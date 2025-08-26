@@ -1,0 +1,55 @@
+name: hivefy
+description: "A spotiify like Flutter App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences:
+  package_info_plus: 
+  dynamic_color:
+  flashy_tab_bar2:
+  flutter_riverpod: 
+  iconly:
+  cached_network_image:
+  shimmer: 
+  app_links:
+  google_fonts:
+  http:
+  dart_des:
+  html:
+  html_unescape:
+  just_audio:
+  audio_session:
+  rxdart:
+  figma_squircle:
+  hive:
+  hive_flutter: 
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_launcher_icons:
+  flutter_lints: ^5.0.0
+  build_runner:
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path_android: "assets/logo.png"
+  adaptive_icon_foreground: "assets/radio.png"
+  adaptive_icon_background: "#1DDA63"
+  adaptive_icon_monochrome: "assets/radio.png"
+  adaptive_icon_foreground_inset: 24
