@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -14,6 +15,9 @@ final playerProvider = Provider<AudioPlayer>((ref) {
 });
 
 final currentSongProvider = StateProvider<SongDetail?>((ref) => null);
+
+// pages
+final albumPageProvider = StateProvider<Widget?>((ref) => null);
 
 
 // common data

@@ -31,6 +31,7 @@ dependencies:
   figma_squircle:
   hive:
   hive_flutter: 
+  marquee:
 
 
 dev_dependencies:

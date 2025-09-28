@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hivefy/shared/miniplayer.dart';
 import 'package:iconly/iconly.dart';
 
 import '../models/datamodel.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
+import '../shared/miniplayer.dart';
 import '../shared/queue.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
+import 'albumviewer.dart';
 
 class Search extends ConsumerStatefulWidget {
   const Search({super.key});
@@ -17,7 +18,11 @@ class Search extends ConsumerStatefulWidget {
   SearchState createState() => SearchState();
 }
 
-class SearchState extends ConsumerState<Search> {
+class SearchState extends ConsumerState<Search>
+    with AutomaticKeepAliveClientMixin<Search> {
+  @override
+  bool get wantKeepAlive => true;
+
   final TextEditingController _controller = TextEditingController();
   List<String> _suggestions = [];
   bool _isLoading = false;
@@ -49,47 +54,50 @@ class SearchState extends ConsumerState<Search> {
         _albums = [];
         _artists = [];
         _playlists = [];
+        _isLoading = false;
       });
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _showSuggestions = true;
-    });
+    _isLoading = true;
+    _showSuggestions = true;
+    setState(() {});
 
     final results = await saavn.getSearchBoxSuggestions(query: value);
 
-    if (mounted) {
-      setState(() {
-        _suggestions = results;
-        _isLoading = false;
-      });
-    }
+    if (!mounted) return;
+    _suggestions = results;
+    _isLoading = false;
+    setState(() {});
   }
 
-  void _onSuggestionTap(String suggestion) async {
-    _controller.text = suggestion;
-    setState(() {
-      _isLoading = true;
-      _showSuggestions = false;
-      // reset all previous results
-      _songs = [];
-      _albums = [];
-      _artists = [];
-      _playlists = [];
-      _suggestions = [];
-    });
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  void _onSuggestionTap(String suggestion, {bool onChange = false}) async {
+    if (!onChange) {
+      _controller.text = suggestion;
+    }
+    _isLoading = !onChange;
+    _showSuggestions = onChange;
+    // reset all previous results
+    _songs = [];
+    _albums = [];
+    _artists = [];
+    _playlists = [];
+    _suggestions = [];
+    setState(() {});
     final results = await saavn.globalSearch(suggestion);
 
     if (mounted && results != null) {
-      setState(() {
-        _songs = results.songs.results;
-        _albums = results.albums.results;
-        _artists = results.artists.results;
-        _playlists = results.playlists.results;
-        _isLoading = false;
-      });
+      _songs = results.songs.results;
+      _albums = results.albums.results;
+      _artists = results.artists.results;
+      _playlists = results.playlists.results;
+      _isLoading = false;
+      setState(() {});
     }
   }
 
@@ -173,10 +181,11 @@ class SearchState extends ConsumerState<Search> {
                       ),
                     const Spacer(),
                     // Loader / Indicator
-                    if (_loadingSongId == p.id)
+                    if (_loadingSongId == p.id &&
+                        ref.watch(currentSongProvider)?.id != p.id)
                       const SizedBox(
-                        height: 20,
-                        width: 20,
+                        height: 15,
+                        width: 15,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.greenAccent,
@@ -208,13 +217,15 @@ class SearchState extends ConsumerState<Search> {
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    super.build(context);
+
+    ref.listen<QueueState>(queueProvider, (prev, next) {
+      if (next.current != prev?.current) {
+        ref.read(currentSongProvider.notifier).state = next.current;
+      }
+    });
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -395,66 +406,103 @@ class SearchState extends ConsumerState<Search> {
                                       });
 
                                       try {
+                                        debugPrint(
+                                          "--- fetching details for song id: ${s.id}",
+                                        );
                                         final details = await saavn
                                             .getSongDetails(ids: [s.id]);
+                                        debugPrint(
+                                          "--- fetched details: ${details.length}",
+                                        );
 
                                         if (details.isNotEmpty) {
                                           final song = details.first;
 
                                           debugPrint(
-                                            "--- playing song: ${song.title} - ${song.url}",
+                                            "--- song title: ${song.title}",
                                           );
-                                          final dominant =
-                                              await getDominantColorFromImage(
-                                                s.images.last.url,
-                                              );
-                                          playerColour =
-                                              (dominant ?? playerColour)
-                                                  .withOpacity(0.85);
+                                          debugPrint(
+                                            "--- song downloadUrls count: ${song.downloadUrls.length}",
+                                          );
+                                          debugPrint(
+                                            "--- song images count: ${s.images.length}",
+                                          );
+
+                                          // get dominant color safely
+                                          String? imageUrl;
+                                          if (s.images.isNotEmpty) {
+                                            imageUrl = s.images.last.url;
+                                            debugPrint(
+                                              "--- using image url: $imageUrl",
+                                            );
+                                          } else {
+                                            debugPrint(
+                                              "--- no images found for song ${song.title}",
+                                            );
+                                          }
+
+                                          final dominant = imageUrl != null
+                                              ? await getDominantColorFromImage(
+                                                  imageUrl,
+                                                )
+                                              : null;
+                                          final mixedColor =
+                                              Color.lerp(
+                                                dominant,
+                                                Colors.black,
+                                                0.6,
+                                              ) ??
+                                              dominant;
+                                          if (mixedColor != null) {
+                                            playerColour = mixedColor.withAlpha(
+                                              250,
+                                            );
+                                          }
 
                                           final player = ref.read(
                                             playerProvider,
                                           );
 
-                                          await player.setUrl(
-                                            song.downloadUrls.last.url,
-                                          );
+                                          // check if downloadUrls exist
+                                          if (song.downloadUrls.isNotEmpty) {
+                                            final url =
+                                                song.downloadUrls.last.url;
+                                            debugPrint(
+                                              "--- setting player url: $url",
+                                            );
+                                            await player.setUrl(url);
 
-                                          // Update provider
-                                          ref
-                                                  .read(
-                                                    currentSongProvider
-                                                        .notifier,
-                                                  )
-                                                  .state =
-                                              song;
+                                            // Update provider
+                                            ref
+                                                    .read(
+                                                      currentSongProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                song;
 
-                                              ref.listen<QueueState>(
-                                            queueProvider,
-                                            (prev, next) {
-                                              if (next.current !=
-                                                  prev?.current) {
-                                                ref
-                                                        .read(
-                                                          currentSongProvider
-                                                              .notifier,
-                                                        )
-                                                        .state =
-                                                    next.current;
-                                              }
-                                            },
-                                          );
-
-
-                                          await player.play();
+                                            await player.play();
+                                          } else {
+                                            debugPrint(
+                                              "--- no download URLs for song ${song.title}",
+                                            );
+                                          }
 
                                           // Reset loading
                                           setState(() {
                                             _loadingSongId = null;
                                           });
+                                        } else {
+                                          debugPrint(
+                                            "--- no details found for song id: ${s.id}",
+                                          );
+                                          setState(() {
+                                            _loadingSongId = null;
+                                          });
                                         }
-                                      } catch (e) {
+                                      } catch (e, st) {
                                         debugPrint("Error playing song: $e");
+                                        debugPrint("$st");
                                         setState(() {
                                           _loadingSongId = null;
                                         });
@@ -478,16 +526,29 @@ class SearchState extends ConsumerState<Search> {
                                 if (_albums.isNotEmpty)
                                   _buildSectionTitle("Albums"),
                                 ..._albums.map(
-                                  (a) => _buildPlaylistRow(
-                                    Playlist(
-                                      id: a.id,
-                                      title: a.title,
-                                      images: a.images,
-                                      url: a.url,
-                                      type: a.type,
-                                      language: a.language,
-                                      explicitContent: false,
-                                      description: a.description,
+                                  (a) => GestureDetector(
+                                    onTap: () async {
+                                      FocusScope.of(context).unfocus();
+
+                                      // Set album page globally
+                                      ref
+                                          .read(albumPageProvider.notifier)
+                                          .state = AlbumViewer(
+                                        albumId: a.id,
+                                      );
+                                    },
+
+                                    child: _buildPlaylistRow(
+                                      Playlist(
+                                        id: a.id,
+                                        title: a.title,
+                                        images: a.images,
+                                        url: a.url,
+                                        type: a.type,
+                                        language: a.language,
+                                        explicitContent: false,
+                                        description: a.description,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -515,6 +576,8 @@ class SearchState extends ConsumerState<Search> {
                               ],
                             ),
                     ),
+
+              const SizedBox(height: 60),
             ],
           ),
         ),

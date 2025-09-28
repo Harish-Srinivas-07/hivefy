@@ -10,7 +10,11 @@ class Dashboard extends StatefulWidget {
   State<Dashboard> createState() => _DashboardState();
 }
 
-class _DashboardState extends State<Dashboard> {
+class _DashboardState extends State<Dashboard>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool loading = true;
 
   @override
@@ -32,6 +36,7 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text("Tamil Music Hub"),
@@ -135,8 +140,7 @@ class _DashboardState extends State<Dashboard> {
                           style: const TextStyle(color: Colors.white),
                         ),
                         subtitle: Text(
-                          "ID: ${artist
-                          .description}",
+                          "ID: ${artist.description}",
                           style: const TextStyle(color: Colors.grey),
                         ),
                       );

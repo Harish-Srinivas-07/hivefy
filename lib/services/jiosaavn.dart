@@ -89,16 +89,30 @@ class SaavnAPI {
 
     final Map<String, SongDetail> resultMap = {};
 
-    // -------- First check in local AppDatabase --------
+    // -------- Check local DB first --------
     if (ids != null && ids.isNotEmpty) {
       final cachedSongs = await AppDatabase.getSongs(ids);
+
       for (final song in cachedSongs) {
+        // If song has no download URLs, remove it from cache and skip
+        if (song.downloadUrls.isEmpty) {
+          debugPrint(
+            "--- Cached song '${song.title}' has no download URLs, removing from cache",
+          );
+          await AppDatabase.removeSong(
+            song.id,
+          ); 
+          continue;
+        }
         resultMap[song.id] = song;
       }
     }
 
-    // If all songs found locally, return immediately
+    // If all found locally, return
     if (ids != null && resultMap.length == ids.length) {
+      debugPrint(
+        "--- All requested songs found in cache with valid download URLs",
+      );
       return ids.map((id) => resultMap[id]!).toList();
     }
 
@@ -106,16 +120,12 @@ class SaavnAPI {
     final queryParams = <String, String>{};
     if (ids != null && ids.isNotEmpty) {
       final missingIds = ids.toSet()..removeAll(resultMap.keys);
-      if (missingIds.isNotEmpty) {
-        queryParams['ids'] = missingIds.join(",");
-      }
+      if (missingIds.isNotEmpty) queryParams['ids'] = missingIds.join(",");
     }
-    if (link != null && link.isNotEmpty) {
-      queryParams['link'] = link;
-    }
+    if (link != null && link.isNotEmpty) queryParams['link'] = link;
 
-    // If nothing to fetch remotely, return what we have
     if (queryParams.isEmpty) {
+      debugPrint("--- No API fetch needed, returning cached results");
       return ids != null
           ? ids.map((id) => resultMap[id]!).toList()
           : resultMap.values.toList();
@@ -127,27 +137,31 @@ class SaavnAPI {
 
     try {
       final response = await get(uri, headers: headers);
-
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
+        debugPrint('--> JSON fetched from API: $jsonData');
+
         if (jsonData['success'] == true && jsonData['data'] != null) {
           final List<dynamic> data = jsonData['data'];
           final fetched = data.map((e) => SongDetail.fromJson(e)).toList();
+          debugPrint('--> Fetched ${fetched.length} songs from API: $fetched');
 
-          // Cache and update resultMap
+          // Cache locally
           for (final song in fetched) {
             await AppDatabase.saveSongDetail(song);
             resultMap[song.id] = song;
           }
+        } else {
+          debugPrint("getSongDetails returned no data or failed");
         }
       } else {
         debugPrint("getSongDetails failed with status: ${response.statusCode}");
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint("Error in getSongDetails: $e");
+      debugPrint("$st");
     }
 
-    // Return in input order if ids provided, else arbitrary order
     return ids != null
         ? ids
               .where((id) => resultMap.containsKey(id))
@@ -287,13 +301,56 @@ class SaavnAPI {
       if (response.statusCode == 200) {
         final jsonBody = json.decode(response.body);
         if (jsonBody['success'] == true && jsonBody['data'] != null) {
-          return GlobalSearch.fromJson(jsonBody);
+          return GlobalSearch.fromJson(jsonBody['data']);
         }
       } else {
         debugPrint('Global search failed with status: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Error in global search: $e');
+    }
+    return null;
+  }
+
+  Future<Album?> fetchAlbumById({
+    String? albumId,
+    String? link,
+    int page = 0,
+    int limit = 10,
+  }) async {
+    if (albumId == null && link == null) {
+      debugPrint("❌ fetchAlbumById: Need either albumId or link");
+      return null;
+    }
+
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+
+    if (albumId != null) queryParams['id'] = albumId;
+    if (link != null) queryParams['link'] = link;
+
+    final url = Uri.parse(
+      '$baseUrl/api/albums',
+    ).replace(queryParameters: queryParams);
+
+    try {
+      final response = await get(url, headers: headers);
+
+      if (response.statusCode == 200) {
+        final jsonBody = json.decode(response.body);
+        if (jsonBody['success'] == true && jsonBody['data'] != null) {
+          return Album.fromJson(jsonBody['data']);
+        } else {
+          debugPrint("fetchAlbumById: success=false or data=null");
+        }
+      } else {
+        debugPrint("fetchAlbumById failed: ${response.statusCode}");
+      }
+    } catch (e, st) {
+      debugPrint("⚠️ Error in fetchAlbumById: $e");
+      debugPrint("$st");
     }
     return null;
   }

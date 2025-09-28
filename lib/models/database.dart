@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'datamodel.dart';
@@ -27,19 +28,48 @@ class AppDatabase {
   // -------------------- SONG STORAGE --------------------
   static Future<SongDetail> saveSongDetail(SongDetail song) async {
     await _init();
-    Map<String, dynamic> newJson = _songDetailToJson(song);
 
+    // Convert the song to JSON
+    Map<String, dynamic> newJson = SongDetail.songDetailToJson(song);
+
+    // Check if the song has download URLs
+    final newDownloadUrls = (newJson['downloadUrl'] as List?) ?? [];
+    if (newDownloadUrls.isEmpty) {
+      debugPrint(
+        "--- Song '${song.title}' has no download URLs, removing from cache",
+      );
+      _cache.remove(song.id);
+      await _prefs.setString(_songKey, jsonEncode(_cache));
+      return song;
+    }
+
+    // Merge with existing cache if present
     if (_cache.containsKey(song.id)) {
-      // Merge old + new
       final oldJson = Map<String, dynamic>.from(_cache[song.id]);
-      // newJson overrides oldJson only if not null/empty
-      oldJson.addAll(newJson);
+
+      for (final key in newJson.keys) {
+        final newValue = newJson[key];
+
+        // Skip null or empty values
+        if (newValue == null) continue;
+        if (newValue is String && newValue.isEmpty) continue;
+        if (newValue is List && newValue.isEmpty) continue;
+        if (newValue is Map && newValue.isEmpty) continue;
+
+        oldJson[key] = newValue;
+      }
+
       _cache[song.id] = oldJson;
     } else {
       _cache[song.id] = newJson;
     }
 
+    // Save the updated cache to SharedPreferences
     await _prefs.setString(_songKey, jsonEncode(_cache));
+
+    debugPrint("--- Song '${song.title}' saved to cache successfully");
+
+    // Return the stored song
     return SongDetail.fromJson(Map<String, dynamic>.from(_cache[song.id]));
   }
 
@@ -97,35 +127,7 @@ class AppDatabase {
     _cache.clear();
     await _prefs.remove(_songKey);
   }
-
-  // -------------------- INTERNAL HELPERS --------------------
-  static Map<String, dynamic> _songDetailToJson(SongDetail song) {
-    return {
-      'id': song.id,
-      'title': song.title,
-      'type': song.type,
-      'url': song.url,
-      'description': song.description,
-      'language': song.language,
-      'album': song.album,
-      'primaryArtists': song.primaryArtists,
-      'singers': song.singers,
-      'year': song.year,
-      'releaseDate': song.releaseDate,
-      'duration': song.duration,
-      'label': song.label,
-      'albumName': song.albumName,
-      'explicitContent': song.explicitContent,
-      'images': song.images
-          .map((e) => {'quality': e.quality, 'url': e.url})
-          .toList(),
-      'downloadUrls': song.downloadUrls
-          .map((e) => {'quality': e.quality, 'url': e.url})
-          .toList(),
-    };
-  }
 }
-
 
 // Artists
 class ArtistDB {
@@ -170,7 +172,7 @@ class ArtistDB {
 
 // Playlists
 class PlaylistDB {
-    static const List<Map<String, String>> playlists = [
+  static const List<Map<String, String>> playlists = [
     {"id": "1170578779", "name": "Tamil 1990s"},
     {"id": "1170578783", "name": "Tamil 2000s"},
     {"id": "901538755", "name": "Tamil 1980s"},
@@ -181,7 +183,7 @@ class PlaylistDB {
     {"id": "1134651042", "name": "Tamil: India Superhits Top 50"},
     {"id": "1074590003", "name": "Tamil BGM"},
     {"id": "804092154", "name": "Sad Love - Tamil"},
-    
+
     // 2025 Featured Playlists
     {"id": "1265148713", "name": "Chartbusters 2025 - Tamil"},
     {"id": "1265148693", "name": "Dance Hits 2025 - Tamil"},
@@ -202,4 +204,27 @@ class PlaylistDB {
       orElse: () => {},
     )["id"];
   }
+}
+
+
+// artist cache
+class ArtistCache {
+  // Singleton instance
+  static final ArtistCache _instance = ArtistCache._internal();
+  factory ArtistCache() => _instance;
+  ArtistCache._internal();
+
+  // Internal cache map
+  final Map<String, ArtistDetails> _cache = {};
+
+  /// Get artist details from cache if available
+  ArtistDetails? get(String artistId) => _cache[artistId];
+
+  /// Store artist details in cache
+  void set(String artistId, ArtistDetails details) {
+    _cache[artistId] = details;
+  }
+
+  /// Clear cache (optional)
+  void clear() => _cache.clear();
 }
