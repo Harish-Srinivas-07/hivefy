@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:iconly/iconly.dart';
+import 'package:page_transition/page_transition.dart';
 
 import '../models/datamodel.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
 import '../shared/miniplayer.dart';
-import '../shared/queue.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'albumviewer.dart';
@@ -151,9 +151,10 @@ class SearchState extends ConsumerState<Search>
                 Text(
                   p.title,
                   style: GoogleFonts.figtree(
-                    color: ref.watch(currentSongProvider)?.id == p.id
-                        ? Colors.greenAccent
-                        : Colors.white,
+                    color:
+                        ref.watch(currentSongProvider)?.id == p.id
+                            ? Colors.greenAccent
+                            : Colors.white,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
                   ),
@@ -192,10 +193,11 @@ class SearchState extends ConsumerState<Search>
                         ),
                       )
                     else if (ref.watch(currentSongProvider)?.id == p.id)
-                      const Icon(
-                        Icons.equalizer,
-                        color: Colors.greenAccent,
-                        size: 20,
+                      Image.asset(
+                        'assets/player.gif',
+                        height: 16,
+                        width: 16,
+                        fit: BoxFit.contain,
                       ),
                   ],
                 ),
@@ -220,12 +222,6 @@ class SearchState extends ConsumerState<Search>
   Widget build(BuildContext context) {
     super.build(context);
 
-    ref.listen<QueueState>(queueProvider, (prev, next) {
-      if (next.current != prev?.current) {
-        ref.read(currentSongProvider.notifier).state = next.current;
-      }
-    });
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -238,7 +234,7 @@ class SearchState extends ConsumerState<Search>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   CircleAvatar(
-                    radius: 20,
+                    radius: 18,
                     backgroundImage: AssetImage('assets/logo.png'),
                   ),
                   Text(
@@ -302,20 +298,21 @@ class SearchState extends ConsumerState<Search>
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _isLoading
                   ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    )
+                    child: CircularProgressIndicator(color: Colors.white),
+                  )
                   : Expanded(
-                      child: _isLoading
-                          ? const Center(
+                    child:
+                        _isLoading
+                            ? const Center(
                               child: CircularProgressIndicator(
                                 color: Colors.white,
                               ),
                             )
-                          : _hasNoResults
-                          ? Center(
+                            : _hasNoResults
+                            ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -338,7 +335,7 @@ class SearchState extends ConsumerState<Search>
                                 ],
                               ),
                             )
-                          : ListView(
+                            : ListView(
                               children: [
                                 // Suggestions
                                 if (_showSuggestions &&
@@ -347,6 +344,7 @@ class SearchState extends ConsumerState<Search>
                                       .take(5)
                                       .map(
                                         (s) => GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
                                           onTap: () => _onSuggestionTap(s),
                                           child: Container(
                                             height: 50,
@@ -401,6 +399,7 @@ class SearchState extends ConsumerState<Search>
                                   _buildSectionTitle("Songs"),
                                 ..._songs.map(
                                   (s) => GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
                                     onTap: () async {
                                       FocusScope.of(context).unfocus();
 
@@ -444,20 +443,25 @@ class SearchState extends ConsumerState<Search>
                                             );
                                           }
 
-                                          final dominant = imageUrl != null
-                                              ? await getDominantColorFromImage(
-                                                  imageUrl,
-                                                )
-                                              : null;
+                                          final dominant =
+                                              imageUrl != null
+                                                  ? await getDominantColorFromImage(
+                                                    imageUrl,
+                                                  )
+                                                  : null;
                                           final mixedColor =
                                               Color.lerp(
                                                 dominant,
                                                 Colors.black,
-                                                0.6,
+                                                0.85,
                                               ) ??
                                               dominant;
                                           if (mixedColor != null) {
-                                            playerColour = mixedColor.withAlpha(
+                                            ref
+                                                .read(
+                                                  playerColourProvider.notifier,
+                                                )
+                                                .state = mixedColor.withAlpha(
                                               250,
                                             );
                                           }
@@ -477,12 +481,10 @@ class SearchState extends ConsumerState<Search>
 
                                             // Update provider
                                             ref
-                                                    .read(
-                                                      currentSongProvider
-                                                          .notifier,
-                                                    )
-                                                    .state =
-                                                song;
+                                                .read(
+                                                  currentSongProvider.notifier,
+                                                )
+                                                .state = song;
 
                                             await player.play();
                                           } else {
@@ -530,21 +532,28 @@ class SearchState extends ConsumerState<Search>
                                   _buildSectionTitle("Albums"),
                                 ..._albums.map(
                                   (a) => GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
                                     onTap: () async {
+                                      // Unfocus keyboard before navigation
                                       FocusScope.of(context).unfocus();
 
-                                      // // Set album page globally
-                                      // ref
-                                      //     .read(albumPageProvider.notifier)
-                                      //     .state = AlbumViewer(
-                                      //   albumId: a.id,
-                                      // );
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              AlbumViewer(albumId: a.id),
-                                        ),
-                                      );
+                                      Navigator.of(context)
+                                          .push(
+                                            PageTransition(
+                                              type:
+                                                  PageTransitionType
+                                                      .rightToLeft,
+                                              duration: const Duration(
+                                                milliseconds: 300,
+                                              ),
+                                              child: AlbumViewer(albumId: a.id),
+                                            ),
+                                          )
+                                          .then((_) {
+                                            // Unfocus again after coming back from AlbumViewer
+                                            if (!context.mounted) return;
+                                            FocusScope.of(context).unfocus();
+                                          });
                                     },
 
                                     child: _buildPlaylistRow(
@@ -590,7 +599,7 @@ class SearchState extends ConsumerState<Search>
                                   const SizedBox(height: 60),
                               ],
                             ),
-                    ),
+                  ),
             ],
           ),
         ),

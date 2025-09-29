@@ -2,18 +2,18 @@ import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:iconly/iconly.dart';
 import 'package:marquee/marquee.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:readmore/readmore.dart';
 
-import '../models/database.dart';
 import '../models/datamodel.dart';
 import '../services/jiosaavn.dart';
+import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'constants.dart';
 import 'queue.dart';
 
-Color playerColour = Colors.black.withAlpha(205);
+final playerColourProvider = StateProvider<Color>((ref) => Colors.black);
 
 class MiniPlayer extends ConsumerStatefulWidget {
   const MiniPlayer({super.key});
@@ -24,69 +24,76 @@ class MiniPlayer extends ConsumerStatefulWidget {
 
 class _MiniPlayerState extends ConsumerState<MiniPlayer> {
   @override
-  void didUpdateWidget(covariant MiniPlayer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _updateDominantColor();
+  void initState() {
+    super.initState();
+
+    // Initial update
+    _updatePlayerCardColour();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _updateDominantColor();
-  }
-
-  Future<void> _updateDominantColor() async {
+  Future<void> _updatePlayerCardColour() async {
     final song = ref.read(currentSongProvider);
-    if (song == null || song.images.isEmpty) return;
+    if (song?.images.isEmpty ?? true) return;
 
-    final dominant = await getDominantColorFromImage(song.images.last.url);
-    if (mounted && dominant != null) {
-      final mixedColor = Color.lerp(dominant, Colors.black, 0.6) ?? dominant;
-      playerColour = mixedColor.withAlpha(250);
-      setState(() {});
-    }
+    final dominant = await getDominantColorFromImage(song!.images.last.url);
+    if (dominant == null) return;
+
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.25);
+
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final player = ref.watch(playerProvider);
     final song = ref.watch(currentSongProvider);
-    ref.listen<QueueState>(queueProvider, (prev, next) {
-      if (next.current != prev?.current) {
-        ref.read(currentSongProvider.notifier).state = next.current;
-      }
-    });
 
     if (song == null) return const SizedBox.shrink();
+    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+
+    // Listen for changes in currentSongProvider
+    ref.listen<SongDetail?>(currentSongProvider, (_, __) {
+      _updatePlayerCardColour();
+    });
 
     return GestureDetector(
       onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            opaque: false,
-            pageBuilder: (_, __, ___) => const FullPlayerScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  final tween = Tween(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).chain(CurveTween(curve: Curves.easeInOut));
-                  return SlideTransition(
-                    position: animation.drive(tween),
-                    child: child,
-                  );
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              child: DraggableScrollableSheet(
+                expand: false,
+                initialChildSize: 1.0,
+                minChildSize: 0.85,
+                maxChildSize: 1.0,
+                shouldCloseOnMinExtent: true,
+                builder: (context, scrollController) {
+                  return FullPlayerScreen(scrollController: scrollController);
                 },
-          ),
-        );
+              ),
+            );
+          },
+        ).then((_) {
+          // This runs after the bottom sheet is dismissed
+          if (!context.mounted) return;
+          FocusScope.of(context).unfocus();
+        });
       },
+
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.only(top: 3),
         decoration: ShapeDecoration(
-          color: playerColour,
+          color: ref.watch(playerColourProvider),
           shape: SmoothRectangleBorder(
             borderRadius: SmoothBorderRadius(
-              cornerRadius: 12,
+              cornerRadius: 8,
               cornerSmoothing: 0.8,
             ),
           ),
@@ -100,11 +107,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                 children: [
                   // Artwork
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(3),
                     child: Image.network(
                       song.images.isNotEmpty ? song.images.last.url : "",
-                      height: 50,
-                      width: 50,
+                      height: 40,
+                      width: 40,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -120,9 +127,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(height: 2),
+                        // const SizedBox(height: 2),
                         Text(
-                          song.albumName ?? song.type,
+                          song.contributors.primary.first.title,
                           style: GoogleFonts.gabarito(
                             color: Colors.white.withAlpha(190),
                             fontSize: 12,
@@ -137,11 +144,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   // Add button
                   IconButton(
                     onPressed: () {
-                      // TODO: Add song to playlist or favorites
+                      ref.read(likedSongsProvider.notifier).toggle(song.id);
                     },
-                    icon: const Icon(
-                      Icons.add_circle_outline,
-                      color: Colors.white,
+                    icon: Icon(
+                      isLiked ? Icons.check_circle : Icons.add_circle_outline,
+                      color: isLiked ? Colors.green : Colors.white,
+
                       size: 28,
                     ),
                   ),
@@ -174,9 +182,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                           return IconButton(
                             padding: EdgeInsets.zero,
                             icon: Icon(
-                              playing
-                                  ? Icons.pause_outlined
-                                  : Icons.play_arrow_outlined,
+                              playing ? Icons.pause_outlined : Icons.play_arrow,
                               color: Colors.white,
                               size: 28,
                             ),
@@ -192,7 +198,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
               ),
             ),
 
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
             // Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -201,9 +207,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                 builder: (context, snapshot) {
                   final pos = snapshot.data ?? Duration.zero;
                   final total = player.duration ?? Duration.zero;
-                  final progress = total.inMilliseconds > 0
-                      ? pos.inMilliseconds / total.inMilliseconds
-                      : 0.0;
+                  final progress =
+                      total.inMilliseconds > 0
+                          ? pos.inMilliseconds / total.inMilliseconds
+                          : 0.0;
 
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(4),
@@ -227,7 +234,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 }
 
 class FullPlayerScreen extends ConsumerStatefulWidget {
-  const FullPlayerScreen({super.key});
+  final ScrollController? scrollController;
+  // const FullPlayerScreen({super.key});
+  const FullPlayerScreen({super.key, this.scrollController});
 
   @override
   ConsumerState<FullPlayerScreen> createState() => _FullPlayerScreenState();
@@ -235,13 +244,7 @@ class FullPlayerScreen extends ConsumerStatefulWidget {
 
 class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
   ArtistDetails? _artistDetails;
-
-  @override
-  void didUpdateWidget(covariant FullPlayerScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _updateBgColor();
-    _fetchArtistDetails();
-  }
+  final ValueNotifier<bool> _isBioExpanded = ValueNotifier(false);
 
   @override
   void initState() {
@@ -250,22 +253,25 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     _fetchArtistDetails();
   }
 
-  Future<void> _updateBgColor() async {
-    final song = ref.read(currentSongProvider);
-    if (song == null) return;
-
-    final dominant = await getDominantColorFromImage(
-      song.images.isNotEmpty ? song.images.last.url : "",
-    );
-
-    if (dominant != null) {
-      final mixedColor = Color.lerp(dominant, Colors.black, 0.6) ?? dominant;
-      playerColour = mixedColor.withAlpha((0.85 * 255).toInt());
-      setState(() {});
-    }
+  @override
+  void dispose() {
+    super.dispose();
+    _isBioExpanded.dispose();
   }
 
-Future<void> _fetchArtistDetails() async {
+  Future<void> _updateBgColor() async {
+    final song = ref.read(currentSongProvider);
+    if (song?.images.isEmpty ?? true) return;
+
+    final dominant = await getDominantColorFromImage(song!.images.last.url);
+    if (dominant == null) return;
+
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.25);
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _fetchArtistDetails() async {
     final song = ref.read(currentSongProvider);
     if (song == null) return;
 
@@ -285,7 +291,6 @@ Future<void> _fetchArtistDetails() async {
     }
   }
 
-
   String _fmt(Duration d) {
     final m = d.inMinutes;
     final s = d.inSeconds % 60;
@@ -296,13 +301,21 @@ Future<void> _fetchArtistDetails() async {
   Widget build(BuildContext context) {
     final player = ref.watch(playerProvider);
     final song = ref.watch(currentSongProvider);
+    final queueManager = ref.watch(queueManagerProvider.notifier);
+    final isShuffle = ref.watch(shuffleProvider);
+    final repeatMode = ref.watch(repeatModeProvider);
 
-    debugPrint('--> here the song details $song');
+    // update colour at song change
+    ref.listen<SongDetail?>(currentSongProvider, (_, __) {
+      _updateBgColor();
+      _fetchArtistDetails();
+    });
 
     if (song == null) {
       //  { Future.microtask(() => Navigator.of(context).maybePop());}
       return const SizedBox.shrink();
     }
+    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
 
     // Compose secondary info line
     final secondaryParts = <String>[];
@@ -311,137 +324,151 @@ Future<void> _fetchArtistDetails() async {
     }
     if (song.primaryArtists.isNotEmpty) secondaryParts.add(song.primaryArtists);
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [playerColour.withAlpha(205), Colors.black, Colors.black],
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [ref.watch(playerColourProvider), Colors.black],
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top bar
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: Colors.white,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 60),
+            // Top bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white,
                   ),
-                  Text(
-                    "Now Playing",
-                    style: GoogleFonts.figtree(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                Text(
+                  "Now Playing",
+                  style: GoogleFonts.figtree(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
-                  const SizedBox(width: 48),
-                ],
-              ),
+                ),
+                const SizedBox(width: 48),
+              ],
+            ),
 
-              // Scrollable content
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 24),
-                      // Artwork (full width, no height restriction)
-                      Hero(
-                        tag: 'artwork_${song.id}',
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.network(
-                            song.images.isNotEmpty ? song.images.last.url : "",
-                            width: MediaQuery.of(context).size.width * 0.85,
-                            fit: BoxFit.cover,
-                          ),
+            // Scrollable content
+            Expanded(
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 40),
+                    // Artwork (full width, no height restriction)
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.80,
+                      // height: 300,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          song.images.isNotEmpty ? song.images.last.url : "",
+                          fit: BoxFit.contain,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                    ),
+                    const SizedBox(height: 35),
 
-                      // Title & metadata
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 30,
-                          vertical: 15,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
+                    // Title & metadata
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 15,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _marqueeText(
-                                    song.title,
-                                    fontSize: 22,
+                                    trimAfterParamText(song.title),
+                                    fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                   ),
                                   if (secondaryParts.isNotEmpty)
                                     _marqueeText(
                                       secondaryParts.join(" • "),
                                       fontSize: 14,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w300,
                                       color: Colors.white70,
                                     ),
                                 ],
                               ),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: IconButton(
-                                icon: const Icon(Icons.favorite_border),
-                                color: Colors.white,
-                                tooltip: "Add to liked songs",
-                                onPressed: () {},
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: IconButton(
+                              icon: Icon(
+                                isLiked
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
                               ),
+                              color: isLiked ? Colors.red : Colors.white,
+                              tooltip: "Add to liked songs",
+                              onPressed: () {
+                                ref
+                                    .read(likedSongsProvider.notifier)
+                                    .toggle(song.id);
+                              },
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
 
-                      // Progress slider
-                      StreamBuilder<Duration>(
-                        stream: player.positionStream,
-                        builder: (context, snapshot) {
-                          final pos = snapshot.data ?? Duration.zero;
-                          final total = player.duration ?? Duration.zero;
-                          final progress = total.inMilliseconds > 0
-                              ? pos.inMilliseconds / total.inMilliseconds
-                              : 0.0;
+                    // Progress slider
+                    StreamBuilder<Duration>(
+                      stream: player.positionStream,
+                      builder: (context, snapshot) {
+                        final pos = snapshot.data ?? Duration.zero;
+                        final total = player.duration ?? Duration.zero;
+                        final progress =
+                            total.inMilliseconds > 0
+                                ? pos.inMilliseconds / total.inMilliseconds
+                                : 0.0;
 
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 5,
-                            ),
-                            child: Column(
-                              children: [
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 6,
-                                      pressedElevation: 8,
-                                    ),
-                                    overlayShape:
-                                        SliderComponentShape.noOverlay,
-                                    trackHeight: 2.5,
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 5,
+                          ),
+                          child: Column(
+                            children: [
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 6,
+                                    pressedElevation: 8,
                                   ),
-                                  child: Slider(
-                                    value: progress.clamp(0.0, 1.0),
-                                    onChanged: total == Duration.zero
-                                        ? null
-                                        : (v) {
+                                  overlayShape: SliderComponentShape.noOverlay,
+                                  trackHeight: 2.5,
+                                ),
+                                child: Slider(
+                                  value: progress.clamp(0.0, 1.0),
+                                  onChanged:
+                                      total == Duration.zero
+                                          ? null
+                                          : (v) {
                                             player.seek(
                                               Duration(
                                                 milliseconds:
@@ -450,166 +477,252 @@ Future<void> _fetchArtistDetails() async {
                                               ),
                                             );
                                           },
-                                    activeColor: Colors.white,
-                                    inactiveColor: Colors.grey[900],
-                                  ),
+                                  activeColor: Colors.white,
+                                  inactiveColor: ref
+                                      .watch(playerColourProvider)
+                                      .withAlpha(100),
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 10,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        _fmt(pos),
-                                        style: GoogleFonts.figtree(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      Text(
-                                        _fmt(total),
-                                        style: GoogleFonts.figtree(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 10,
                                 ),
-                              ],
-                            ),
-                          );
-                        },
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _fmt(pos),
+                                      style: GoogleFonts.figtree(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      _fmt(total),
+                                      style: GoogleFonts.figtree(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    // Playback controls
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12.0,
                       ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          //  Shuffle button
+                          _ControlButton(
+                            icon: Icons.shuffle,
+                            enabled: true,
+                            iconColor:
+                                isShuffle ? Colors.greenAccent : Colors.white70,
+                            onTap: () {
+                              queueManager.toggleShuffle();
+                            },
+                          ),
 
-                      const SizedBox(height: 15),
+                          // ⏮ Previous
+                          _ControlButton(
+                            icon: Icons.skip_previous,
+                            enabled: queueManager.hasPrevious,
+                            onTap:
+                                queueManager.hasPrevious
+                                    ? () => queueManager.playPrevious()
+                                    : null,
+                            size: 45,
+                          ),
 
-                      // Playback controls
+                          // ▶️ / ⏸ Play/Pause
+                          StreamBuilder<PlayerState>(
+                            stream: player.playerStateStream,
+                            builder: (context, snapshot) {
+                              final st = snapshot.data;
+                              final playing = st?.playing ?? false;
+                              return _ControlButton(
+                                icon: playing ? Icons.pause : Icons.play_arrow,
+                                enabled: true,
+                                onTap:
+                                    () =>
+                                        playing
+                                            ? player.pause()
+                                            : player.play(),
+                                size: 64,
+                                background: Colors.white,
+                                iconColor: Colors.black,
+                              );
+                            },
+                          ),
+
+                          // ⏭ Next
+                          _ControlButton(
+                            icon: Icons.skip_next,
+                            enabled: queueManager.hasNext,
+                            onTap:
+                                queueManager.hasNext
+                                    ? () => queueManager.playNext()
+                                    : null,
+                            size: 45,
+                          ),
+
+                          // 🔁 Repeat button
+                          _ControlButton(
+                            icon:
+                                repeatMode == RepeatMode.one
+                                    ? Icons.repeat_one
+                                    : Icons.repeat,
+                            enabled: true,
+                            iconColor:
+                                repeatMode == RepeatMode.none
+                                    ? Colors.white70
+                                    : Colors.greenAccent,
+                            onTap: () {
+                              queueManager.toggleRepeatMode();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    if (_artistDetails != null)
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12.0,
+                          horizontal: 24,
+                          vertical: 12,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _ControlButton(
-                              icon: Icons.shuffle,
-                              enabled: true,
-                              onTap: () {},
-                            ),
-                            _ControlButton(
-                              icon: Icons.skip_previous,
-                              enabled: player.hasPrevious,
-                              onTap: player.hasPrevious
-                                  ? player.seekToPrevious
-                                  : null,
-                              size: 42,
-                            ),
-                            StreamBuilder<PlayerState>(
-                              stream: player.playerStateStream,
-                              builder: (context, snapshot) {
-                                final st = snapshot.data;
-                                final playing = st?.playing ?? false;
-                                return _ControlButton(
-                                  icon: playing
-                                      ? Icons.pause
-                                      : Icons.play_arrow,
-                                  enabled: true,
-                                  onTap: () =>
-                                      playing ? player.pause() : player.play(),
-                                  size: 64,
-                                  background: Colors.white,
-                                  iconColor: Colors.black,
-                                );
-                              },
-                            ),
-                            _ControlButton(
-                              icon: Icons.skip_next,
-                              enabled: player.hasNext,
-                              onTap: player.hasNext ? player.seekToNext : null,
-                              size: 42,
-                            ),
-                            _ControlButton(
-                              icon: Icons.repeat,
-                              enabled: true,
-                              onTap: () {},
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Artist details
-                      if (_artistDetails != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 12,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
                           ),
                           child: Container(
                             width: double.infinity,
-                            constraints: BoxConstraints(maxHeight: 300),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              image: _artistDetails!.images.isNotEmpty
-                                  ? DecorationImage(
-                                      image: NetworkImage(
-                                        _artistDetails!.images.last.url,
-                                      ),
-                                      fit: BoxFit.cover,
-                                      colorFilter: ColorFilter.mode(
-                                        Colors.black.withAlpha(125),
-                                        BlendMode.darken,
-                                      ),
-                                    )
-                                  : null,
-                              color: Colors.grey[900],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "About the Artist",
-                                    style: GoogleFonts.figtree(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Spacer(),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
+                            decoration: BoxDecoration(color: Colors.grey[900]),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Image with overlay
+                                if (_artistDetails!.images.isNotEmpty)
+                                  Stack(
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          _artistDetails!.title,
-                                          style: GoogleFonts.figtree(
-                                            color: Colors.white,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w600,
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 220,
+                                        child: ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            topRight: Radius.circular(16),
+                                          ),
+                                          child: Transform(
+                                            alignment: Alignment.center,
+                                            transform: Matrix4.rotationZ(0),
+                                            child: Image.network(
+                                              _artistDetails!.images.last.url,
+                                              fit: BoxFit.cover,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                      if (_artistDetails!.isVerified == true)
-                                        const Icon(
-                                          Icons.verified,
-                                          color: Colors.blueAccent,
-                                          size: 20,
+
+                                      Container(
+                                        height: 220,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.black.withAlpha(150),
+                                              Colors.transparent,
+                                            ],
+                                            begin: Alignment.bottomCenter,
+                                            end: Alignment.topCenter,
+                                          ),
                                         ),
+                                      ),
+                                      Positioned(
+                                        bottom: 0,
+                                        left: 16,
+                                        right: 16,
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                _artistDetails!.title,
+                                                style: GoogleFonts.figtree(
+                                                  color: Colors.white,
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.w600,
+                                                  shadows: [
+                                                    Shadow(
+                                                      blurRadius: 10.0,
+                                                      color: Colors.black,
+                                                      offset: Offset(2.0, 2.0),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            if (_artistDetails!.isVerified ==
+                                                true)
+                                              const Icon(
+                                                Icons.verified,
+                                                color: Colors.blueAccent,
+                                                size: 20,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 16,
+                                        left: 16,
+                                        right: 16,
+                                        child: Text(
+                                          'About the artist',
+                                          style: GoogleFonts.figtree(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                            shadows: [
+                                              Shadow(
+                                                blurRadius: 10.0,
+                                                color: Colors.black,
+                                                offset: Offset(2.0, 2.0),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
+
+                                const SizedBox(height: 12),
+
+                                // Stats
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
                                     [
                                       if (_artistDetails!.followerCount != null)
                                         "Followers: ${_artistDetails!.followerCount}",
@@ -621,32 +734,65 @@ Future<void> _fetchArtistDetails() async {
                                     style: GoogleFonts.figtree(
                                       color: Colors.white70,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
-                                  if (_artistDetails!.bio.isNotEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _artistDetails!.bio.join("\n"),
-                                      style: GoogleFonts.figtree(
-                                        color: Colors.white70,
-                                        fontSize: 14,
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                if (_artistDetails!.bio.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        _isBioExpanded.value =
+                                            !_isBioExpanded.value;
+                                      },
+                                      child: ReadMoreText(
+                                        _artistDetails!.bio
+                                            .map((bio) => sanitizeBio(bio))
+                                            .join("\n\n"),
+                                        trimLines: 3,
+                                        trimMode: TrimMode.Line,
+                                        colorClickableText: Colors.greenAccent,
+                                        trimCollapsedText: " ...more",
+                                        trimExpandedText: " Show less",
+                                        style: GoogleFonts.figtree(
+                                          color: Colors.white70,
+                                          fontSize: 14,
+                                        ),
+                                        moreStyle: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.greenAccent,
+                                        ),
+                                        lessStyle: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.greenAccent,
+                                        ),
+                                        isExpandable:
+                                            false, // We will handle expand ourselves
+                                        isCollapsed:
+                                            _isBioExpanded, // toggle expand
                                       ),
                                     ),
-                                  ],
-                                ],
-                              ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
 
-                      const SizedBox(height: 24),
-                    ],
-                  ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -696,7 +842,7 @@ Widget _marqueeText(
   FontWeight fontWeight = FontWeight.w600,
   color = Colors.white,
 }) {
-  if (text.length <= 25) {
+  if (text.length <= 30) {
     return Text(
       text,
       style: GoogleFonts.gabarito(
@@ -720,8 +866,8 @@ Widget _marqueeText(
       ),
       velocity: 25,
       blankSpace: 50,
-      fadingEdgeStartFraction: .2,
-      fadingEdgeEndFraction: .2,
+      fadingEdgeStartFraction: .5,
+      fadingEdgeEndFraction: .5,
       startAfter: const Duration(seconds: 1),
       pauseAfterRound: const Duration(seconds: 1),
     ),

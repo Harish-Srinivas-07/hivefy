@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:just_audio/just_audio.dart';
+
 import '../models/datamodel.dart';
 import '../models/shimmers.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
 import '../shared/miniplayer.dart';
+import '../utils/format.dart';
 import '../utils/theme.dart';
 
 class AlbumViewer extends ConsumerStatefulWidget {
@@ -16,13 +19,11 @@ class AlbumViewer extends ConsumerStatefulWidget {
   ConsumerState<AlbumViewer> createState() => _AlbumViewerState();
 }
 
-class _AlbumViewerState extends ConsumerState<AlbumViewer>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
+class _AlbumViewerState extends ConsumerState<AlbumViewer> {
   Album? _album;
+  List<SongDetail> _albumSongDetails = [];
   bool _loading = true;
+  int _totalAlbumDuration = 0;
 
   @override
   void initState() {
@@ -30,200 +31,391 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer>
     _fetchAlbum();
   }
 
+  int getTotalDuration(List<SongDetail> songs) {
+    return songs.fold<int>(0, (sum, song) {
+      final dur =
+          (song.duration is int)
+              ? song.duration as int
+              : int.tryParse(song.duration.toString()) ?? 0;
+      return sum + dur;
+    });
+  }
+
   Future<void> _fetchAlbum() async {
     final api = SaavnAPI();
-    final alb = await api.fetchAlbumById(albumId: widget.albumId);
-    debugPrint('--> fetched album Data: $alb');
-    _album = alb;
+
+    try {
+      final alb = await api.fetchAlbumById(albumId: widget.albumId);
+      _album = alb;
+
+      // ⚡ Pre-fetch all song details for the album
+      if (_album?.songs.isNotEmpty ?? false) {
+        _albumSongDetails = await api.getSongDetails(
+          ids: _album!.songs.map((s) => s.id).toList(),
+        );
+        _totalAlbumDuration = getTotalDuration(_albumSongDetails);
+        await _updateBgColor();
+      }
+    } catch (e, st) {
+      debugPrint("Error fetching album: $e\n$st");
+    }
+
     _loading = false;
     setState(() {});
   }
 
+  Future<void> _updateBgColor() async {
+    if (_album?.images.last.url.isEmpty ?? true) return;
+
+    final dominant = await getDominantColorFromImage(_album!.images.last.url);
+    if (dominant == null) return;
+
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.25);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    ref.listen<List<SongDetail>>(queueManagerProvider, (_, __) {
+      final qm = ref.read(queueManagerProvider.notifier);
+      ref.read(currentSongProvider.notifier).state = qm.currentSong;
+    });
+
+    final player = ref.read(playerProvider);
+    player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        ref.read(queueManagerProvider.notifier).playNext();
+      }
+    });
+    final isShuffle = ref.watch(shuffleProvider);
+    ref.listen<SongDetail?>(currentSongProvider, (_, __) {
+      _updateBgColor();
+    });
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          "Album",
-          style: GoogleFonts.figtree(fontWeight: FontWeight.w600),
+      backgroundColor: ref.watch(playerColourProvider),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [ref.watch(playerColourProvider), Colors.black],
+          ),
         ),
-      ),
-      body: _loading
-          ? buildAlbumShimmer()
-          : _album == null
-          ? const Center(
-              child: Text(
-                "Failed to load album",
-                style: TextStyle(color: Colors.white70),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Album cover
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
-                    _album!.images.isNotEmpty ? _album!.images.last.url : "",
-                    width: double.infinity,
-                    // height: 220,
-                    fit: BoxFit.cover,
+        child:
+            _loading
+                ? buildAlbumShimmer()
+                : _album == null
+                ? const Center(
+                  child: Text(
+                    "Failed to load album",
+                    style: TextStyle(color: Colors.white70),
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Album title
-                Text(
-                  _album!.title,
-                  style: GoogleFonts.figtree(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                // Artist
-                if (_album!.artist.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      _album!.artist,
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 14,
+                )
+                : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    // Album cover with Hero animation
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.80,
+                      height: 300,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          _album!.images.isNotEmpty
+                              ? _album!.images.last.url
+                              : "",
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
-                  ),
 
-                // Year & Label
-                if (_album!.year.isNotEmpty || _album!.label.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2.0),
-                    child: Text(
-                      "${_album!.year}  •  ${_album!.label}",
+                    const SizedBox(height: 24),
+
+                    // Album title
+                    Text(
+                      _album!.title,
                       style: GoogleFonts.figtree(
-                        color: Colors.white54,
-                        fontSize: 12,
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                const SizedBox(height: 20),
 
-                // Songs
-                ..._album!.songs.map((song) {
-                  final currentSong = ref.watch(currentSongProvider);
-                  final isPlaying = currentSong?.id == song.id;
-
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Row(
+                    // Album metaData
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Equalizer icon in front of the title
-                        if (isPlaying)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6.0),
-                            child: Icon(
-                              Icons.graphic_eq,
-                              color: Colors.greenAccent,
-                              size: 16, // same height as font
-                            ),
-                          ),
+                        // Album details
                         Expanded(
-                          child: Text(
-                            song.title,
-                            style: GoogleFonts.figtree(
-                              color: isPlaying
-                                  ? Colors.greenAccent
-                                  : Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_album!.artist.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    _album!.artist,
+                                    style: GoogleFonts.figtree(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              if (_album!.description.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    _album!.description,
+                                    style: GoogleFonts.figtree(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              if (_totalAlbumDuration > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    formatDuration(_totalAlbumDuration),
+                                    style: GoogleFonts.figtree(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        // Album Controls: Shuffle + Play/Pause
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Shuffle button
+                              GestureDetector(
+                                onTap: () {
+                                  ref
+                                      .read(queueManagerProvider.notifier)
+                                      .toggleShuffle();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    // color: Colors.grey[900],
+                                  ),
+                                  child: Icon(
+                                    Icons.shuffle,
+                                    color:
+                                        isShuffle
+                                            ? Colors.greenAccent
+                                            : Colors.grey[600],
+                                    size: 24,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+
+                              // Play / Pause Button
+                              StreamBuilder<PlayerState>(
+                                stream: player.playerStateStream,
+                                builder: (context, snapshot) {
+                                  final isPlaying =
+                                      snapshot.data?.playing ?? false;
+                                  final currentSong = ref.read(
+                                    currentSongProvider,
+                                  );
+
+                                  // Check if current song belongs to this album
+                                  final bool isCurrentAlbumSong =
+                                      currentSong != null &&
+                                      _albumSongDetails.any(
+                                        (s) => s.id == currentSong.id,
+                                      );
+
+                                  return GestureDetector(
+                                    onTap: () async {
+                                      final queueManager = ref.read(
+                                        queueManagerProvider.notifier,
+                                      );
+
+                                      if (!isCurrentAlbumSong) {
+                                        // Load this album queue from start
+                                        await queueManager.loadQueue(
+                                          _albumSongDetails,
+                                          startIndex:
+                                              isShuffle
+                                                  ? (DateTime.now()
+                                                          .millisecondsSinceEpoch %
+                                                      _albumSongDetails.length)
+                                                  : 0,
+                                        );
+                                        await player.play();
+                                      } else {
+                                        // Toggle play/pause for current album song
+                                        if (isPlaying) {
+                                          await player.pause();
+                                        } else {
+                                          await player.play();
+                                        }
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.green,
+                                      ),
+                                      child: Icon(
+                                        isCurrentAlbumSong
+                                            ? (isPlaying
+                                                ? Icons.pause
+                                                : Icons.play_arrow)
+                                            : Icons.play_arrow,
+                                        color: Colors.black,
+                                        size: 30,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    subtitle: Text(
-                      song.primaryArtists.isNotEmpty
-                          ? song.primaryArtists
-                          : _album!.artist,
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                    trailing: SizedBox(
-                      height: 40, // ensures vertical center alignment
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.add_circle_outline,
-                              color: Colors.white70,
-                              size: 24,
-                            ),
-                            onPressed: () {
-                              // TODO: Add song to playlist/favorites
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.more_vert,
-                              color: Colors.white70,
-                              size: 24,
-                            ),
-                            onPressed: () {
-                              // TODO: Show song menu
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    onTap: () async {
-                      try {
-                        final details = await SaavnAPI().getSongDetails(
-                          ids: [song.id],
-                        );
-                        if (details.isNotEmpty) {
-                          final songDetails = details.first;
-                          String? imageUrl = songDetails.images.isNotEmpty
-                              ? songDetails.images.last.url
-                              : null;
-                          final dominant = imageUrl != null
-                              ? await getDominantColorFromImage(imageUrl)
-                              : null;
-                          final mixedColor =
-                              Color.lerp(dominant, Colors.black, 0.6) ??
-                              dominant;
-                          if (mixedColor != null) {
-                            playerColour = mixedColor.withAlpha(250);
+
+                    const SizedBox(height: 20),
+
+                    // Songs
+                    ..._album!.songs.map((song) {
+                      final currentSong = ref.watch(currentSongProvider);
+                      final isPlaying = currentSong?.id == song.id;
+                      final isLiked = ref
+                          .watch(likedSongsProvider)
+                          .contains(song.id);
+
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () async {
+                          try {
+                            if (_albumSongDetails.isNotEmpty) {
+                              final tappedIndex = _albumSongDetails.indexWhere(
+                                (s) => s.id == song.id,
+                              );
+                              await ref
+                                  .read(queueManagerProvider.notifier)
+                                  .loadQueue(
+                                    _albumSongDetails,
+                                    startIndex: tappedIndex,
+                                  );
+                            }
+                          } catch (e, st) {
+                            debugPrint("Error starting album queue: $e\n$st");
                           }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8.0,
+                            horizontal: 4.0,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // Playing indicator
+                                    if (isPlaying)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 8.0,
+                                        ),
+                                        child: Image.asset(
+                                          'assets/player.gif',
+                                          height: 18,
+                                          // width: 16,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
 
-                          final player = ref.read(playerProvider);
+                                    // Song details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            song.title,
+                                            style: GoogleFonts.figtree(
+                                              color:
+                                                  isPlaying
+                                                      ? Colors.greenAccent
+                                                      : Colors.white,
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 16,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                          // const SizedBox(height: 2),
+                                          Text(
+                                            song.primaryArtists.isNotEmpty
+                                                ? song.primaryArtists
+                                                : _album!.artist,
+                                            style: GoogleFonts.figtree(
+                                              color: Colors.white70,
+                                              fontSize: 13,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
 
-                          if (songDetails.downloadUrls.isNotEmpty) {
-                            final url = songDetails.downloadUrls.last.url;
-                            await player.setUrl(url);
-                            ref.read(currentSongProvider.notifier).state =
-                                songDetails;
-                            await player.play();
-                          }
-                        }
-                      } catch (e, st) {
-                        debugPrint("Error playing song: $e\n$st");
-                      }
-                    },
-                  );
-                }),
+                                    // Liked song indicator
+                                    if (isLiked)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8.0,
+                                        ),
+                                        child: Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    // Menu icon at far right with extra padding
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.more_vert,
+                                        color: Colors.white70,
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        // TODO: Show song menu
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
 
-                const SizedBox(height: 70),
-              ],
-            ),
+                    const SizedBox(height: 70),
+                  ],
+                ),
+      ),
     );
   }
 }

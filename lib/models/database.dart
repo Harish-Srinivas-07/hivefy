@@ -164,8 +164,8 @@ class ArtistDB {
             .key
             .isNotEmpty
         ? knownArtists.entries
-              .firstWhere((e) => e.value.toLowerCase() == name.toLowerCase())
-              .key
+            .firstWhere((e) => e.value.toLowerCase() == name.toLowerCase())
+            .key
         : null;
   }
 }
@@ -206,47 +206,106 @@ class PlaylistDB {
   }
 }
 
-
-// artist cache
+// Artist cache with persistence
 class ArtistCache {
-  // Singleton instance
+  static const _prefsKey = 'artist_cache';
   static final ArtistCache _instance = ArtistCache._internal();
   factory ArtistCache() => _instance;
   ArtistCache._internal();
 
-  // Internal cache map
   final Map<String, ArtistDetails> _cache = {};
+  bool _initialized = false;
+  late SharedPreferences _prefs;
 
-  /// Get artist details from cache if available
-  ArtistDetails? get(String artistId) => _cache[artistId];
-
-  /// Store artist details in cache
-  void set(String artistId, ArtistDetails details) {
-    _cache[artistId] = details;
+  Future<void> _init() async {
+    if (_initialized) return;
+    _prefs = await SharedPreferences.getInstance();
+    final stored = _prefs.getString(_prefsKey);
+    if (stored != null) {
+      final Map<String, dynamic> decoded = jsonDecode(stored);
+      decoded.forEach((key, value) {
+        _cache[key] = ArtistDetails.fromJson(Map<String, dynamic>.from(value));
+      });
+    }
+    _initialized = true;
   }
 
-  /// Clear cache (optional)
-  void clear() => _cache.clear();
+  Future<ArtistDetails?> get(String artistId) async {
+    await _init();
+    return _cache[artistId];
+  }
+
+  Future<void> set(String artistId, ArtistDetails details) async {
+    await _init();
+    _cache[artistId] = details;
+    await _saveToPrefs();
+  }
+
+  List<ArtistDetails> getAll() => _cache.values.toList();
+
+  Future<void> clear() async {
+    await _init();
+    _cache.clear();
+    await _prefs.remove(_prefsKey);
+  }
+
+  Future<void> _saveToPrefs() async {
+    final Map<String, dynamic> toStore = {};
+    _cache.forEach((key, value) {
+      toStore[key] = ArtistDetails.artistDetailsToJson(value);
+    });
+    await _prefs.setString(_prefsKey, jsonEncode(toStore));
+  }
 }
 
-// album cache
+// Album cache with persistence
 class AlbumCache {
-  // Singleton instance
+  static const _prefsKey = 'album_cache';
   static final AlbumCache _instance = AlbumCache._internal();
   factory AlbumCache() => _instance;
   AlbumCache._internal();
 
-  // Internal cache
   final Map<String, Album> _cache = {};
+  bool _initialized = false;
+  late SharedPreferences _prefs;
 
-  /// Get album from cache
-  Album? get(String albumId) => _cache[albumId];
-
-  /// Save album to cache
-  void set(String albumId, Album album) {
-    _cache[albumId] = album;
+  Future<void> _init() async {
+    if (_initialized) return;
+    _prefs = await SharedPreferences.getInstance();
+    final stored = _prefs.getString(_prefsKey);
+    if (stored != null) {
+      final Map<String, dynamic> decoded = jsonDecode(stored);
+      decoded.forEach((key, value) {
+        _cache[key] = Album.fromJson(Map<String, dynamic>.from(value));
+      });
+    }
+    _initialized = true;
   }
 
-  /// Clear all cached albums
-  void clear() => _cache.clear();
+  Future<Album?> get(String albumId) async {
+    await _init();
+    return _cache[albumId];
+  }
+
+  Future<void> set(String albumId, Album album) async {
+    await _init();
+    _cache[albumId] = album;
+    await _saveToPrefs();
+  }
+
+  List<Album> getAll() => _cache.values.toList();
+
+  Future<void> clear() async {
+    await _init();
+    _cache.clear();
+    await _prefs.remove(_prefsKey);
+  }
+
+  Future<void> _saveToPrefs() async {
+    final Map<String, dynamic> toStore = {};
+    _cache.forEach((key, value) {
+      toStore[key] = Album.albumToJson(value);
+    });
+    await _prefs.setString(_prefsKey, jsonEncode(toStore));
+  }
 }

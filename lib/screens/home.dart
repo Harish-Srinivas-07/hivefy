@@ -23,7 +23,31 @@ class _HomeState extends ConsumerState<Home>
   @override
   bool get wantKeepAlive => true;
 
-  final List<Widget> _pages = const [Dashboard(), Search(), LibraryPage()];
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+  ];
+
+  late final List<Widget> _navigators;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _navigators = [
+      _buildNavigator(const Dashboard(), _navigatorKeys[0]),
+      _buildNavigator(const Search(), _navigatorKeys[1]),
+      _buildNavigator(const LibraryPage(), _navigatorKeys[2]),
+    ];
+  }
+
+  Widget _buildNavigator(Widget page, GlobalKey<NavigatorState> key) {
+    return Navigator(
+      key: key,
+      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => page),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,54 +55,60 @@ class _HomeState extends ConsumerState<Home>
 
     final tabIndex = ref.watch(tabIndexProvider);
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Each tab gets its own navigator to preserve state
-          IndexedStack(
-            index: tabIndex,
-            children: List.generate(_pages.length, (i) {
-              return Navigator(
-                key: GlobalKey<NavigatorState>(), // keep separate stack per tab
-                onGenerateRoute: (settings) {
-                  return MaterialPageRoute(builder: (_) => _pages[i]);
-                },
-              );
-            }),
-          ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
 
-          // MiniPlayer above nav bar
-          const Align(alignment: Alignment.bottomCenter, child: MiniPlayer()),
-        ],
+        final currentNavigatorKey = _navigatorKeys[tabIndex];
+        if (currentNavigatorKey.currentState?.canPop() ?? false) {
+          currentNavigatorKey.currentState!.pop();
+        } else {
+          Navigator.of(context).maybePop();
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            IndexedStack(index: tabIndex, children: _navigators),
+            const Align(alignment: Alignment.bottomCenter, child: MiniPlayer()),
+          ],
+        ),
+        bottomNavigationBar: _buildBottomNavBar(tabIndex),
       ),
-      bottomNavigationBar: FlashyTabBar(
-        selectedIndex: tabIndex,
-        onItemSelected: (index) async {
-          ref.read(tabIndexProvider.notifier).state = index;
-          final prefs = await SharedPreferences.getInstance();
-          prefs.setInt('last_index', index);
-        },
-        items: [
-          FlashyTabBarItem(
-            icon: const Icon(IconlyBroken.home),
-            title: Text('Home', style: GoogleFonts.poppins()),
-            activeColor: Colors.greenAccent,
-            inactiveColor: Colors.grey,
-          ),
-          FlashyTabBarItem(
-            icon: const Icon(IconlyLight.search),
-            title: Text('Search', style: GoogleFonts.poppins()),
-            activeColor: Colors.greenAccent,
-            inactiveColor: Colors.grey,
-          ),
-          FlashyTabBarItem(
-            icon: const Icon(IconlyBroken.chart),
-            title: Text('Library', style: GoogleFonts.poppins()),
-            activeColor: Colors.greenAccent,
-            inactiveColor: Colors.grey,
-          ),
-        ],
-      ),
+    );
+  }
+
+  Widget _buildBottomNavBar(int tabIndex) {
+    return FlashyTabBar(
+      height: 60,
+      selectedIndex: tabIndex,
+      backgroundColor: const Color.fromARGB(255, 21, 21, 21),
+      onItemSelected: (index) async {
+        ref.read(tabIndexProvider.notifier).state = index;
+        final prefs = await SharedPreferences.getInstance();
+        prefs.setInt('last_index', index);
+      },
+      items: [
+        FlashyTabBarItem(
+          icon: const Icon(IconlyBroken.home, size: 30),
+          title: Text('Home', style: GoogleFonts.figtree(fontSize: 16)),
+          activeColor: Colors.greenAccent,
+          inactiveColor: Colors.grey,
+        ),
+        FlashyTabBarItem(
+          icon: const Icon(IconlyLight.search, size: 30),
+          title: Text('Search', style: GoogleFonts.figtree(fontSize: 16)),
+          activeColor: Colors.greenAccent,
+          inactiveColor: Colors.grey,
+        ),
+        FlashyTabBarItem(
+          icon: const Icon(IconlyBroken.chart, size: 30),
+          title: Text('Library', style: GoogleFonts.figtree(fontSize: 16)),
+          activeColor: Colors.greenAccent,
+          inactiveColor: Colors.grey,
+        ),
+      ],
     );
   }
 }

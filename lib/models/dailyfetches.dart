@@ -45,9 +45,10 @@ class Dailyfetches {
     final stale = force || _isStale(_prefs!.getString(_artistsTsKey));
     if (!stale) return getArtistsFromCache();
 
-    final ids = (artistIds ?? ArtistDB.knownArtists.keys.toList())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    final ids =
+        (artistIds ?? ArtistDB.knownArtists.keys.toList())
+            .where((e) => e.isNotEmpty)
+            .toList();
 
     // Fetch in parallel
     final results = await Future.wait(
@@ -79,11 +80,11 @@ class Dailyfetches {
 
     final ids =
         (playlistIds ??
-        PlaylistDB.playlists
-            .map((e) => e['id'] ?? '')
-            .where((e) => e.isNotEmpty)
-            .cast<String>()
-            .toList());
+            PlaylistDB.playlists
+                .map((e) => e['id'] ?? '')
+                .where((e) => e.isNotEmpty)
+                .cast<String>()
+                .toList());
 
     final results = await Future.wait(
       ids.map(
@@ -171,6 +172,31 @@ class Dailyfetches {
       return differentDay || olderThan24h;
     } catch (_) {
       return true;
+    }
+  }
+}
+
+// last played
+class LastPlayedSongStorage {
+  static const _key = 'last_played_song';
+
+  /// Save song details as JSON
+  static Future<void> save(SongDetail song) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = json.encode(SongDetail.songDetailToJson(song));
+    await prefs.setString(_key, jsonStr);
+  }
+
+  /// Load last song from storage
+  static Future<SongDetail?> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_key);
+    if (jsonStr == null) return null;
+    try {
+      final map = json.decode(jsonStr) as Map<String, dynamic>;
+      return SongDetail.fromJson(map);
+    } catch (_) {
+      return null;
     }
   }
 }

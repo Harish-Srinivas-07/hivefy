@@ -162,9 +162,9 @@ class SaavnAPI {
 
     return ids != null
         ? ids
-              .where((id) => resultMap.containsKey(id))
-              .map((id) => resultMap[id]!)
-              .toList()
+            .where((id) => resultMap.containsKey(id))
+            .map((id) => resultMap[id]!)
+            .toList()
         : resultMap.values.toList();
   }
 
@@ -221,8 +221,8 @@ class SaavnAPI {
   }) async {
     final cache = ArtistCache();
 
-    // ✅ Check cache first
-    final cached = cache.get(artistId);
+    // ✅ Check cache first (await async getter)
+    final cached = await cache.get(artistId);
     if (cached != null) {
       debugPrint("✅ fetchArtistDetailsById: loaded from cache ($artistId)");
       return cached;
@@ -242,8 +242,8 @@ class SaavnAPI {
             jsonBody['data'] as Map<String, dynamic>,
           );
 
-          // ✅ Save to cache
-          cache.set(artistId, details);
+          // ✅ Save to cache (async)
+          await cache.set(artistId, details);
 
           debugPrint("🎤 fetchArtistDetailsById: fetched from API ($artistId)");
           return details;
@@ -257,6 +257,7 @@ class SaavnAPI {
       debugPrint("⚠️ Error in fetchArtistDetailsById: $e");
       debugPrint("$st");
     }
+
     return null;
   }
 
@@ -341,7 +342,9 @@ class SaavnAPI {
 
     // Use albumId as cache key if available, else fallback to link
     final cacheKey = albumId ?? link!;
-    final cached = cache.get(cacheKey);
+
+    // Await the async cache getter
+    final cached = await cache.get(cacheKey);
     if (cached != null) {
       debugPrint("✅ fetchAlbumById: loaded from cache ($cacheKey)");
       return cached;
@@ -367,8 +370,8 @@ class SaavnAPI {
         if (jsonBody['success'] == true && jsonBody['data'] != null) {
           final album = Album.fromJson(jsonBody['data']);
 
-          // ✅ Save to cache
-          cache.set(cacheKey, album);
+          // Save to cache (async)
+          await cache.set(cacheKey, album);
 
           debugPrint("📀 fetchAlbumById: fetched from API ($cacheKey)");
           return album;

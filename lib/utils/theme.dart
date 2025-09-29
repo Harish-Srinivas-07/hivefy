@@ -31,14 +31,24 @@ class ThemeController {
     }
     return mode == ThemeMode.dark;
   }
-
 }
-
 
 Future<Color?> getDominantColorFromImage(String imageUrl) async {
   final colorScheme = await ColorScheme.fromImageProvider(
     provider: NetworkImage(imageUrl),
   );
+  debugPrint(
+    '--> here the colur ${colorScheme.primary} & ${colorScheme.brightness}',
+  );
   // The dominant color is usually the 'primary' field
   return colorScheme.primary;
+}
+
+// darker
+Color darken(Color color, [double amount = .2]) {
+  final hsl = HSLColor.fromColor(color);
+  return hsl
+      .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
+      .withSaturation((hsl.saturation + 0.05).clamp(0.0, 1.0))
+      .toColor();
 }

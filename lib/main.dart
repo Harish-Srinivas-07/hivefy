@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:page_transition/page_transition.dart';
 
 import 'screens/home.dart';
+import 'screens/library.dart';
+import 'screens/search.dart';
 import 'shared/constants.dart';
 import 'utils/theme.dart';
 
@@ -25,7 +28,6 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> {
-
   StreamSubscription<Uri>? _linkSubscription;
 
   @override
@@ -68,7 +70,26 @@ class _MyAppState extends ConsumerState<MyApp> {
               theme: ThemeData(colorScheme: lightScheme, useMaterial3: true),
               darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
               themeMode: mode,
-              home: const Home(),
+              onGenerateRoute: (settings) {
+                Widget page;
+                switch (settings.name) {
+                  case '/search':
+                    page = const Search();
+                    break;
+                  case '/library':
+                    page = const LibraryPage();
+                    break;
+                  default:
+                    page = const Home();
+                }
+                return PageTransition(
+                  type: PageTransitionType.rightToLeft,
+                  child: page,
+                  settings: settings,
+                  duration: const Duration(milliseconds: 300),
+                  reverseDuration: const Duration(milliseconds: 300),
+                );
+              },
             );
           },
         );
