@@ -280,6 +280,9 @@ class SearchState extends ConsumerState<Search>
                         controller: _controller,
                         cursorColor: Colors.greenAccent,
                         onChanged: _onTextChanged,
+                        onSubmitted: (value) {
+                          _onSuggestionTap(value.trim());
+                        },
                         style: GoogleFonts.figtree(color: Colors.white),
                         decoration: InputDecoration(
                           hintText: "What do you want to listen to?",
@@ -530,11 +533,17 @@ class SearchState extends ConsumerState<Search>
                                     onTap: () async {
                                       FocusScope.of(context).unfocus();
 
-                                      // Set album page globally
-                                      ref
-                                          .read(albumPageProvider.notifier)
-                                          .state = AlbumViewer(
-                                        albumId: a.id,
+                                      // // Set album page globally
+                                      // ref
+                                      //     .read(albumPageProvider.notifier)
+                                      //     .state = AlbumViewer(
+                                      //   albumId: a.id,
+                                      // );
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              AlbumViewer(albumId: a.id),
+                                        ),
                                       );
                                     },
 
@@ -573,11 +582,15 @@ class SearchState extends ConsumerState<Search>
                                 if (_playlists.isNotEmpty)
                                   _buildSectionTitle("Playlists"),
                                 ..._playlists.map(_buildPlaylistRow),
+
+                                if (_songs.isNotEmpty ||
+                                    _albums.isNotEmpty ||
+                                    _artists.isNotEmpty ||
+                                    _playlists.isNotEmpty)
+                                  const SizedBox(height: 60),
                               ],
                             ),
                     ),
-
-              const SizedBox(height: 60),
             ],
           ),
         ),

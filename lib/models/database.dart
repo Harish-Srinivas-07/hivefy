@@ -228,3 +228,25 @@ class ArtistCache {
   /// Clear cache (optional)
   void clear() => _cache.clear();
 }
+
+// album cache
+class AlbumCache {
+  // Singleton instance
+  static final AlbumCache _instance = AlbumCache._internal();
+  factory AlbumCache() => _instance;
+  AlbumCache._internal();
+
+  // Internal cache
+  final Map<String, Album> _cache = {};
+
+  /// Get album from cache
+  Album? get(String albumId) => _cache[albumId];
+
+  /// Save album to cache
+  void set(String albumId, Album album) {
+    _cache[albumId] = album;
+  }
+
+  /// Clear all cached albums
+  void clear() => _cache.clear();
+}

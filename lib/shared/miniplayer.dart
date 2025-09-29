@@ -95,7 +95,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 children: [
                   // Artwork
@@ -175,10 +175,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                             padding: EdgeInsets.zero,
                             icon: Icon(
                               playing
-                                  ? Icons.pause_circle_filled
-                                  : IconlyBold.play,
+                                  ? Icons.pause_outlined
+                                  : Icons.play_arrow_outlined,
                               color: Colors.white,
-                              size: 36,
+                              size: 28,
                             ),
                             onPressed: () {
                               playing ? player.pause() : player.play();
@@ -192,7 +192,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
               ),
             ),
 
-            const SizedBox(height: 3),
+            const SizedBox(height: 6),
             // Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -211,9 +211,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                       value: progress,
                       backgroundColor: Colors.white.withAlpha(51),
                       valueColor: const AlwaysStoppedAnimation<Color>(
-                        Colors.greenAccent,
+                        Colors.white,
                       ),
-                      minHeight: 4,
+                      minHeight: 2,
                     ),
                   );
                 },
@@ -265,38 +265,26 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     }
   }
 
-  Future<void> _fetchArtistDetails() async {
+Future<void> _fetchArtistDetails() async {
     final song = ref.read(currentSongProvider);
     if (song == null) return;
 
-    final artistId = song.contributors.primary.first.id;
+    final primaryContributors = song.contributors.primary;
+    if (primaryContributors.isEmpty) return;
+
+    final artistId = primaryContributors.first.id;
     if (artistId.isEmpty) return;
 
-    final cache = ArtistCache();
-
-    // Try to get from cache first
-    final cached = cache.get(artistId);
-    if (cached != null) {
-      _artistDetails = cached;
-      setState(() {});
-      debugPrint('--> loaded artist details from cache: $_artistDetails');
-      return;
-    }
-
-    // Fetch from API if not cached
     final api = SaavnAPI();
     final details = await api.fetchArtistDetailsById(artistId: artistId);
 
     if (mounted && details != null) {
       _artistDetails = details;
-
-      // Save to cache
-      cache.set(artistId, details);
-
       setState(() {});
-      debugPrint('--> fetched artist details from API: $_artistDetails');
+      debugPrint('--> loaded artist details: $_artistDetails');
     }
   }
+
 
   String _fmt(Duration d) {
     final m = d.inMinutes;
@@ -732,9 +720,10 @@ Widget _marqueeText(
       ),
       velocity: 25,
       blankSpace: 50,
+      fadingEdgeStartFraction: .2,
+      fadingEdgeEndFraction: .2,
       startAfter: const Duration(seconds: 1),
       pauseAfterRound: const Duration(seconds: 1),
-      numberOfRounds: 1,
     ),
   );
 }

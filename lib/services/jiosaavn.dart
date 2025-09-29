@@ -99,9 +99,7 @@ class SaavnAPI {
           debugPrint(
             "--- Cached song '${song.title}' has no download URLs, removing from cache",
           );
-          await AppDatabase.removeSong(
-            song.id,
-          ); 
+          await AppDatabase.removeSong(song.id);
           continue;
         }
         resultMap[song.id] = song;
@@ -221,6 +219,15 @@ class SaavnAPI {
     String sortBy = "popularity",
     String sortOrder = "desc",
   }) async {
+    final cache = ArtistCache();
+
+    // ✅ Check cache first
+    final cached = cache.get(artistId);
+    if (cached != null) {
+      debugPrint("✅ fetchArtistDetailsById: loaded from cache ($artistId)");
+      return cached;
+    }
+
     final url = Uri.parse(
       '$baseUrl/api/artists/$artistId?page=$page&songCount=$songCount&albumCount=$albumCount&sortBy=$sortBy&sortOrder=$sortOrder',
     );
@@ -231,17 +238,24 @@ class SaavnAPI {
       if (response.statusCode == 200) {
         final jsonBody = json.decode(response.body);
         if (jsonBody['success'] == true && jsonBody['data'] != null) {
-          return ArtistDetails.fromJson(
+          final details = ArtistDetails.fromJson(
             jsonBody['data'] as Map<String, dynamic>,
           );
+
+          // ✅ Save to cache
+          cache.set(artistId, details);
+
+          debugPrint("🎤 fetchArtistDetailsById: fetched from API ($artistId)");
+          return details;
         } else {
-          debugPrint("fetchArtistDetails: success=false or data=null");
+          debugPrint("fetchArtistDetailsById: success=false or data=null");
         }
       } else {
-        debugPrint("fetchArtistDetails failed: ${response.statusCode}");
+        debugPrint("fetchArtistDetailsById failed: ${response.statusCode}");
       }
-    } catch (e) {
-      debugPrint("Error in fetchArtistDetails: $e");
+    } catch (e, st) {
+      debugPrint("⚠️ Error in fetchArtistDetailsById: $e");
+      debugPrint("$st");
     }
     return null;
   }
@@ -323,6 +337,16 @@ class SaavnAPI {
       return null;
     }
 
+    final cache = AlbumCache();
+
+    // Use albumId as cache key if available, else fallback to link
+    final cacheKey = albumId ?? link!;
+    final cached = cache.get(cacheKey);
+    if (cached != null) {
+      debugPrint("✅ fetchAlbumById: loaded from cache ($cacheKey)");
+      return cached;
+    }
+
     final queryParams = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
@@ -341,7 +365,13 @@ class SaavnAPI {
       if (response.statusCode == 200) {
         final jsonBody = json.decode(response.body);
         if (jsonBody['success'] == true && jsonBody['data'] != null) {
-          return Album.fromJson(jsonBody['data']);
+          final album = Album.fromJson(jsonBody['data']);
+
+          // ✅ Save to cache
+          cache.set(cacheKey, album);
+
+          debugPrint("📀 fetchAlbumById: fetched from API ($cacheKey)");
+          return album;
         } else {
           debugPrint("fetchAlbumById: success=false or data=null");
         }

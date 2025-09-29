@@ -26,91 +26,58 @@ class _HomeState extends ConsumerState<Home>
   final List<Widget> _pages = const [Dashboard(), Search(), LibraryPage()];
 
   @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    _loadLastIndex();
-  }
-
-  Future<void> _loadLastIndex() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    final lastIndex = prefs.getInt('last_index') ?? 0;
-    ref.read(tabIndexProvider.notifier).state = lastIndex;
-  }
-
-  @override
   Widget build(BuildContext context) {
     super.build(context);
 
     final tabIndex = ref.watch(tabIndexProvider);
-    final albumPage = ref.watch(albumPageProvider);
 
-    // Show album page if set, else default tab
-    final currentPage = albumPage ?? _pages[tabIndex];
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Each tab gets its own navigator to preserve state
+          IndexedStack(
+            index: tabIndex,
+            children: List.generate(_pages.length, (i) {
+              return Navigator(
+                key: GlobalKey<NavigatorState>(), // keep separate stack per tab
+                onGenerateRoute: (settings) {
+                  return MaterialPageRoute(builder: (_) => _pages[i]);
+                },
+              );
+            }),
+          ),
 
-    return PopScope(
-      canPop: albumPage == null,
-      onPopInvokedWithResult: (canPop, _) {
-        final albumPage = ref.read(albumPageProvider);
-        if (albumPage != null) {
-          ref.read(albumPageProvider.notifier).state = null;
-        }
-      },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            // Active page
-            currentPage,
-
-            // MiniPlayer positioned above bottom nav bar
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [MiniPlayer()],
-              ),
-            ),
-          ],
-        ),
-        bottomNavigationBar: FlashyTabBar(
-          selectedIndex: tabIndex,
-          showElevation: true,
-          height: 55,
-          backgroundColor: const Color.fromARGB(255, 21, 21, 21),
-          iconSize: 28,
-          animationCurve: Curves.easeOutExpo,
-          onItemSelected: (index) async {
-            // Reset album page when switching tabs
-            ref.read(albumPageProvider.notifier).state = null;
-
-            ref.read(tabIndexProvider.notifier).state = index;
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            prefs.setInt('last_index', index);
-          },
-          items: [
-            FlashyTabBarItem(
-              icon: const Icon(IconlyBroken.home),
-              title: Text('Home', style: GoogleFonts.poppins()),
-              activeColor: Colors.greenAccent,
-              inactiveColor: Colors.grey,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(IconlyLight.search),
-              title: Text('Search', style: GoogleFonts.poppins()),
-              activeColor: Colors.greenAccent,
-              inactiveColor: Colors.grey,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(IconlyBroken.chart),
-              title: Text('Library', style: GoogleFonts.poppins()),
-              activeColor: Colors.greenAccent,
-              inactiveColor: Colors.grey,
-            ),
-          ],
-        ),
+          // MiniPlayer above nav bar
+          const Align(alignment: Alignment.bottomCenter, child: MiniPlayer()),
+        ],
+      ),
+      bottomNavigationBar: FlashyTabBar(
+        selectedIndex: tabIndex,
+        onItemSelected: (index) async {
+          ref.read(tabIndexProvider.notifier).state = index;
+          final prefs = await SharedPreferences.getInstance();
+          prefs.setInt('last_index', index);
+        },
+        items: [
+          FlashyTabBarItem(
+            icon: const Icon(IconlyBroken.home),
+            title: Text('Home', style: GoogleFonts.poppins()),
+            activeColor: Colors.greenAccent,
+            inactiveColor: Colors.grey,
+          ),
+          FlashyTabBarItem(
+            icon: const Icon(IconlyLight.search),
+            title: Text('Search', style: GoogleFonts.poppins()),
+            activeColor: Colors.greenAccent,
+            inactiveColor: Colors.grey,
+          ),
+          FlashyTabBarItem(
+            icon: const Icon(IconlyBroken.chart),
+            title: Text('Library', style: GoogleFonts.poppins()),
+            activeColor: Colors.greenAccent,
+            inactiveColor: Colors.grey,
+          ),
+        ],
       ),
     );
   }
