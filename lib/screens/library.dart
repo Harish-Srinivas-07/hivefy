@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
 import '../shared/constants.dart';
+import 'likedsongviewer.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -23,10 +25,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Future<void> _loadAllSongsCount() async {
     final allSongs = await AppDatabase.getAllSongs();
+    _allSongsCount = allSongs.length;
     if (mounted) {
-      setState(() {
-        _allSongsCount = allSongs.length;
-      });
+      setState(() {});
     }
   }
 
@@ -102,7 +103,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             count: item.count,
             imageUrl: item.imageUrl,
             fallbackColor: item.fallbackColor,
-            onTap: () {}, // TODO: add navigation
+            onTap: () {
+              if (item.title == 'Liked Songs') {
+                Navigator.of(context).push(
+                  PageTransition(
+                    type: PageTransitionType.rightToLeft,
+                    duration: const Duration(milliseconds: 300),
+                    child: const LikedSongsViewer(),
+                  ),
+                );
+              }
+            },
           );
         },
       ),
