@@ -6,10 +6,12 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:page_transition/page_transition.dart';
+import 'package:toastification/toastification.dart';
 
 import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/search.dart';
+import 'services/audiohandler.dart';
 import 'shared/constants.dart';
 import 'utils/theme.dart';
 
@@ -17,7 +19,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.init();
   packageInfo = await PackageInfo.fromPlatform();
-  runApp(ProviderScope(child: const MyApp()));
+
+  runApp(ToastificationWrapper(child: ProviderScope(child: const MyApp())));
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -33,7 +36,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
-    initDeepLinks();
+    _init();
   }
 
   @override
@@ -42,14 +45,32 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.dispose();
   }
 
-  Future<void> initDeepLinks() async {
+  Future<void> _init() async {
+    // Deep links
     _linkSubscription = AppLinks().uriLinkStream.listen((uri) {
       debugPrint('onAppLink: $uri');
+    });
+
+    // Await the audioHandler FutureProvider
+    final audioHandler = await ref.read(audioHandlerProvider.future);
+
+    debugPrint('--> AudioHandler initialized: $audioHandler');
+    // Listen to current media item
+    audioHandler.mediaItem.listen((mediaItem) {
+      debugPrint('Current MediaItem: $mediaItem');
+    });
+
+    // Optionally, listen to the queue
+    audioHandler.queue.listen((queue) {
+      debugPrint('Queue: $queue');
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Optional: watch the provider to rebuild when it’s ready
+    ref.watch(audioHandlerProvider);
+
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeController.themeNotifier,
       builder: (context, mode, _) {

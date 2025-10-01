@@ -6,7 +6,7 @@ import 'package:iconly/iconly.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shared/constants.dart';
-import '../shared/miniplayer.dart';
+import '../shared/player.dart';
 import 'dashboard.dart';
 import 'library.dart';
 import 'search.dart';

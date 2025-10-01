@@ -188,13 +188,20 @@ class LastPlayedSongStorage {
   }
 
   /// Load last song from storage
+  /// Returns null if the saved song is invalid or default
   static Future<SongDetail?> load() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_key);
     if (jsonStr == null) return null;
+
     try {
       final map = json.decode(jsonStr) as Map<String, dynamic>;
-      return SongDetail.fromJson(map);
+      final song = SongDetail.fromJson(map);
+
+      // Check if it's a placeholder/default song
+      if (song.id.isEmpty) return null;
+
+      return song;
     } catch (_) {
       return null;
     }

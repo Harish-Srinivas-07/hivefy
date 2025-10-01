@@ -7,7 +7,7 @@ import 'package:page_transition/page_transition.dart';
 import '../models/datamodel.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
-import '../shared/miniplayer.dart';
+import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'albumviewer.dart';

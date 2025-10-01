@@ -4,8 +4,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/datamodel.dart';
+import '../services/audiohandler.dart';
 import 'likedsong.dart';
-import 'queue.dart';
 
 // tab index
 final tabIndexProvider = StateProvider<int>((ref) => 0);
@@ -21,13 +21,6 @@ final currentSongProvider = StateProvider<SongDetail?>((ref) => null);
 // pages
 final albumPageProvider = StateProvider<Widget?>((ref) => null);
 
-// queu manager
-final queueManagerProvider =
-    StateNotifierProvider<QueueManager, List<SongDetail>>((ref) {
-      final player = ref.read(playerProvider);
-      return QueueManager(player, ref);
-    });
-
 // shufflemanage
 final shuffleProvider = StateProvider<bool>((ref) => false);
 
@@ -42,6 +35,7 @@ final likedSongsProvider =
 // common data
 List<Playlist> playlists = [];
 List<ArtistDetails> artists = [];
+List<Album> albums = [];
 
 PackageInfo packageInfo = PackageInfo(
   appName: 'Go Stream',

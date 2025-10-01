@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../components/snackbar.dart';
 import '../models/datamodel.dart';
 import '../models/shimmers.dart';
+import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
-import '../shared/miniplayer.dart';
+import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 
@@ -76,17 +79,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<List<SongDetail>>(queueManagerProvider, (_, __) {
-      final qm = ref.read(queueManagerProvider.notifier);
-      ref.read(currentSongProvider.notifier).state = qm.currentSong;
-    });
+    final player = ref.watch(playerProvider);
 
-    final player = ref.read(playerProvider);
-    player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) {
-        ref.read(queueManagerProvider.notifier).playNext();
-      }
-    });
     final isShuffle = ref.watch(shuffleProvider);
     ref.listen<SongDetail?>(currentSongProvider, (_, __) {
       _updateBgColor();
@@ -197,10 +191,11 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                             children: [
                               // Shuffle button
                               GestureDetector(
-                                onTap: () {
-                                  ref
-                                      .read(queueManagerProvider.notifier)
-                                      .toggleShuffle();
+                                onTap: () async {
+                                  final handler = await ref.read(
+                                    audioHandlerProvider.future,
+                                  );
+                                  handler.toggleShuffle();
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
@@ -226,11 +221,10 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                 builder: (context, snapshot) {
                                   final isPlaying =
                                       snapshot.data?.playing ?? false;
-                                  final currentSong = ref.read(
+                                  final currentSong = ref.watch(
                                     currentSongProvider,
                                   );
 
-                                  // Check if current song belongs to this album
                                   final bool isCurrentAlbumSong =
                                       currentSong != null &&
                                       _albumSongDetails.any(
@@ -239,29 +233,37 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
                                   return GestureDetector(
                                     onTap: () async {
-                                      final queueManager = ref.read(
-                                        queueManagerProvider.notifier,
-                                      );
-
-                                      if (!isCurrentAlbumSong) {
-                                        // Load this album queue from start
-                                        await queueManager.loadQueue(
-                                          _albumSongDetails,
-                                          startIndex:
-                                              isShuffle
-                                                  ? (DateTime.now()
-                                                          .millisecondsSinceEpoch %
-                                                      _albumSongDetails.length)
-                                                  : 0,
+                                      try {
+                                        final audioHandler = await ref.read(
+                                          audioHandlerProvider.future,
                                         );
-                                        await player.play();
-                                      } else {
-                                        // Toggle play/pause for current album song
-                                        if (isPlaying) {
-                                          await player.pause();
+
+                                        if (!isCurrentAlbumSong) {
+                                          // Load this album queue from start
+                                          final startIndex =
+                                              isShuffle
+                                                  ? DateTime.now()
+                                                          .millisecondsSinceEpoch %
+                                                      _albumSongDetails.length
+                                                  : 0;
+
+                                          await audioHandler.loadQueue(
+                                            _albumSongDetails,
+                                            startIndex: startIndex,
+                                          );
+                                          await audioHandler.play();
                                         } else {
-                                          await player.play();
+                                          // Toggle play/pause for current album song
+                                          if (isPlaying) {
+                                            await audioHandler.pause();
+                                          } else {
+                                            await audioHandler.play();
+                                          }
                                         }
+                                      } catch (e, st) {
+                                        debugPrint(
+                                          "Error handling play/pause: $e\n$st",
+                                        );
                                       }
                                     },
                                     child: Container(
@@ -299,114 +301,149 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                           .watch(likedSongsProvider)
                           .contains(song.id);
 
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () async {
-                          try {
-                            if (_albumSongDetails.isNotEmpty) {
-                              final tappedIndex = _albumSongDetails.indexWhere(
-                                (s) => s.id == song.id,
+                      return SwipeActionCell(
+                        backgroundColor: Colors.transparent,
+                        key: ValueKey(song.id),
+                        fullSwipeFactor: 0.3,
+                        editModeOffset: 10,
+                        trailingActions: [
+                          SwipeAction(
+                            color: Colors.greenAccent.shade700,
+                            icon: const Icon(Icons.playlist_add),
+                            performsFirstActionWithFullSwipe: true,
+                            onTap: (handler) async {
+                              final audioHandler = await ref.read(
+                                audioHandlerProvider.future,
                               );
-                              await ref
-                                  .read(queueManagerProvider.notifier)
-                                  .loadQueue(
-                                    _albumSongDetails,
-                                    startIndex: tappedIndex,
-                                  );
-                            }
-                          } catch (e, st) {
-                            debugPrint("Error starting album queue: $e\n$st");
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8.0,
-                            horizontal: 4.0,
+                              await audioHandler.playSongNow(
+                                song,
+                                insertNext: true,
+                              );
+                              info(
+                                '${song.title} added to Queue',
+                                Severity.success,
+                              );
+                              await handler(false);
+                            },
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    // Playing indicator
-                                    if (isPlaying)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 8.0,
+                        ],
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () async {
+                            try {
+                              if (_albumSongDetails.isNotEmpty) {
+                                final tappedIndex = _albumSongDetails
+                                    .indexWhere((s) => s.id == song.id);
+
+                                // Get the audio handler
+                                final audioHandler = await ref.read(
+                                  audioHandlerProvider.future,
+                                );
+
+                                // Load the album queue starting at tapped song
+                                await audioHandler.loadQueue(
+                                  _albumSongDetails,
+                                  startIndex: tappedIndex,
+                                );
+
+                                // Play the selected song
+                                await audioHandler.play();
+                              }
+                            } catch (e, st) {
+                              debugPrint("Error starting album queue: $e\n$st");
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 8.0,
+                              horizontal: 4.0,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      // Playing indicator
+                                      if (isPlaying)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
+                                          child: Image.asset(
+                                            'assets/player.gif',
+                                            height: 18,
+                                            // width: 16,
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
-                                        child: Image.asset(
-                                          'assets/player.gif',
-                                          height: 18,
-                                          // width: 16,
-                                          fit: BoxFit.contain,
+
+                                      // Song details
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              song.title,
+                                              style: GoogleFonts.figtree(
+                                                color:
+                                                    isPlaying
+                                                        ? Colors.greenAccent
+                                                        : Colors.white,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 16,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                            // const SizedBox(height: 2),
+                                            Text(
+                                              song.primaryArtists.isNotEmpty
+                                                  ? song.primaryArtists
+                                                  : _album!.artist,
+                                              style: GoogleFonts.figtree(
+                                                color: Colors.white70,
+                                                fontSize: 13,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ],
                                         ),
                                       ),
 
-                                    // Song details
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            song.title,
-                                            style: GoogleFonts.figtree(
-                                              color:
-                                                  isPlaying
-                                                      ? Colors.greenAccent
-                                                      : Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                              fontSize: 16,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
+                                      // Liked song indicator
+                                      if (isLiked)
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 8.0,
                                           ),
-                                          // const SizedBox(height: 2),
-                                          Text(
-                                            song.primaryArtists.isNotEmpty
-                                                ? song.primaryArtists
-                                                : _album!.artist,
-                                            style: GoogleFonts.figtree(
-                                              color: Colors.white70,
-                                              fontSize: 13,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
+                                          child: Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green,
+                                            size: 20,
                                           ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Liked song indicator
-                                    if (isLiked)
-                                      const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8.0,
                                         ),
-                                        child: Icon(
-                                          Icons.check_circle,
-                                          color: Colors.green,
+                                      // Menu icon at far right with extra padding
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.more_vert,
+                                          color: Colors.white70,
                                           size: 20,
                                         ),
+                                        onPressed: () {
+                                          // TODO: Show song menu
+                                        },
                                       ),
-                                    // Menu icon at far right with extra padding
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.more_vert,
-                                        color: Colors.white70,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        // TODO: Show song menu
-                                      },
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );

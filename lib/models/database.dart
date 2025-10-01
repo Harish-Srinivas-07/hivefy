@@ -241,7 +241,10 @@ class ArtistCache {
     await _saveToPrefs();
   }
 
-  List<ArtistDetails> getAll() => _cache.values.toList();
+  Future<List<ArtistDetails>> getAll() async {
+    await _init();
+    return _cache.values.toList();
+  }
 
   Future<void> clear() async {
     await _init();
@@ -293,7 +296,10 @@ class AlbumCache {
     await _saveToPrefs();
   }
 
-  List<Album> getAll() => _cache.values.toList();
+  Future<List<Album>> getAll() async {
+    await _init();
+    return _cache.values.toList();
+  }
 
   Future<void> clear() async {
     await _init();
