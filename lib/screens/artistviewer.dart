@@ -4,6 +4,7 @@ import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hivefy/models/shimmers.dart';
 import 'package:page_transition/page_transition.dart';
+import 'package:readmore/readmore.dart';
 import '../models/datamodel.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
@@ -96,13 +97,35 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
             style: GoogleFonts.figtree(color: Colors.white70, fontSize: 13),
           ),
           if (_artist!.bio.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                _artist!.bio.join("\n"),
-                style: GoogleFonts.figtree(color: Colors.white70, fontSize: 14),
+            if (_artist!.bio.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: ReadMoreText(
+                  _artist!.bio.join("\n\n"),
+                  trimLines: 3,
+                  trimMode: TrimMode.Line,
+                  colorClickableText: Colors.greenAccent,
+                  trimCollapsedText: " ...more",
+                  trimExpandedText: " Show less",
+                  style: GoogleFonts.figtree(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  moreStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.greenAccent,
+                  ),
+                  lessStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.greenAccent,
+                  ),
+                ),
               ),
-            ),
         ],
       ),
     );

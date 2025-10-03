@@ -85,6 +85,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
   @override
   Widget build(BuildContext context) {
     final isShuffle = ref.watch(shuffleProvider);
+    final currentSong = ref.watch(currentSongProvider);
 
     return Scaffold(
       backgroundColor: ref.watch(playerColourProvider),
@@ -214,6 +215,11 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       ),
                     ),
                     ..._songs.map((song) {
+                      final isPlaying = currentSong?.id == song.id;
+                      final isLiked = ref
+                          .watch(likedSongsProvider)
+                          .contains(song.id);
+
                       return SwipeActionCell(
                         backgroundColor: Colors.transparent,
                         key: ValueKey(song.id),
@@ -241,17 +247,30 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           ),
                         ],
                         child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: () async {
-                            final audioHandler = await ref.read(
-                              audioHandlerProvider.future,
-                            );
-                            final idx = _songs.indexWhere(
-                              (s) => s.id == song.id,
-                            );
-                            await audioHandler.loadQueue(
-                              _songs,
-                              startIndex: idx,
-                            );
+                            try {
+                              final audioHandler = await ref.read(
+                                audioHandlerProvider.future,
+                              );
+                              final idx = _songs.indexWhere(
+                                (s) => s.id == song.id,
+                              );
+                              if (idx == -1) return;
+
+                              // If tapped song is already current, toggle play/pause
+                              if (isPlaying) {
+                                await audioHandler.pause();
+                              } else {
+                                await audioHandler.loadQueue(
+                                  _songs,
+                                  startIndex: idx,
+                                );
+                                await audioHandler.play();
+                              }
+                            } catch (e, st) {
+                              debugPrint("Error playing song: $e\n$st");
+                            }
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -265,8 +284,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                                       ? song.images.last.url
                                       : '',
                                 ),
-                                if (ref.watch(currentSongProvider)?.id ==
-                                    song.id)
+                                if (isPlaying)
                                   const Padding(
                                     padding: EdgeInsets.only(right: 8),
                                     child: Image(
@@ -284,12 +302,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                                         song.title,
                                         style: GoogleFonts.figtree(
                                           color:
-                                              ref
-                                                          .watch(
-                                                            currentSongProvider,
-                                                          )
-                                                          ?.id ==
-                                                      song.id
+                                              isPlaying
                                                   ? Colors.greenAccent
                                                   : Colors.white,
                                           fontWeight: FontWeight.w500,
@@ -312,6 +325,17 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                                     ],
                                   ),
                                 ),
+                                if (isLiked)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8.0,
+                                    ),
+                                    child: Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 20,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

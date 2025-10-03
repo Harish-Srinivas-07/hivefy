@@ -5,12 +5,14 @@ import 'package:iconly/iconly.dart';
 import 'package:page_transition/page_transition.dart';
 
 import '../models/datamodel.dart';
+import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
 import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'albumviewer.dart';
+import 'artistviewer.dart';
 
 class Search extends ConsumerStatefulWidget {
   const Search({super.key});
@@ -127,9 +129,12 @@ class SearchState extends ConsumerState<Search>
     );
   }
 
-  Widget _buildItemImage(String url) {
+  Widget _buildItemImage(String url, String type) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius:
+          type.toLowerCase().contains('artist')
+              ? BorderRadius.circular(50)
+              : BorderRadius.circular(8),
       child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover),
     );
   }
@@ -141,7 +146,7 @@ class SearchState extends ConsumerState<Search>
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          _buildItemImage(imageUrl),
+          _buildItemImage(imageUrl, p.type),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -403,52 +408,40 @@ class SearchState extends ConsumerState<Search>
                                     onTap: () async {
                                       FocusScope.of(context).unfocus();
 
-                                      setState(() {
-                                        _loadingSongId = s.id;
-                                      });
-
                                       try {
-                                        debugPrint(
-                                          "--- fetching details for song id: ${s.id}",
-                                        );
+                                        // Unfocus keyboard if any
+                                        FocusScope.of(context).unfocus();
+
+                                        setState(() {
+                                          _loadingSongId = s.id;
+                                        });
+
+                                        // Fetch song details (to ensure we have latest URLs/images)
                                         final details = await saavn
                                             .getSongDetails(ids: [s.id]);
+                                        if (details.isEmpty) {
+                                          debugPrint(
+                                            "--- no details found for song id: ${s.id}",
+                                          );
+                                          setState(() => _loadingSongId = null);
+                                          return;
+                                        }
+
+                                        final song = details.first;
                                         debugPrint(
-                                          "--- fetched details: ${details.length}",
+                                          "--- fetched song: ${song.title}",
                                         );
 
-                                        if (details.isNotEmpty) {
-                                          final song = details.first;
-
-                                          debugPrint(
-                                            "--- song title: ${song.title}",
-                                          );
-                                          debugPrint(
-                                            "--- song downloadUrls count: ${song.downloadUrls.length}",
-                                          );
-                                          debugPrint(
-                                            "--- song images count: ${s.images.length}",
-                                          );
-
-                                          // get dominant color safely
-                                          String? imageUrl;
-                                          if (s.images.isNotEmpty) {
-                                            imageUrl = s.images.last.url;
-                                            debugPrint(
-                                              "--- using image url: $imageUrl",
-                                            );
-                                          } else {
-                                            debugPrint(
-                                              "--- no images found for song ${song.title}",
-                                            );
-                                          }
-
+                                        // Update theme colour (optional UI thing)
+                                        String? imageUrl =
+                                            song.images.isNotEmpty
+                                                ? song.images.last.url
+                                                : null;
+                                        if (imageUrl != null) {
                                           final dominant =
-                                              imageUrl != null
-                                                  ? await getDominantColorFromImage(
-                                                    imageUrl,
-                                                  )
-                                                  : null;
+                                              await getDominantColorFromImage(
+                                                imageUrl,
+                                              );
                                           final mixedColor =
                                               Color.lerp(
                                                 dominant,
@@ -465,52 +458,42 @@ class SearchState extends ConsumerState<Search>
                                               250,
                                             );
                                           }
+                                        }
 
-                                          final player = ref.read(
-                                            playerProvider,
-                                          );
+                                        final audioHandler = await ref.read(
+                                          audioHandlerProvider.future,
+                                        );
+                                        final currentSong = ref.read(
+                                          currentSongProvider,
+                                        );
 
-                                          // check if downloadUrls exist
-                                          if (song.downloadUrls.isNotEmpty) {
-                                            final url =
-                                                song.downloadUrls.last.url;
-                                            debugPrint(
-                                              "--- setting player url: $url",
-                                            );
-                                            await player.setUrl(url);
+                                        final isCurrentSong =
+                                            currentSong?.id == song.id;
 
-                                            // Update provider
-                                            ref
-                                                .read(
-                                                  currentSongProvider.notifier,
-                                                )
-                                                .state = song;
-
-                                            await player.play();
-                                          } else {
-                                            debugPrint(
-                                              "--- no download URLs for song ${song.title}",
-                                            );
-                                          }
-
-                                          // Reset loading
-                                          setState(() {
-                                            _loadingSongId = null;
-                                          });
+                                        if (!isCurrentSong) {
+                                          // Load queue with this one song (or use full list if you want)
+                                          await audioHandler.loadQueue([
+                                            song,
+                                          ], startIndex: 0);
+                                          await audioHandler.play();
                                         } else {
-                                          debugPrint(
-                                            "--- no details found for song id: ${s.id}",
-                                          );
-                                          setState(() {
-                                            _loadingSongId = null;
-                                          });
+                                          // Toggle play/pause for current song
+                                          final isPlaying = await audioHandler
+                                              .playerStateStream
+                                              .first
+                                              .then((ps) => ps.playing);
+                                          if (isPlaying) {
+                                            await audioHandler.pause();
+                                          } else {
+                                            await audioHandler.play();
+                                          }
                                         }
                                       } catch (e, st) {
-                                        debugPrint("Error playing song: $e");
-                                        debugPrint("$st");
-                                        setState(() {
-                                          _loadingSongId = null;
-                                        });
+                                        debugPrint(
+                                          "Error playing tapped song: $e\n$st",
+                                        );
+                                      } finally {
+                                        setState(() => _loadingSongId = null);
                                       }
                                     },
                                     child: _buildPlaylistRow(
@@ -574,16 +557,30 @@ class SearchState extends ConsumerState<Search>
                                 if (_artists.isNotEmpty)
                                   _buildSectionTitle("Artists"),
                                 ..._artists.map(
-                                  (ar) => _buildPlaylistRow(
-                                    Playlist(
-                                      id: ar.id,
-                                      title: ar.title,
-                                      images: ar.images,
-                                      url: '',
-                                      type: ar.type,
-                                      language: '',
-                                      explicitContent: false,
-                                      description: ar.description,
+                                  (ar) => GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        PageTransition(
+                                          type: PageTransitionType.rightToLeft,
+                                          duration: const Duration(
+                                            milliseconds: 300,
+                                          ),
+                                          child: ArtistViewer(artistId: ar.id),
+                                        ),
+                                      );
+                                    },
+                                    child: _buildPlaylistRow(
+                                      Playlist(
+                                        id: ar.id,
+                                        title: ar.title,
+                                        images: ar.images,
+                                        url: '',
+                                        type: ar.type,
+                                        language: '',
+                                        explicitContent: false,
+                                        description: ar.description,
+                                      ),
                                     ),
                                   ),
                                 ),

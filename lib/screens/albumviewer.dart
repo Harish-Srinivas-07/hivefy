@@ -79,8 +79,6 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final player = ref.watch(playerProvider);
-
     final isShuffle = ref.watch(shuffleProvider);
     ref.listen<SongDetail?>(currentSongProvider, (_, __) {
       _updateBgColor();
@@ -199,12 +197,11 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     shape: BoxShape.circle,
-                                    // color: Colors.grey[900],
                                   ),
                                   child: Icon(
-                                    Icons.shuffle,
+                                    isShuffle ? Icons.shuffle : Icons.shuffle,
                                     color:
                                         isShuffle
                                             ? Colors.greenAccent
@@ -213,11 +210,14 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 3),
+                              const SizedBox(width: 8),
 
-                              // Play / Pause Button
+                              // Play Album / Play First / Shuffle
                               StreamBuilder<PlayerState>(
-                                stream: player.playerStateStream,
+                                stream: ref
+                                    .read(audioHandlerProvider.future)
+                                    .asStream()
+                                    .asyncExpand((h) => h.playerStateStream),
                                 builder: (context, snapshot) {
                                   final isPlaying =
                                       snapshot.data?.playing ?? false;
@@ -231,6 +231,17 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                         (s) => s.id == currentSong.id,
                                       );
 
+                                  // --- Icon logic ---
+                                  IconData icon;
+                                  if (isCurrentAlbumSong) {
+                                    icon =
+                                        isPlaying
+                                            ? Icons.pause
+                                            : Icons.play_arrow;
+                                  } else {
+                                    icon = Icons.play_arrow;
+                                  }
+
                                   return GestureDetector(
                                     onTap: () async {
                                       try {
@@ -238,31 +249,39 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                           audioHandlerProvider.future,
                                         );
 
-                                        if (!isCurrentAlbumSong) {
-                                          // Load this album queue from start
-                                          final startIndex =
-                                              isShuffle
-                                                  ? DateTime.now()
-                                                          .millisecondsSinceEpoch %
-                                                      _albumSongDetails.length
-                                                  : 0;
-
-                                          await audioHandler.loadQueue(
-                                            _albumSongDetails,
-                                            startIndex: startIndex,
-                                          );
-                                          await audioHandler.play();
-                                        } else {
-                                          // Toggle play/pause for current album song
+                                        if (isCurrentAlbumSong) {
+                                          // If this album’s song is already playing -> toggle pause/play
                                           if (isPlaying) {
                                             await audioHandler.pause();
                                           } else {
                                             await audioHandler.play();
                                           }
+                                        } else {
+                                          // Load full album queue
+                                          int startIndex = 0;
+                                          if (isShuffle) {
+                                            startIndex =
+                                                DateTime.now()
+                                                    .millisecondsSinceEpoch %
+                                                _albumSongDetails.length;
+                                          }
+
+                                          await audioHandler.loadQueue(
+                                            _albumSongDetails,
+                                            startIndex: startIndex,
+                                          );
+
+                                          // If shuffle is enabled, apply it after loading
+                                          if (isShuffle &&
+                                              !audioHandler.isShuffle) {
+                                            audioHandler.toggleShuffle();
+                                          }
+
+                                          await audioHandler.play();
                                         }
                                       } catch (e, st) {
                                         debugPrint(
-                                          "Error handling play/pause: $e\n$st",
+                                          "Error handling album play: $e\n$st",
                                         );
                                       }
                                     },
@@ -273,11 +292,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                         color: Colors.green,
                                       ),
                                       child: Icon(
-                                        isCurrentAlbumSong
-                                            ? (isPlaying
-                                                ? Icons.pause
-                                                : Icons.play_arrow)
-                                            : Icons.play_arrow,
+                                        icon,
                                         color: Colors.black,
                                         size: 30,
                                       ),
@@ -331,26 +346,40 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                           behavior: HitTestBehavior.opaque,
                           onTap: () async {
                             try {
-                              if (_albumSongDetails.isNotEmpty) {
-                                final tappedIndex = _albumSongDetails
-                                    .indexWhere((s) => s.id == song.id);
+                              if (_albumSongDetails.isEmpty) return;
 
-                                // Get the audio handler
-                                final audioHandler = await ref.read(
-                                  audioHandlerProvider.future,
-                                );
+                              final tappedIndex = _albumSongDetails.indexWhere(
+                                (s) => s.id == song.id,
+                              );
+                              if (tappedIndex == -1) return;
 
-                                // Load the album queue starting at tapped song
+                              final audioHandler = await ref.read(
+                                audioHandlerProvider.future,
+                              );
+
+                              // Check if tapped song is currently playing
+                              final isCurrentSong = currentSong?.id == song.id;
+
+                              if (!isCurrentSong) {
+                                // Load album queue starting at tapped song
                                 await audioHandler.loadQueue(
                                   _albumSongDetails,
                                   startIndex: tappedIndex,
                                 );
 
-                                // Play the selected song
+                                // Respect shuffle mode if enabled
+                                final isShuffle = ref.read(shuffleProvider);
+                                if (isShuffle) audioHandler.toggleShuffle();
+
                                 await audioHandler.play();
+                              } else {
+                                // Toggle play/pause for current song
+                                await audioHandler.pause();
                               }
                             } catch (e, st) {
-                              debugPrint("Error starting album queue: $e\n$st");
+                              debugPrint(
+                                "Error playing tapped album song: $e\n$st",
+                              );
                             }
                           },
                           child: Container(
@@ -376,7 +405,6 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                           child: Image.asset(
                                             'assets/player.gif',
                                             height: 18,
-                                            // width: 16,
                                             fit: BoxFit.contain,
                                           ),
                                         ),
@@ -400,7 +428,6 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                               overflow: TextOverflow.ellipsis,
                                               maxLines: 1,
                                             ),
-                                            // const SizedBox(height: 2),
                                             Text(
                                               song.primaryArtists.isNotEmpty
                                                   ? song.primaryArtists
@@ -428,7 +455,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                             size: 20,
                                           ),
                                         ),
-                                      // Menu icon at far right with extra padding
+
+                                      // Menu icon
                                       IconButton(
                                         icon: const Icon(
                                           Icons.more_vert,

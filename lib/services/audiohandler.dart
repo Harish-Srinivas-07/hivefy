@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../components/snackbar.dart';
 import '../models/dailyfetches.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
@@ -22,6 +23,8 @@ final audioHandlerProvider = FutureProvider<MyAudioHandler>((ref) async {
       androidNotificationChannelName: 'Hivefy Audio',
       androidNotificationIcon: 'drawable/ic_launcher_foreground',
       androidShowNotificationBadge: true,
+      androidResumeOnClick: true,
+      androidStopForegroundOnPause: false,
     ),
   );
   return handler;
@@ -57,6 +60,13 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       playbackState.add(old.copyWith(bufferedPosition: buf));
     });
 
+    _player.durationStream.listen((dur) {
+      final current = mediaItem.value;
+      if (current != null && dur != null && current.duration != dur) {
+        mediaItem.add(current.copyWith(duration: dur));
+      }
+    });
+
     // resume last played song if exists
     _initLastPlayed();
   }
@@ -67,8 +77,11 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           ? _queue[_currentIndex]
           : null;
 
-  bool get hasNext => _currentIndex + 1 < _queue.length;
-  bool get hasPrevious => _currentIndex - 1 >= 0;
+  // safe hasNext / hasPrevious
+  bool get hasNext => _currentIndex >= 0 && (_currentIndex + 1 < _queue.length);
+
+  bool get hasPrevious => _currentIndex > 0 && (_currentIndex < _queue.length);
+
   bool get isShuffle => _shuffle;
   RepeatMode get repeatMode => _repeat;
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
@@ -79,6 +92,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   void toggleShuffle() {
     _shuffle = !_shuffle;
     if (_shuffle) _generateShuffleOrder();
+    ref.read(shuffleProvider.notifier).state = _shuffle;
   }
 
   void toggleRepeatMode() {
@@ -93,6 +107,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         _repeat = RepeatMode.none;
         break;
     }
+    ref.read(repeatModeProvider.notifier).state = _repeat;
   }
 
   // --- AudioHandler API
@@ -113,6 +128,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> pause() async {
     if (_player.audioSource == null) return;
+
+    // update UI immediately
+    playbackState.add(playbackState.value.copyWith(playing: false));
     await _player.pause();
   }
 
@@ -142,8 +160,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   @override
-  Future<void> seek(Duration position) {
-    return _player.seek(position);
+  Future<void> seek(Duration position) async {
+    await _player.seek(position);
+    final old = playbackState.value;
+    playbackState.add(old.copyWith(updatePosition: position));
   }
 
   @override
@@ -216,6 +236,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final song = await AppDatabase.getSong(mediaItem.id);
     if (song == null) return;
 
+    _queue.removeWhere((s) => s.id == song.id);
     _queue.add(song);
 
     if (_shuffle) {
@@ -281,6 +302,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     if (song.downloadUrls.isEmpty) {
+      info('Oops! Playback error skip to next song', Severity.warning);
       await skipToNext();
       return;
     }
@@ -337,6 +359,8 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           MediaAction.seekForward,
           MediaAction.seekBackward,
         },
+        queueIndex: _currentIndex,
+        speed: _player.speed,
       ),
     );
 
@@ -346,7 +370,21 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       } else if (hasNext || _repeat == RepeatMode.all) {
         await skipToNext();
       } else if (_queue.isEmpty) {
+        await pause();
         await stop();
+        _currentIndex = -1;
+        // clear mediaItem so UI knows nothing is playing
+        mediaItem.add(null);
+        playbackState.add(
+          playbackState.value.copyWith(
+            playing: false,
+            processingState: AudioProcessingState.idle,
+            updatePosition: Duration.zero,
+            bufferedPosition: Duration.zero,
+            queueIndex: -1,
+          ),
+        );
+        return;
       }
     }
   }

@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -224,11 +225,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: StreamBuilder<Duration>(
-                      stream: audioHandler.positionStream,
+                      stream: AudioService.position,
                       builder: (context, snapshot) {
                         final pos = snapshot.data ?? Duration.zero;
-
-                        // Convert song.duration (probably String? or int?) to Duration
                         final total = Duration(
                           seconds: int.tryParse(song.duration ?? '0') ?? 0,
                         );
@@ -329,6 +328,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final song = ref.watch(currentSongProvider);
+    final isShuffle = ref.watch(shuffleProvider);
+    final repeatMode = ref.watch(repeatModeProvider);
 
     // update colour at song change
     ref.listen<SongDetail?>(currentSongProvider, (_, __) {
@@ -470,20 +471,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                           return const SizedBox.shrink();
                         }
 
+                        // Watch current song so UI updates when song changes
+                        final song = ref.watch(currentSongProvider);
+                        final total = Duration(
+                          seconds: int.tryParse(song?.duration ?? '0') ?? 0,
+                        );
+
                         return StreamBuilder<Duration>(
                           stream: audioHandler.positionStream,
-                          builder: (context, snapshot) {
-                            final pos = snapshot.data ?? Duration.zero;
-
-                            // Use song duration if audioHandler.duration is unavailable
-                            final total = Duration(
-                              seconds:
-                                  int.tryParse(
-                                    ref.read(currentSongProvider)?.duration ??
-                                        '0',
-                                  ) ??
-                                  0,
-                            );
+                          builder: (context, posSnapshot) {
+                            final pos = posSnapshot.data ?? Duration.zero;
 
                             final progress =
                                 total.inMilliseconds > 0
@@ -497,6 +494,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                               ),
                               child: Column(
                                 children: [
+                                  // Slider
                                   SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       thumbShape: const RoundSliderThumbShape(
@@ -525,6 +523,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                           .withAlpha(100),
                                     ),
                                   ),
+
+                                  // Position / Duration labels
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 6,
@@ -577,8 +577,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                           return StreamBuilder<PlayerState>(
                             stream: audioHandler.playerStateStream,
                             builder: (context, stateSnapshot) {
-                              final st = stateSnapshot.data;
-                              final playing = st?.playing ?? false;
+                              final playerState = stateSnapshot.data;
+                              final playing = playerState?.playing ?? false;
 
                               return Row(
                                 mainAxisAlignment:
@@ -589,7 +589,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                     icon: Icons.shuffle,
                                     enabled: true,
                                     iconColor:
-                                        audioHandler.isShuffle
+                                        isShuffle
                                             ? Colors.greenAccent
                                             : Colors.white70,
                                     onTap: () => audioHandler.toggleShuffle(),
@@ -638,16 +638,14 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                   // Repeat
                                   _ControlButton(
                                     icon:
-                                        audioHandler.repeatMode ==
-                                                RepeatMode.one
+                                        repeatMode == RepeatMode.one
                                             ? Icons.repeat_one
                                             : Icons.repeat,
-                                    enabled: true,
                                     iconColor:
-                                        audioHandler.repeatMode ==
-                                                RepeatMode.none
+                                        repeatMode == RepeatMode.none
                                             ? Colors.white70
                                             : Colors.greenAccent,
+                                    enabled: true,
                                     onTap:
                                         () => audioHandler.toggleRepeatMode(),
                                   ),
