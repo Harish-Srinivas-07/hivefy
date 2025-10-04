@@ -315,3 +315,96 @@ class AlbumCache {
     await _prefs.setString(_prefsKey, jsonEncode(toStore));
   }
 }
+
+// ---------------- SEARCH HISTORY ----------------
+List<String> searchHistory = [];
+
+Future<void> loadSearchHistory() async {
+  final prefs = await SharedPreferences.getInstance();
+  searchHistory = prefs.getStringList('search_history') ?? [];
+}
+
+Future<void> saveSearchTerm(String term) async {
+  term = term.trim();
+  if (term.isEmpty) return;
+
+  // remove duplicate if already exists
+  searchHistory.remove(term);
+  searchHistory.insert(0, term); // put latest at front
+
+  // keep max 5
+  if (searchHistory.length > 5) {
+    searchHistory = searchHistory.sublist(0, 5);
+  }
+
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setStringList('search_history', searchHistory);
+}
+
+// ---------------- LAST SONGS ----------------
+Future<List<SongDetail>> loadLastSongs() async {
+  final prefs = await SharedPreferences.getInstance();
+  final songsJson = prefs.getStringList('last_songs') ?? [];
+  return songsJson.map((s) => SongDetail.fromJson(jsonDecode(s))).toList();
+}
+
+Future<void> storeLastSongs(List<SongDetail> newSongs) async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = await loadLastSongs();
+
+  final updated =
+      [
+        ...newSongs,
+        ...existing.where((e) => !newSongs.any((n) => n.id == e.id)),
+      ].take(5).toList(); // keep only 5
+
+  final songsJson =
+      updated.map((s) => jsonEncode(SongDetail.songDetailToJson(s))).toList();
+  await prefs.setStringList('last_songs', songsJson);
+}
+
+// ---------------- LAST ALBUMS ----------------
+Future<List<Album>> loadLastAlbums() async {
+  final prefs = await SharedPreferences.getInstance();
+  final albumsJson = prefs.getStringList('last_albums') ?? [];
+  return albumsJson.map((a) => Album.fromJson(jsonDecode(a))).toList();
+}
+
+Future<void> storeLastAlbums(List<Album> newAlbums) async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = await loadLastAlbums();
+
+  final updated =
+      [
+        ...newAlbums,
+        ...existing.where((e) => !newAlbums.any((n) => n.id == e.id)),
+      ].take(5).toList();
+
+  final albumsJson =
+      updated.map((a) => jsonEncode(Album.albumToJson(a))).toList();
+  await prefs.setStringList('last_albums', albumsJson);
+}
+
+// ---------------- REMOVE LAST SONG ----------------
+Future<void> removeLastSong(String songId) async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = await loadLastSongs();
+
+  final updated = existing.where((s) => s.id != songId).toList();
+
+  final songsJson =
+      updated.map((s) => jsonEncode(SongDetail.songDetailToJson(s))).toList();
+  await prefs.setStringList('last_songs', songsJson);
+}
+
+// ---------------- REMOVE LAST ALBUM ----------------
+Future<void> removeLastAlbum(String albumId) async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = await loadLastAlbums();
+
+  final updated = existing.where((a) => a.id != albumId).toList();
+
+  final albumsJson =
+      updated.map((a) => jsonEncode(Album.albumToJson(a))).toList();
+  await prefs.setStringList('last_albums', albumsJson);
+}

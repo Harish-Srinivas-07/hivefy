@@ -4,7 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:iconly/iconly.dart';
 import 'package:page_transition/page_transition.dart';
 
+import '../models/database.dart';
 import '../models/datamodel.dart';
+import '../models/shimmers.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
@@ -13,6 +15,7 @@ import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'albumviewer.dart';
 import 'artistviewer.dart';
+import 'playlistviewer.dart';
 
 class Search extends ConsumerStatefulWidget {
   const Search({super.key});
@@ -20,10 +23,9 @@ class Search extends ConsumerStatefulWidget {
   SearchState createState() => SearchState();
 }
 
-class SearchState extends ConsumerState<Search>
-    with AutomaticKeepAliveClientMixin<Search> {
-  @override
-  bool get wantKeepAlive => true;
+class SearchState extends ConsumerState<Search> {
+  bool _extraSongsLoaded = false;
+  bool _extraArtistsLoaded = false;
 
   final TextEditingController _controller = TextEditingController();
   List<String> _suggestions = [];
@@ -34,6 +36,8 @@ class SearchState extends ConsumerState<Search>
   List<Album> _albums = [];
   List<Artist> _artists = [];
   List<Playlist> _playlists = [];
+  List<SongDetail> _lastSongs = [];
+  List<Album> _lastAlbums = [];
 
   final SaavnAPI saavn = SaavnAPI();
   bool _showSuggestions = false;
@@ -47,64 +51,205 @@ class SearchState extends ConsumerState<Search>
       _playlists.isEmpty &&
       _controller.text.trim().isEmpty;
 
-  void _onTextChanged(String value) async {
-    if (value.isEmpty) {
-      setState(() {
-        _suggestions = [];
-        _showSuggestions = true;
-        _songs = [];
-        _albums = [];
-        _artists = [];
-        _playlists = [];
-        _isLoading = false;
-      });
-      return;
-    }
-
-    _isLoading = true;
-    _showSuggestions = true;
-    setState(() {});
-
-    final results = await saavn.getSearchBoxSuggestions(query: value);
-
-    if (!mounted) return;
-    _suggestions = results;
-    _isLoading = false;
-    setState(() {});
-  }
-
   @override
   void dispose() {
+    _controller.dispose();
     super.dispose();
   }
 
-  void _onSuggestionTap(String suggestion, {bool onChange = false}) async {
-    if (!onChange) {
-      _controller.text = suggestion;
-    }
-    _isLoading = !onChange;
-    _showSuggestions = onChange;
-    // reset all previous results
-    _songs = [];
-    _albums = [];
-    _artists = [];
-    _playlists = [];
-    _suggestions = [];
-    setState(() {});
-    final results = await saavn.globalSearch(suggestion);
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
 
-    if (mounted && results != null) {
-      _songs = results.songs.results;
-      _albums = results.albums.results;
-      _artists = results.artists.results;
-      _playlists = results.playlists.results;
-      _isLoading = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _init();
+  }
+
+  Future<void> _init() async {
+    if (!mounted) return;
+    await loadSearchHistory();
+    _lastSongs = await loadLastSongs();
+    _lastAlbums = await loadLastAlbums();
+    debugPrint('--> her ethe data $_lastSongs & $_lastAlbums');
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildRecentSection() {
+    if (_lastSongs.isEmpty && _lastAlbums.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_lastSongs.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: _buildSection(
+              "Recently Played Songs",
+              _lastSongs,
+              (song) => GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _onSongTap(song),
+                child: _buildPlaylistRow(
+                  Playlist(
+                    id: song.id,
+                    title: song.title,
+                    images: song.images,
+                    url: song.url,
+                    type: song.type,
+                    language: song.language,
+                    explicitContent: song.explicitContent,
+                    description: song.description,
+                  ),
+                  onRemove: () async {
+                    await removeLastSong(song.id);
+                    _lastSongs = await loadLastSongs();
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ),
+        if (_lastAlbums.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+
+            child: _buildSection(
+              "Recently Played Albums",
+              _lastAlbums,
+              (album) => GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _onAlbumTap(album),
+                child: _buildPlaylistRow(
+                  Playlist(
+                    id: album.id,
+                    title: album.title,
+                    images: album.images,
+                    url: album.url,
+                    type: album.type,
+                    language: album.language,
+                    explicitContent: false,
+                    description: album.description,
+                  ),
+                  onRemove: () async {
+                    await removeLastAlbum(album.id);
+                    _lastAlbums = await loadLastAlbums();
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _fetchExtraSongs() async {
+    if (_extraSongsLoaded) return;
+
+    final extraSongs = await saavn.searchSongs(query: _controller.text.trim());
+
+    if (extraSongs.isNotEmpty) {
+      final existingIds = _songs.map((s) => s.id).toSet();
+
+      _songs.addAll(
+        extraSongs
+            .where((s) => !existingIds.contains(s.id))
+            .map(
+              (s) => Song(
+                id: s.id,
+                title: s.title,
+                images: s.images,
+                url: s.url,
+                type: s.type,
+                language: s.language,
+                description: s.description,
+              ),
+            ),
+      );
+
+      _extraSongsLoaded = true;
       setState(() {});
     }
   }
 
+  Future<void> _fetchExtraArtists() async {
+    if (_extraArtistsLoaded) return;
+
+    final extraArtistsResponse = await saavn.searchArtists(
+      query: _controller.text.trim(),
+    );
+
+    if (extraArtistsResponse != null &&
+        extraArtistsResponse.results.isNotEmpty) {
+      final existingIds = _artists.map((a) => a.id).toSet();
+
+      _artists.addAll(
+        extraArtistsResponse.results
+            .where((a) => !existingIds.contains(a.id))
+            .toList(),
+      );
+
+      _extraArtistsLoaded = true;
+      setState(() {});
+    }
+  }
+
+  void _onTextChanged(String value) async {
+    if (value.isEmpty) {
+      _resetSearch();
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _showSuggestions = true;
+    });
+
+    final results = await saavn.getSearchBoxSuggestions(query: value);
+
+    if (!mounted) return;
+    setState(() {
+      _suggestions = results;
+      _isLoading = false;
+    });
+  }
+
+  void _onSuggestionTap(String suggestion, {bool onChange = false}) async {
+    if (!onChange) _controller.text = suggestion;
+    saveSearchTerm(suggestion);
+    setState(() {
+      _isLoading = !onChange;
+      _showSuggestions = onChange;
+      _clearResults();
+    });
+
+    final results = await saavn.globalSearch(suggestion);
+    await _fetchExtraSongs();
+    await _fetchExtraArtists();
+
+    if (!mounted || results == null) return;
+
+    _songs = results.songs.results;
+    _albums = results.albums.results;
+    _artists = results.artists.results;
+    _playlists = results.playlists.results;
+    _isLoading = false;
+    setState(() {});
+  }
+
   void _clearText() {
     _controller.clear();
+    _resetSearch();
+    _init();
+  }
+
+  void _resetSearch() {
     setState(() {
       _suggestions = [];
       _songs = [];
@@ -112,7 +257,17 @@ class SearchState extends ConsumerState<Search>
       _artists = [];
       _playlists = [];
       _showSuggestions = true;
+      _isLoading = false;
     });
+  }
+
+  void _clearResults() {
+    _songs = [];
+    _albums = [];
+    _artists = [];
+    _playlists = [];
+    _suggestions = [];
+    if (mounted) setState(() {});
   }
 
   Widget _buildSectionTitle(String title) {
@@ -121,9 +276,12 @@ class SearchState extends ConsumerState<Search>
       child: Text(
         title,
         style: GoogleFonts.figtree(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
+          fontSize: title.toLowerCase().contains('recently') ? 16 : 18,
+          fontWeight: FontWeight.w600,
+          color:
+              title.toLowerCase().contains('recently')
+                  ? Colors.white54
+                  : Colors.white,
         ),
       ),
     );
@@ -139,7 +297,7 @@ class SearchState extends ConsumerState<Search>
     );
   }
 
-  Widget _buildPlaylistRow(Playlist p) {
+  Widget _buildPlaylistRow(Playlist p, {VoidCallback? onRemove}) {
     final imageUrl = p.images.isNotEmpty ? p.images.last.url : '';
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -150,7 +308,6 @@ class SearchState extends ConsumerState<Search>
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -167,65 +324,98 @@ class SearchState extends ConsumerState<Search>
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (p.language.isNotEmpty)
-                      Text(
-                        '${capitalize(p.language)} ',
-                        style: GoogleFonts.figtree(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    if (p.type.isNotEmpty)
-                      Text(
-                        capitalize(p.type),
-                        style: GoogleFonts.figtree(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    const Spacer(),
-                    // Loader / Indicator
-                    if (_loadingSongId == p.id &&
-                        ref.watch(currentSongProvider)?.id != p.id)
-                      const SizedBox(
-                        height: 15,
-                        width: 15,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.greenAccent,
-                        ),
-                      )
-                    else if (ref.watch(currentSongProvider)?.id == p.id)
-                      Image.asset(
-                        'assets/player.gif',
-                        height: 16,
-                        width: 16,
-                        fit: BoxFit.contain,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                if (p.songCount != null)
-                  Text(
-                    "${p.songCount} songs",
-                    style: GoogleFonts.figtree(
-                      color: Colors.grey,
-                      fontSize: 12,
-                    ),
-                  ),
+                _buildSubtitleRow(p),
               ],
             ),
           ),
+          if (onRemove != null) // show only in recent list
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.grey, size: 18),
+              onPressed: onRemove,
+            ),
         ],
       ),
     );
   }
 
+  Widget _buildSubtitleRow(Playlist p) {
+    return Row(
+      children: [
+        if (p.language.isNotEmpty)
+          Text('${capitalize(p.description)} ', style: _subtitleStyle),
+        if (p.type.isNotEmpty) Text(capitalize(p.type), style: _subtitleStyle),
+        const Spacer(),
+        if (_loadingSongId == p.id &&
+            ref.watch(currentSongProvider)?.id != p.id)
+          const SizedBox(
+            height: 15,
+            width: 15,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.greenAccent,
+            ),
+          )
+        else if (ref.watch(currentSongProvider)?.id == p.id)
+          Image.asset(
+            'assets/player.gif',
+            height: 16,
+            width: 16,
+            fit: BoxFit.contain,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSearchHistoryRow() {
+    if (searchHistory.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Recent Search',
+          style: GoogleFonts.figtree(fontSize: 13, color: Colors.white54),
+        ),
+        const SizedBox(height: 2),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children:
+                searchHistory.map((term) {
+                  return GestureDetector(
+                    onTap: () => _onSuggestionTap(term),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 3,
+                        vertical: 2,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        term,
+                        style: GoogleFonts.figtree(color: Colors.white),
+                      ),
+                    ),
+                  );
+                }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  TextStyle get _subtitleStyle =>
+      GoogleFonts.figtree(color: Colors.grey, fontSize: 12);
+
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    // super.build(context);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -235,371 +425,344 @@ class SearchState extends ConsumerState<Search>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundImage: AssetImage('assets/logo.png'),
-                  ),
-                  Text(
-                    'Search',
-                    style: GoogleFonts.figtree(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.camera_alt_outlined,
-                      size: 28,
-                      color: Colors.white,
-                    ),
-                    onPressed: () {},
-                  ),
-                ],
-              ),
+              _buildHeader(),
               const SizedBox(height: 16),
-              // /searchbox
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(IconlyLight.search, color: Colors.grey),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        onTapOutside: (_) => FocusScope.of(context).unfocus(),
-                        controller: _controller,
-                        cursorColor: Colors.greenAccent,
-                        onChanged: _onTextChanged,
-                        onSubmitted: (value) {
-                          _onSuggestionTap(value.trim());
-                        },
-                        style: GoogleFonts.figtree(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: "What do you want to listen to?",
-                          hintStyle: GoogleFonts.figtree(color: Colors.grey),
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    ),
-                    if (_controller.text.isNotEmpty)
-                      GestureDetector(
-                        onTap: _clearText,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Icon(Icons.close, color: Colors.grey),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+              _buildSearchBox(),
               const SizedBox(height: 10),
-              _isLoading
-                  ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                  : Expanded(
-                    child:
-                        _isLoading
-                            ? const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            )
-                            : _hasNoResults
-                            ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Play what you love',
-                                    style: GoogleFonts.figtree(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Search for artists, songs, and more',
-                                    style: GoogleFonts.figtree(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                            : ListView(
-                              children: [
-                                // Suggestions
-                                if (_showSuggestions &&
-                                    _controller.text.isNotEmpty)
-                                  ..._suggestions
-                                      .take(5)
-                                      .map(
-                                        (s) => GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => _onSuggestionTap(s),
-                                          child: Container(
-                                            height: 50,
-                                            margin: const EdgeInsets.symmetric(
-                                              vertical: 2,
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 5,
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.all(
-                                                    8,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: Colors.grey[800],
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.search,
-                                                    color: Colors.grey,
-                                                    size: 28,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Text(
-                                                    s,
-                                                    style: GoogleFonts.figtree(
-                                                      color: Colors.grey,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Transform.rotate(
-                                                  angle: -0.785398,
-                                                  child: const Icon(
-                                                    Icons.arrow_upward,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                // Songs
-                                if (_songs.isNotEmpty)
-                                  _buildSectionTitle("Songs"),
-                                ..._songs.map(
-                                  (s) => GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () async {
-                                      FocusScope.of(context).unfocus();
-
-                                      try {
-                                        // Unfocus keyboard if any
-                                        FocusScope.of(context).unfocus();
-
-                                        setState(() {
-                                          _loadingSongId = s.id;
-                                        });
-
-                                        // Fetch song details (to ensure we have latest URLs/images)
-                                        final details = await saavn
-                                            .getSongDetails(ids: [s.id]);
-                                        if (details.isEmpty) {
-                                          debugPrint(
-                                            "--- no details found for song id: ${s.id}",
-                                          );
-                                          setState(() => _loadingSongId = null);
-                                          return;
-                                        }
-
-                                        final song = details.first;
-                                        debugPrint(
-                                          "--- fetched song: ${song.title}",
-                                        );
-
-                                        // Update theme colour (optional UI thing)
-                                        String? imageUrl =
-                                            song.images.isNotEmpty
-                                                ? song.images.last.url
-                                                : null;
-                                        if (imageUrl != null) {
-                                          final dominant =
-                                              await getDominantColorFromImage(
-                                                imageUrl,
-                                              );
-                                          final mixedColor =
-                                              Color.lerp(
-                                                dominant,
-                                                Colors.black,
-                                                0.85,
-                                              ) ??
-                                              dominant;
-                                          if (mixedColor != null) {
-                                            ref
-                                                .read(
-                                                  playerColourProvider.notifier,
-                                                )
-                                                .state = mixedColor.withAlpha(
-                                              250,
-                                            );
-                                          }
-                                        }
-
-                                        final audioHandler = await ref.read(
-                                          audioHandlerProvider.future,
-                                        );
-                                        final currentSong = ref.read(
-                                          currentSongProvider,
-                                        );
-
-                                        final isCurrentSong =
-                                            currentSong?.id == song.id;
-
-                                        if (!isCurrentSong) {
-                                          // Load queue with this one song (or use full list if you want)
-                                          await audioHandler.loadQueue([
-                                            song,
-                                          ], startIndex: 0);
-                                          await audioHandler.play();
-                                        } else {
-                                          // Toggle play/pause for current song
-                                          final isPlaying = await audioHandler
-                                              .playerStateStream
-                                              .first
-                                              .then((ps) => ps.playing);
-                                          if (isPlaying) {
-                                            await audioHandler.pause();
-                                          } else {
-                                            await audioHandler.play();
-                                          }
-                                        }
-                                      } catch (e, st) {
-                                        debugPrint(
-                                          "Error playing tapped song: $e\n$st",
-                                        );
-                                      } finally {
-                                        setState(() => _loadingSongId = null);
-                                      }
-                                    },
-                                    child: _buildPlaylistRow(
-                                      Playlist(
-                                        id: s.id,
-                                        title: s.title,
-                                        images: s.images,
-                                        url: s.url,
-                                        type: s.type,
-                                        language: s.language,
-                                        explicitContent: false,
-                                        description: s.description,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Albums
-                                if (_albums.isNotEmpty)
-                                  _buildSectionTitle("Albums"),
-                                ..._albums.map(
-                                  (a) => GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () async {
-                                      // Unfocus keyboard before navigation
-                                      FocusScope.of(context).unfocus();
-
-                                      Navigator.of(context)
-                                          .push(
-                                            PageTransition(
-                                              type:
-                                                  PageTransitionType
-                                                      .rightToLeft,
-                                              duration: const Duration(
-                                                milliseconds: 300,
-                                              ),
-                                              child: AlbumViewer(albumId: a.id),
-                                            ),
-                                          )
-                                          .then((_) {
-                                            // Unfocus again after coming back from AlbumViewer
-                                            if (!context.mounted) return;
-                                            FocusScope.of(context).unfocus();
-                                          });
-                                    },
-
-                                    child: _buildPlaylistRow(
-                                      Playlist(
-                                        id: a.id,
-                                        title: a.title,
-                                        images: a.images,
-                                        url: a.url,
-                                        type: a.type,
-                                        language: a.language,
-                                        explicitContent: false,
-                                        description: a.description,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Artists
-                                if (_artists.isNotEmpty)
-                                  _buildSectionTitle("Artists"),
-                                ..._artists.map(
-                                  (ar) => GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        PageTransition(
-                                          type: PageTransitionType.rightToLeft,
-                                          duration: const Duration(
-                                            milliseconds: 300,
-                                          ),
-                                          child: ArtistViewer(artistId: ar.id),
-                                        ),
-                                      );
-                                    },
-                                    child: _buildPlaylistRow(
-                                      Playlist(
-                                        id: ar.id,
-                                        title: ar.title,
-                                        images: ar.images,
-                                        url: '',
-                                        type: ar.type,
-                                        language: '',
-                                        explicitContent: false,
-                                        description: ar.description,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Playlists
-                                if (_playlists.isNotEmpty)
-                                  _buildSectionTitle("Playlists"),
-                                ..._playlists.map(_buildPlaylistRow),
-
-                                if (_songs.isNotEmpty ||
-                                    _albums.isNotEmpty ||
-                                    _artists.isNotEmpty ||
-                                    _playlists.isNotEmpty)
-                                  const SizedBox(height: 60),
-                              ],
-                            ),
-                  ),
+              Flexible(child: _buildSearchContent()),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundImage: AssetImage('assets/logo.png'),
+        ),
+        Text(
+          'Search',
+          style: GoogleFonts.figtree(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        Icon(Icons.camera_alt_outlined, size: 28, color: Colors.white),
+      ],
+    );
+  }
+
+  Widget _buildSearchBox() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Icon(IconlyLight.search, color: Colors.grey),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              cursorColor: Colors.greenAccent,
+              style: GoogleFonts.figtree(color: Colors.white),
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
+              onChanged: _onTextChanged,
+              onSubmitted: (value) => _onSuggestionTap(value.trim()),
+              decoration: InputDecoration(
+                hintText: "What do you want to listen to?",
+                hintStyle: GoogleFonts.figtree(color: Colors.grey),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          if (_controller.text.isNotEmpty)
+            GestureDetector(
+              onTap: _clearText,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(Icons.close, color: Colors.grey),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchContent() {
+    if (_isLoading) return buildSearchShimmer();
+
+    if (_hasNoResults || _controller.text.trim().isEmpty) {
+      return ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          _buildSearchHistoryRow(),
+          _buildRecentSection(),
+          _buildNoResults(),
+          const SizedBox(height: 100),
+        ],
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 60),
+      children: [
+        if (_showSuggestions && _controller.text.isNotEmpty)
+          ..._buildSuggestions(),
+
+        if (_songs.isNotEmpty)
+          _buildSection(
+            "Songs",
+            _songs,
+            (song) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onSongTap(song),
+              child: _buildPlaylistRow(
+                Playlist(
+                  id: song.id,
+                  title: song.title,
+                  images: song.images,
+                  url: song.url,
+                  type: song.type,
+                  language: song.language,
+                  explicitContent: false,
+                  description: song.album,
+                ),
+              ),
+            ),
+          ),
+
+        if (_albums.isNotEmpty)
+          _buildSection(
+            "Albums",
+            _albums,
+            (album) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onAlbumTap(album),
+              child: _buildPlaylistRow(
+                Playlist(
+                  id: album.id,
+                  title: album.title,
+                  images: album.images,
+                  url: album.url,
+                  type: album.type,
+                  language: album.language,
+                  explicitContent: false,
+                  description: album.artist,
+                ),
+              ),
+            ),
+          ),
+
+        if (_artists.isNotEmpty)
+          _buildSection(
+            "Artists",
+            _artists,
+            (artist) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onArtistTap(artist),
+              child: _buildPlaylistRow(
+                Playlist(
+                  id: artist.id,
+                  title: artist.title,
+                  images: artist.images,
+                  url: '',
+                  type: artist.type,
+                  language: '',
+                  explicitContent: false,
+                  description: artist.description,
+                ),
+              ),
+            ),
+          ),
+
+        if (_playlists.isNotEmpty)
+          _buildSection(
+            "Playlists",
+            _playlists,
+            (playlist) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onPlaylistTap(playlist),
+              child: _buildPlaylistRow(
+                Playlist(
+                  id: playlist.id,
+                  title: playlist.title,
+                  images: playlist.images,
+                  url: playlist.url,
+                  type: playlist.type,
+                  language: playlist.language,
+                  explicitContent: playlist.explicitContent,
+                  description: playlist.description,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNoResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 30),
+          Text(
+            'Play what you love',
+            style: GoogleFonts.figtree(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Search for artists, songs, and more',
+            style: GoogleFonts.figtree(fontSize: 13, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildSuggestions() {
+    return _suggestions.take(5).map((s) {
+      return GestureDetector(
+        onTap: () => _onSuggestionTap(s),
+        child: Container(
+          height: 50,
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.grey[800],
+                ),
+                child: const Icon(Icons.search, color: Colors.grey, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  s,
+                  style: GoogleFonts.figtree(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const Icon(Icons.arrow_upward, color: Colors.grey, size: 18),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildSection<T>(
+    String title,
+    List<T> items,
+    Widget Function(T) builder,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [_buildSectionTitle(title), ...items.map(builder)],
+    );
+  }
+
+  void _onSongTap(Song song) async {
+    FocusScope.of(context).unfocus();
+    setState(() => _loadingSongId = song.id);
+
+    final details = await saavn.getSongDetails(ids: [song.id]);
+    if (details.isEmpty) {
+      setState(() => _loadingSongId = null);
+      return;
+    }
+    final loadedSong = details.first;
+
+    //  Save this song into SharedPreferences
+    await storeLastSongs([loadedSong]);
+
+    //  Reload to update UI
+    _lastSongs = await loadLastSongs();
+    if (mounted) setState(() {});
+
+    String? imageUrl =
+        loadedSong.images.isNotEmpty ? loadedSong.images.last.url : null;
+    if (imageUrl != null) {
+      final dominant = await getDominantColorFromImage(imageUrl);
+      ref
+          .read(playerColourProvider.notifier)
+          .state = (Color.lerp(dominant, Colors.black, 0.85) ?? dominant)!
+          .withAlpha(250);
+    }
+
+    final audioHandler = await ref.read(audioHandlerProvider.future);
+    final currentSong = ref.read(currentSongProvider);
+    final isCurrentSong = currentSong?.id == loadedSong.id;
+
+    if (!isCurrentSong) {
+      await audioHandler.loadQueue([loadedSong], startIndex: 0);
+      await audioHandler.play();
+    } else {
+      (await audioHandler.playerStateStream.first).playing
+          ? await audioHandler.pause()
+          : await audioHandler.play();
+    }
+
+    setState(() => _loadingSongId = null);
+  }
+
+  void _onAlbumTap(Album album) async {
+    FocusScope.of(context).unfocus();
+    //  Save album into SharedPreferences
+    await storeLastAlbums([album]);
+
+    //  Reload to update UI
+    _lastAlbums = await loadLastAlbums();
+    if (mounted) setState(() {});
+    if (!mounted) return;
+    Navigator.of(context).push(
+      PageTransition(
+        type: PageTransitionType.rightToLeft,
+        duration: const Duration(milliseconds: 300),
+        child: AlbumViewer(albumId: album.id),
+      ),
+    );
+  }
+
+  void _onPlaylistTap(Playlist p) {
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).push(
+      PageTransition(
+        type: PageTransitionType.rightToLeft,
+        duration: const Duration(milliseconds: 300),
+        child: PlaylistViewer(playlistId: p.id),
+      ),
+    );
+  }
+
+  void _onArtistTap(Artist artist) {
+    Navigator.of(context).push(
+      PageTransition(
+        type: PageTransitionType.rightToLeft,
+        duration: const Duration(milliseconds: 300),
+        child: ArtistViewer(artistId: artist.id),
       ),
     );
   }

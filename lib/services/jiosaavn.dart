@@ -10,7 +10,8 @@ import '../models/datamodel.dart';
 final saavn = SaavnAPI();
 
 class SaavnAPI {
-  final String baseUrl = "https://saavn.dev";
+  final String baseUrl =
+      "https://jiosaavn-c451wwyru-sumit-kolhes-projects-94a4846a.vercel.app/";
 
   final Map<String, String> headers = {
     "Accept": "application/json",
@@ -46,10 +47,37 @@ class SaavnAPI {
     return null;
   }
 
-  Future<List<SongDetail>> searchSongs({
+  Future<SearchArtistsResponse?> searchArtists({
     required String query,
     int page = 0,
     int limit = 10,
+  }) async {
+    if (query.isEmpty) return null;
+
+    final url = Uri.parse(
+      '$baseUrl/api/search/artists?query=${Uri.encodeComponent(query)}&page=$page&limit=$limit',
+    );
+
+    try {
+      final response = await get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final jsonBody = json.decode(response.body);
+        if (jsonBody['success'] == true && jsonBody['data'] != null) {
+          return SearchArtistsResponse.fromJson(jsonBody);
+        }
+      } else {
+        debugPrint('searchArtists failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error in searchArtists: $e');
+    }
+    return null;
+  }
+
+  Future<List<SongDetail>> searchSongs({
+    required String query,
+    int page = 0,
+    int limit = 50,
   }) async {
     if (query.isEmpty) return [];
 
@@ -409,4 +437,14 @@ enum SortOrder { asc, desc }
 
 extension SortOrderExt on SortOrder {
   String get value => this == SortOrder.asc ? "asc" : "desc";
+}
+
+int getTotalDuration(List<SongDetail> songs) {
+  return songs.fold<int>(0, (sum, song) {
+    final dur =
+        (song.duration is int)
+            ? song.duration as int
+            : int.tryParse(song.duration.toString()) ?? 0;
+    return sum + dur;
+  });
 }

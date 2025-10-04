@@ -734,3 +734,29 @@ class SearchPlaylistsResponse {
     );
   }
 }
+
+class SearchArtistsResponse {
+  final int total;
+  final int start;
+  final List<Artist> results;
+
+  SearchArtistsResponse({
+    required this.total,
+    required this.start,
+    required this.results,
+  });
+
+  factory SearchArtistsResponse.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] ?? {};
+    final results =
+        (data['results'] as List<dynamic>? ?? [])
+            .map((e) => Artist.fromJson(e as Map<String, dynamic>))
+            .toList();
+    return SearchArtistsResponse(
+      total:
+          int.tryParse('${data['total'] ?? results.length}') ?? results.length,
+      start: int.tryParse('${data['start'] ?? 0}') ?? 0,
+      results: results,
+    );
+  }
+}

@@ -4,10 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
+import '../models/shimmers.dart';
 import '../shared/constants.dart';
+import '../utils/format.dart';
 import 'albumviewer.dart';
 import 'artistviewer.dart';
 import 'songsviewer.dart';
+
+enum LibraryFilter { all, artists, albums }
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -20,6 +24,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   int _allSongsCount = 0;
   bool isDefined = false;
   List<LibraryCardData> items = [];
+
+  LibraryFilter _currentFilter = LibraryFilter.all;
 
   @override
   void initState() {
@@ -50,6 +56,64 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   Future<void> _loadAllSongsCount() async {
     final allSongs = await AppDatabase.getAllSongs();
     _allSongsCount = allSongs.length;
+  }
+
+  Widget _buildFilterBar() {
+    return Container(
+      color: Colors.black54,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Row(
+        // mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.start,
+        children:
+            LibraryFilter.values.map((filter) {
+              final isSelected = _currentFilter == filter;
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _currentFilter = filter);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          isSelected
+                              ? Colors.green.withAlpha(160)
+                              : Colors.white38.withAlpha(100),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      capitalize(filter.name),
+                      style: GoogleFonts.figtree(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+      ),
+    );
+  }
+
+  List<LibraryCardData> _filteredItems() {
+    switch (_currentFilter) {
+      case LibraryFilter.artists:
+        return items
+            .where((item) => item.type == LibraryItemType.artist)
+            .toList();
+      case LibraryFilter.albums:
+        return items
+            .where((item) => item.type == LibraryItemType.album)
+            .toList();
+      case LibraryFilter.all:
+        return items;
+    }
   }
 
   @override
@@ -115,58 +179,72 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       ),
       body:
           !isDefined
-              ? const Center(child: CircularProgressIndicator())
-              : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  return LibraryCard(
-                    title: item.title,
-                    count: item.count,
-                    imageUrl: item.imageUrl,
-                    fallbackColor: item.fallbackColor,
-                    type: item.type,
-                    onTap: () {
-                      switch (item.type) {
-                        case LibraryItemType.likedSongs:
-                        case LibraryItemType.allSongs:
-                          Navigator.of(context).push(
-                            PageTransition(
-                              type: PageTransitionType.rightToLeft,
-                              duration: const Duration(milliseconds: 300),
-                              child: SongsViewer(
-                                showLikedSongs:
-                                    item.type == LibraryItemType.likedSongs,
-                              ),
-                            ),
-                          );
-                          break;
+              ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: buildAlbumShimmer(),
+              )
+              : Column(
+                children: [
+                  _buildFilterBar(),
 
-                        case LibraryItemType.album:
-                          Navigator.of(context).push(
-                            PageTransition(
-                              type: PageTransitionType.rightToLeft,
-                              duration: const Duration(milliseconds: 300),
-                              child: AlbumViewer(albumId: item.id!),
-                            ),
-                          );
-                          break;
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
+                      itemCount: _filteredItems().length,
 
-                        case LibraryItemType.artist:
-                          Navigator.of(context).push(
-                            PageTransition(
-                              type: PageTransitionType.rightToLeft,
-                              duration: const Duration(milliseconds: 300),
-                              child: ArtistViewer(artistId: item.id!),
-                            ),
-                          );
-                          break;
-                      }
-                    },
-                  );
-                },
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final item = _filteredItems()[index];
+
+                        return LibraryCard(
+                          title: item.title,
+                          count: item.count,
+                          imageUrl: item.imageUrl,
+                          fallbackColor: item.fallbackColor,
+                          type: item.type,
+                          onTap: () {
+                            switch (item.type) {
+                              case LibraryItemType.likedSongs:
+                              case LibraryItemType.allSongs:
+                                Navigator.of(context).push(
+                                  PageTransition(
+                                    type: PageTransitionType.rightToLeft,
+                                    duration: const Duration(milliseconds: 300),
+                                    child: SongsViewer(
+                                      showLikedSongs:
+                                          item.type ==
+                                          LibraryItemType.likedSongs,
+                                    ),
+                                  ),
+                                );
+                                break;
+
+                              case LibraryItemType.album:
+                                Navigator.of(context).push(
+                                  PageTransition(
+                                    type: PageTransitionType.rightToLeft,
+                                    duration: const Duration(milliseconds: 300),
+                                    child: AlbumViewer(albumId: item.id!),
+                                  ),
+                                );
+                                break;
+
+                              case LibraryItemType.artist:
+                                Navigator.of(context).push(
+                                  PageTransition(
+                                    type: PageTransitionType.rightToLeft,
+                                    duration: const Duration(milliseconds: 300),
+                                    child: ArtistViewer(artistId: item.id!),
+                                  ),
+                                );
+                                break;
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
     );
   }
@@ -226,13 +304,6 @@ class LibraryCard extends StatelessWidget {
                   type == LibraryItemType.artist
                       ? BorderRadius.circular(65)
                       : BorderRadius.circular(8),
-              image:
-                  imageUrl != null
-                      ? DecorationImage(
-                        image: NetworkImage(imageUrl!),
-                        fit: BoxFit.cover,
-                      )
-                      : null,
             ),
             child:
                 imageUrl == null
@@ -243,7 +314,16 @@ class LibraryCard extends StatelessWidget {
                       color: Colors.black54,
                       size: 24,
                     )
-                    : null,
+                    : CacheNetWorkImg(
+                      url: imageUrl!,
+                      width: 65,
+                      height: 65,
+                      fit: BoxFit.cover,
+                      borderRadius:
+                          type == LibraryItemType.artist
+                              ? BorderRadius.circular(65)
+                              : BorderRadius.circular(8),
+                    ),
           ),
           const SizedBox(width: 12),
           Expanded(

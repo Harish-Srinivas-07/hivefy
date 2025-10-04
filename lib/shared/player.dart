@@ -1,13 +1,18 @@
+// ignore_for_file: unnecessary_null_comparison
+
 import 'package:audio_service/audio_service.dart';
 import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marquee/marquee.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:readmore/readmore.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/datamodel.dart';
+import '../screens/queuesheet.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../utils/format.dart';
@@ -39,7 +44,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     final dominant = await getDominantColorFromImage(song!.images.last.url);
     if (dominant == null) return;
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.25);
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
 
     if (mounted) setState(() {});
   }
@@ -273,6 +278,7 @@ class FullPlayerScreen extends ConsumerStatefulWidget {
 class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
   ArtistDetails? _artistDetails;
   final ValueNotifier<bool> _isBioExpanded = ValueNotifier(false);
+  final PageController _pageController = PageController();
 
   @override
   void initState() {
@@ -294,7 +300,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final dominant = await getDominantColorFromImage(song!.images.last.url);
     if (dominant == null) return;
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.25);
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
 
     if (mounted) setState(() {});
   }
@@ -325,533 +331,755 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     return "$m:${s.toString().padLeft(2, '0')}";
   }
 
-  @override
-  Widget build(BuildContext context) {
+  void openQueueBottomSheet() {
     final song = ref.watch(currentSongProvider);
-    final isShuffle = ref.watch(shuffleProvider);
-    final repeatMode = ref.watch(repeatModeProvider);
+    final size = MediaQuery.of(context).size;
 
-    // update colour at song change
-    ref.listen<SongDetail?>(currentSongProvider, (_, __) {
-      _updateBgColor();
-      _fetchArtistDetails();
-    });
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.5,
+            minChildSize: 0.01,
+            maxChildSize: .95,
+            expand: false,
+            snap: true,
+            builder:
+                (_, scrollController) => Container(
+                  constraints: BoxConstraints(
+                    maxHeight: size.height,
+                    maxWidth: size.width,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.grey.shade900, Colors.black87],
+                    ),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Drag handle
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: SizedBox(
+                          width: 40,
+                          height: 4,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.white54,
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
 
-    if (song == null) {
-      //  { Future.microtask(() => Navigator.of(context).maybePop());}
-      return const SizedBox.shrink();
-    }
-    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+                      // Header
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Queue",
+                                style: GoogleFonts.figtree(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Text(
+                                    "Playing ",
+                                    style: GoogleFonts.figtree(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white60,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      song?.album ?? 'Now',
+                                      style: GoogleFonts.figtree(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white54,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
 
-    // Compose secondary info line
-    final secondaryParts = <String>[];
-    if ((song.albumName ?? song.album).isNotEmpty) {
-      secondaryParts.add(song.albumName ?? song.album);
-    }
-    if (song.primaryArtists.isNotEmpty) secondaryParts.add(song.primaryArtists);
+                      // Queue list
+                      Flexible(
+                        fit: FlexFit.tight,
+                        child: QueueList(scrollController: scrollController),
+                      ),
+                    ],
+                  ),
+                ),
+          ),
+    );
+  }
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [ref.watch(playerColourProvider), Colors.black],
+  Widget _artistInfoWidget() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
         ),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 60),
-            // Top bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.white,
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                Text(
-                  "Now Playing",
-                  style: GoogleFonts.figtree(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-
-            // Scrollable content
-            Expanded(
-              child: SingleChildScrollView(
-                controller: widget.scrollController,
-                child: Column(
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(color: Colors.grey[900]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image with overlay
+              if (_artistDetails!.images.isNotEmpty)
+                Stack(
                   children: [
-                    const SizedBox(height: 30),
-                    // Artwork (full width, no height restriction)
                     SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.80,
-                      // height: 300,
+                      width: double.infinity,
+                      height: 220,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          song.images.isNotEmpty ? song.images.last.url : "",
-                          fit: BoxFit.contain,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
+                        ),
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.rotationZ(0),
+                          child: Image.network(
+                            _artistDetails!.images.last.url,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 35),
 
-                    // Title & metadata
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 15,
+                    Container(
+                      height: 220,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.black.withAlpha(150),
+                            Colors.transparent,
+                          ],
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                        ),
                       ),
+                    ),
+                    Positioned(
+                      bottom: 6,
+                      left: 16,
+                      right: 16,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _marqueeText(
-                                    trimAfterParamText(song.title),
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
+                            child: Text(
+                              _artistDetails!.title,
+                              style: GoogleFonts.figtree(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                shadows: [
+                                  Shadow(
+                                    blurRadius: 10.0,
+                                    color: Colors.black,
+                                    offset: Offset(2.0, 2.0),
                                   ),
-                                  if (secondaryParts.isNotEmpty)
-                                    _marqueeText(
-                                      secondaryParts.join(" • "),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w300,
-                                      color: Colors.white70,
-                                    ),
                                 ],
                               ),
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8.0),
-                            child: IconButton(
-                              icon: Icon(
-                                isLiked
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                              ),
-                              color: isLiked ? Colors.red : Colors.white,
-                              tooltip: "Add to liked songs",
-                              onPressed: () {
-                                ref
-                                    .read(likedSongsProvider.notifier)
-                                    .toggle(song.id);
-                              },
+                          if (_artistDetails!.isVerified == true)
+                            const Icon(
+                              Icons.verified,
+                              color: Colors.blueAccent,
+                              size: 20,
                             ),
-                          ),
                         ],
                       ),
                     ),
-
-                    // Progress slider
-                    FutureBuilder<MyAudioHandler>(
-                      future: ref.read(audioHandlerProvider.future),
-                      builder: (context, snapshot) {
-                        final audioHandler = snapshot.data;
-                        if (audioHandler == null) {
-                          return const SizedBox.shrink();
-                        }
-
-                        // Watch current song so UI updates when song changes
-                        final song = ref.watch(currentSongProvider);
-                        final total = Duration(
-                          seconds: int.tryParse(song?.duration ?? '0') ?? 0,
-                        );
-
-                        return StreamBuilder<Duration>(
-                          stream: audioHandler.positionStream,
-                          builder: (context, posSnapshot) {
-                            final pos = posSnapshot.data ?? Duration.zero;
-
-                            final progress =
-                                total.inMilliseconds > 0
-                                    ? pos.inMilliseconds / total.inMilliseconds
-                                    : 0.0;
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 5,
-                              ),
-                              child: Column(
-                                children: [
-                                  // Slider
-                                  SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      thumbShape: const RoundSliderThumbShape(
-                                        enabledThumbRadius: 6,
-                                        pressedElevation: 8,
-                                      ),
-                                      overlayShape:
-                                          SliderComponentShape.noOverlay,
-                                      trackHeight: 2.5,
-                                    ),
-                                    child: Slider(
-                                      value: progress.clamp(0.0, 1.0),
-                                      onChanged:
-                                          total == Duration.zero
-                                              ? null
-                                              : (v) => audioHandler.seek(
-                                                Duration(
-                                                  milliseconds:
-                                                      (v * total.inMilliseconds)
-                                                          .toInt(),
-                                                ),
-                                              ),
-                                      activeColor: Colors.white,
-                                      inactiveColor: ref
-                                          .watch(playerColourProvider)
-                                          .withAlpha(100),
-                                    ),
-                                  ),
-
-                                  // Position / Duration labels
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 10,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          _fmt(pos),
-                                          style: GoogleFonts.figtree(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        Text(
-                                          _fmt(total),
-                                          style: GoogleFonts.figtree(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Playback controls
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      child: FutureBuilder<MyAudioHandler>(
-                        future: ref.read(audioHandlerProvider.future),
-                        builder: (context, snapshot) {
-                          final audioHandler = snapshot.data;
-                          if (audioHandler == null) {
-                            return const SizedBox.shrink();
-                          }
-
-                          return StreamBuilder<PlayerState>(
-                            stream: audioHandler.playerStateStream,
-                            builder: (context, stateSnapshot) {
-                              final playerState = stateSnapshot.data;
-                              final playing = playerState?.playing ?? false;
-
-                              return Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                children: [
-                                  // Shuffle
-                                  _ControlButton(
-                                    icon: Icons.shuffle,
-                                    enabled: true,
-                                    iconColor:
-                                        isShuffle
-                                            ? Colors.greenAccent
-                                            : Colors.white70,
-                                    onTap: () => audioHandler.toggleShuffle(),
-                                  ),
-
-                                  // Previous
-                                  _ControlButton(
-                                    icon: Icons.skip_previous,
-                                    enabled: audioHandler.hasPrevious,
-                                    onTap:
-                                        audioHandler.hasPrevious
-                                            ? () =>
-                                                audioHandler.skipToPrevious()
-                                            : null,
-                                    size: 45,
-                                  ),
-
-                                  // Play / Pause
-                                  _ControlButton(
-                                    icon:
-                                        playing
-                                            ? Icons.pause
-                                            : Icons.play_arrow,
-                                    enabled: true,
-                                    onTap:
-                                        () =>
-                                            playing
-                                                ? audioHandler.pause()
-                                                : audioHandler.play(),
-                                    size: 64,
-                                    background: Colors.white,
-                                    iconColor: Colors.black,
-                                  ),
-
-                                  // Next
-                                  _ControlButton(
-                                    icon: Icons.skip_next,
-                                    enabled: audioHandler.hasNext,
-                                    onTap:
-                                        audioHandler.hasNext
-                                            ? () => audioHandler.skipToNext()
-                                            : null,
-                                    size: 45,
-                                  ),
-
-                                  // Repeat
-                                  _ControlButton(
-                                    icon:
-                                        repeatMode == RepeatMode.one
-                                            ? Icons.repeat_one
-                                            : Icons.repeat,
-                                    iconColor:
-                                        repeatMode == RepeatMode.none
-                                            ? Colors.white70
-                                            : Colors.greenAccent,
-                                    enabled: true,
-                                    onTap:
-                                        () => audioHandler.toggleRepeatMode(),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    if (_artistDetails != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      right: 16,
+                      child: Text(
+                        'About the artist',
+                        style: GoogleFonts.figtree(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 10.0,
+                              color: Colors.black,
+                              offset: Offset(2.0, 2.0),
+                            ),
+                          ],
                         ),
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
+                      ),
+                    ),
+                  ],
+                ),
+
+              const SizedBox(height: 12),
+
+              // Stats
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Text(
+                  [
+                    if (_artistDetails!.followerCount != null)
+                      "Followers: ${_artistDetails!.followerCount}",
+                    if (_artistDetails!.dominantLanguage.isNotEmpty)
+                      "Language: ${_artistDetails!.dominantLanguage}",
+                  ].join(" • "),
+                  style: GoogleFonts.figtree(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              if (_artistDetails!.bio.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      _isBioExpanded.value = !_isBioExpanded.value;
+                    },
+                    child: ReadMoreText(
+                      _artistDetails!.bio
+                          .map((bio) => sanitizeBio(bio))
+                          .join("\n\n"),
+                      trimLines: 3,
+                      trimMode: TrimMode.Line,
+                      colorClickableText: Colors.greenAccent,
+                      trimCollapsedText: " ...more",
+                      trimExpandedText: " Show less",
+                      style: GoogleFonts.figtree(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                      moreStyle: GoogleFonts.figtree(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.greenAccent,
+                      ),
+                      lessStyle: GoogleFonts.figtree(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.greenAccent,
+                      ),
+                      isExpandable: false,
+                      isCollapsed: _isBioExpanded,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _playBackControl() {
+    final isShuffle = ref.watch(shuffleProvider);
+    final repeatMode = ref.watch(repeatModeProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: FutureBuilder<MyAudioHandler>(
+        future: ref.read(audioHandlerProvider.future),
+        builder: (context, snapshot) {
+          final audioHandler = snapshot.data;
+          if (audioHandler == null) {
+            return const SizedBox.shrink();
+          }
+
+          return StreamBuilder<PlayerState>(
+            stream: audioHandler.playerStateStream,
+            builder: (context, stateSnapshot) {
+              final playerState = stateSnapshot.data;
+              final playing = playerState?.playing ?? false;
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  // Shuffle
+                  _ControlButton(
+                    icon: Icons.shuffle,
+                    enabled: true,
+                    iconColor: isShuffle ? Colors.greenAccent : Colors.white70,
+                    onTap: () => audioHandler.toggleShuffle(),
+                  ),
+
+                  // Previous
+                  _ControlButton(
+                    icon: Icons.skip_previous,
+                    enabled: audioHandler.hasPrevious,
+                    onTap:
+                        audioHandler.hasPrevious
+                            ? () => audioHandler.skipToPrevious()
+                            : null,
+                    size: 45,
+                  ),
+
+                  // Play / Pause
+                  _ControlButton(
+                    icon: playing ? Icons.pause : Icons.play_arrow,
+                    enabled: true,
+                    onTap:
+                        () =>
+                            playing
+                                ? audioHandler.pause()
+                                : audioHandler.play(),
+                    size: 64,
+                    background: Colors.white,
+                    iconColor: Colors.black,
+                  ),
+
+                  // Next
+                  _ControlButton(
+                    icon: Icons.skip_next,
+                    enabled: audioHandler.hasNext,
+                    onTap:
+                        audioHandler.hasNext
+                            ? () => audioHandler.skipToNext()
+                            : null,
+                    size: 45,
+                  ),
+
+                  // Repeat
+                  _ControlButton(
+                    icon:
+                        repeatMode == RepeatMode.one
+                            ? Icons.repeat_one
+                            : Icons.repeat,
+                    iconColor:
+                        repeatMode == RepeatMode.none
+                            ? Colors.white70
+                            : Colors.greenAccent,
+                    enabled: true,
+                    onTap: () => audioHandler.toggleRepeatMode(),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _streamProgressBar() {
+    return FutureBuilder<MyAudioHandler>(
+      future: ref.read(audioHandlerProvider.future),
+      builder: (context, snapshot) {
+        final audioHandler = snapshot.data;
+        if (audioHandler == null) {
+          return const SizedBox.shrink();
+        }
+
+        // Watch current song so UI updates when song changes
+        final song = ref.watch(currentSongProvider);
+        final total = Duration(
+          seconds: int.tryParse(song?.duration ?? '0') ?? 0,
+        );
+
+        return StreamBuilder<Duration>(
+          stream: audioHandler.positionStream,
+          builder: (context, posSnapshot) {
+            final pos = posSnapshot.data ?? Duration.zero;
+
+            final progress =
+                total.inMilliseconds > 0
+                    ? pos.inMilliseconds / total.inMilliseconds
+                    : 0.0;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 5),
+              child: Column(
+                children: [
+                  // Slider
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                        pressedElevation: 8,
+                      ),
+                      overlayShape: SliderComponentShape.noOverlay,
+                      trackHeight: 2.5,
+                    ),
+                    child: Slider(
+                      value: progress.clamp(0.0, 1.0),
+                      onChanged:
+                          total == Duration.zero
+                              ? null
+                              : (v) => audioHandler.seek(
+                                Duration(
+                                  milliseconds:
+                                      (v * total.inMilliseconds).toInt(),
+                                ),
+                              ),
+                      activeColor: Colors.white,
+                      inactiveColor: Colors.white54.withAlpha(50),
+                    ),
+                  ),
+
+                  // Position / Duration labels
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _fmt(pos),
+                          style: GoogleFonts.figtree(
+                            color: Colors.white70,
+                            fontSize: 12,
                           ),
-                          child: Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(color: Colors.grey[900]),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Image with overlay
-                                if (_artistDetails!.images.isNotEmpty)
-                                  Stack(
+                        ),
+                        Text(
+                          _fmt(total),
+                          style: GoogleFonts.figtree(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final song = ref.watch(currentSongProvider);
+
+    if (song == null) {
+      return const SizedBox.shrink();
+    }
+    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+
+    final secondaryParts = <String>[];
+    if ((song.albumName ?? song.album).isNotEmpty) {
+      secondaryParts.add(song.albumName ?? song.album);
+    }
+    if (song.primaryArtists.isNotEmpty) {
+      secondaryParts.add(song.primaryArtists);
+    }
+
+    final handlerAsync = ref.watch(audioHandlerProvider);
+
+    return handlerAsync.when(
+      data: (handler) {
+        final queueAsync = ref.watch(queueStreamProvider(handler));
+        ref.listen<SongDetail?>(currentSongProvider, (_, __) {
+          _updateBgColor();
+          _fetchArtistDetails();
+
+          if (handler.currentIndex != _pageController.page?.round()) {
+            _pageController.jumpToPage(handler.currentIndex);
+          }
+        });
+
+        return queueAsync.when(
+          data: (queue) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [ref.watch(playerColourProvider), Colors.black],
+                ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 50),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                        Text(
+                          "Now Playing",
+                          style: GoogleFonts.figtree(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: widget.scrollController,
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 30),
+                            SizedBox(
+                              height: 300,
+                              child: PageView.builder(
+                                controller: _pageController,
+                                itemCount: handler.queueLength,
+                                onPageChanged: (index) async {
+                                  await handler.skipToQueueItem(index);
+                                },
+                                itemBuilder: (context, index) {
+                                  final song = handler.queueSongs[index];
+                                  return Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       SizedBox(
-                                        width: double.infinity,
-                                        height: 220,
+                                        width:
+                                            MediaQuery.of(context).size.width *
+                                            0.8,
+                                        height: 300,
                                         child: ClipRRect(
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(16),
-                                            topRight: Radius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
                                           ),
-                                          child: Transform(
-                                            alignment: Alignment.center,
-                                            transform: Matrix4.rotationZ(0),
-                                            child: Image.network(
-                                              _artistDetails!.images.last.url,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-
-                                      Container(
-                                        height: 220,
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.black.withAlpha(150),
-                                              Colors.transparent,
-                                            ],
-                                            begin: Alignment.bottomCenter,
-                                            end: Alignment.topCenter,
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        bottom: 0,
-                                        left: 16,
-                                        right: 16,
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                _artistDetails!.title,
-                                                style: GoogleFonts.figtree(
-                                                  color: Colors.white,
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w600,
-                                                  shadows: [
-                                                    Shadow(
-                                                      blurRadius: 10.0,
-                                                      color: Colors.black,
-                                                      offset: Offset(2.0, 2.0),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            if (_artistDetails!.isVerified ==
-                                                true)
-                                              const Icon(
-                                                Icons.verified,
-                                                color: Colors.blueAccent,
-                                                size: 20,
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: 16,
-                                        left: 16,
-                                        right: 16,
-                                        child: Text(
-                                          'About the artist',
-                                          style: GoogleFonts.figtree(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w500,
-                                            shadows: [
-                                              Shadow(
-                                                blurRadius: 10.0,
-                                                color: Colors.black,
-                                                offset: Offset(2.0, 2.0),
-                                              ),
-                                            ],
+                                          child: Image.network(
+                                            song.images.isNotEmpty
+                                                ? song.images.last.url
+                                                : "",
+                                            fit: BoxFit.contain,
                                           ),
                                         ),
                                       ),
                                     ],
-                                  ),
+                                  );
+                                },
+                              ),
+                            ),
 
-                                const SizedBox(height: 12),
+                            const SizedBox(height: 35),
 
-                                // Stats
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 6,
-                                  ),
-                                  child: Text(
-                                    [
-                                      if (_artistDetails!.followerCount != null)
-                                        "Followers: ${_artistDetails!.followerCount}",
-                                      if (_artistDetails!
-                                          .dominantLanguage
-                                          .isNotEmpty)
-                                        "Language: ${_artistDetails!.dominantLanguage}",
-                                    ].join(" • "),
-                                    style: GoogleFonts.figtree(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 12),
-
-                                if (_artistDetails!.bio.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        _isBioExpanded.value =
-                                            !_isBioExpanded.value;
-                                      },
-                                      child: ReadMoreText(
-                                        _artistDetails!.bio
-                                            .map((bio) => sanitizeBio(bio))
-                                            .join("\n\n"),
-                                        trimLines: 3,
-                                        trimMode: TrimMode.Line,
-                                        colorClickableText: Colors.greenAccent,
-                                        trimCollapsedText: " ...more",
-                                        trimExpandedText: " Show less",
-                                        style: GoogleFonts.figtree(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                        ),
-                                        moreStyle: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.greenAccent,
-                                        ),
-                                        lessStyle: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.greenAccent,
-                                        ),
-                                        isExpandable:
-                                            false, // We will handle expand ourselves
-                                        isCollapsed:
-                                            _isBioExpanded, // toggle expand
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 15,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _marqueeText(
+                                            trimAfterParamText(song.title),
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          if (secondaryParts.isNotEmpty)
+                                            _marqueeText(
+                                              secondaryParts.join(" • "),
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w300,
+                                              color: Colors.white70,
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                              ],
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: IconButton(
+                                      icon: Icon(
+                                        isLiked
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                      ),
+                                      color:
+                                          isLiked ? Colors.red : Colors.white,
+                                      tooltip: "Add to liked songs",
+                                      onPressed: () {
+                                        ref
+                                            .read(likedSongsProvider.notifier)
+                                            .toggle(song.id);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+
+                            _streamProgressBar(),
+                            const SizedBox(height: 15),
+                            _playBackControl(),
+                            const SizedBox(height: 12),
+
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.queue_music,
+                                      size: 24,
+                                    ),
+                                    color: Colors.white70,
+                                    tooltip: "Queue",
+                                    onPressed: () {
+                                      openQueueBottomSheet();
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.share, size: 24),
+                                    color: Colors.white70,
+                                    tooltip: "Share",
+                                    onPressed: () async {
+                                      debugPrint('--> Share pressed');
+
+                                      final box =
+                                          context.findRenderObject()
+                                              as RenderBox?;
+
+                                      // Prepare nice user-friendly share text
+                                      final details = StringBuffer();
+                                      details.writeln(
+                                        "Sharing from Hivefy 🎵\n",
+                                      );
+                                      details.writeln("Song: ${song.title}");
+                                      if (song.primaryArtists.isNotEmpty) {
+                                        details.writeln(
+                                          "Artist(s): ${song.primaryArtists}",
+                                        );
+                                      }
+                                      if ((song.albumName ?? song.album)
+                                          .isNotEmpty) {
+                                        details.writeln(
+                                          "Album: ${song.albumName ?? song.album}",
+                                        );
+                                      }
+                                      if (song.duration != null) {
+                                        details.writeln(
+                                          "Duration: ${song.getHumanReadableDuration()}",
+                                        );
+                                      }
+                                      if (song.year != null) {
+                                        details.writeln("Year: ${song.year}");
+                                      }
+                                      if (song.url != null &&
+                                          song.url.isNotEmpty) {
+                                        details.writeln("URL: ${song.url}");
+                                      }
+
+                                      await SharePlus.instance.share(
+                                        ShareParams(
+                                          text: details.toString(),
+                                          files:
+                                              song.images.isNotEmpty
+                                                  ? [
+                                                    XFile.fromData(
+                                                      (await NetworkAssetBundle(
+                                                        Uri.parse(
+                                                          song.images.last.url,
+                                                        ),
+                                                      ).load(
+                                                        song.images.last.url,
+                                                      )).buffer.asUint8List(),
+                                                      mimeType: 'image/jpeg',
+                                                      name:
+                                                          '${song.title}_hivefy.jpg',
+                                                    ),
+                                                  ]
+                                                  : [],
+                                          title: "Sharing from Hivefy 🎵",
+                                          sharePositionOrigin:
+                                              box!.localToGlobal(Offset.zero) &
+                                              box.size,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            if (_artistDetails != null) ...[
+                              _artistInfoWidget(),
+                              const SizedBox(height: 24),
+                            ],
+                          ],
                         ),
                       ),
-
-                    const SizedBox(height: 24),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) => Center(child: Text("Error loading queue")),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => Center(child: Text("Error loading handler")),
     );
   }
 }

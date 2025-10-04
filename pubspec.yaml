@@ -37,6 +37,8 @@ dependencies:
   toastification:
   audio_service:
   just_audio_background:
+  drag_and_drop_lists:
+  share_plus:
 
 dev_dependencies:
   flutter_test:
