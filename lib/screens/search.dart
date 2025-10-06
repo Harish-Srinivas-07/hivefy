@@ -6,7 +6,7 @@ import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
 import '../models/datamodel.dart';
-import '../models/shimmers.dart';
+import '../components/shimmers.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
@@ -340,27 +340,49 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildSubtitleRow(Playlist p) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         if (p.language.isNotEmpty)
-          Text('${capitalize(p.description)} ', style: _subtitleStyle),
-        if (p.type.isNotEmpty) Text(capitalize(p.type), style: _subtitleStyle),
-        const Spacer(),
+          Flexible(
+            child: Text(
+              '${capitalize(p.description)} ',
+              style: _subtitleStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (p.type.isNotEmpty && p.description.length < 20)
+          Flexible(
+            child: Text(
+              capitalize(p.type),
+              style: _subtitleStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+
         if (_loadingSongId == p.id &&
             ref.watch(currentSongProvider)?.id != p.id)
-          const SizedBox(
-            height: 15,
-            width: 15,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.greenAccent,
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: const SizedBox(
+              height: 15,
+              width: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.greenAccent,
+              ),
             ),
           )
         else if (ref.watch(currentSongProvider)?.id == p.id)
-          Image.asset(
-            'assets/player.gif',
-            height: 16,
-            width: 16,
-            fit: BoxFit.contain,
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Image.asset(
+              'assets/player.gif',
+              height: 16,
+              width: 16,
+              fit: BoxFit.contain,
+            ),
           ),
       ],
     );
@@ -415,23 +437,12 @@ class SearchState extends ConsumerState<Search> {
 
   @override
   Widget build(BuildContext context) {
-    // super.build(context);
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              _buildSearchBox(),
-              const SizedBox(height: 10),
-              Flexible(child: _buildSearchContent()),
-            ],
-          ),
+          child: _buildSearchContent(),
         ),
       ),
     );
@@ -460,7 +471,7 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildSearchBox() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      // padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
@@ -501,112 +512,117 @@ class SearchState extends ConsumerState<Search> {
   }
 
   Widget _buildSearchContent() {
-    if (_isLoading) return buildSearchShimmer();
+    final bool isEmpty = _hasNoResults || _controller.text.trim().isEmpty;
 
-    if (_hasNoResults || _controller.text.trim().isEmpty) {
-      return ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          _buildSearchHistoryRow(),
-          _buildRecentSection(),
-          _buildNoResults(),
-          const SizedBox(height: 100),
-        ],
-      );
-    }
+    return CustomScrollView(
+      slivers: [
+        // HEADER → normal scroll
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: _buildHeader(),
+          ),
+        ),
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 60),
-      children: [
-        if (_showSuggestions && _controller.text.isNotEmpty)
-          ..._buildSuggestions(),
-
-        if (_songs.isNotEmpty)
-          _buildSection(
-            "Songs",
-            _songs,
-            (song) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onSongTap(song),
-              child: _buildPlaylistRow(
-                Playlist(
-                  id: song.id,
-                  title: song.title,
-                  images: song.images,
-                  url: song.url,
-                  type: song.type,
-                  language: song.language,
-                  explicitContent: false,
-                  description: song.album,
-                ),
-              ),
+        // SEARCH BOX → sticky
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: StickyHeaderDelegate(
+            height: 60,
+            child: Container(
+              color: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: _buildSearchBox(),
             ),
           ),
+        ),
 
-        if (_albums.isNotEmpty)
-          _buildSection(
-            "Albums",
-            _albums,
-            (album) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onAlbumTap(album),
-              child: _buildPlaylistRow(
-                Playlist(
-                  id: album.id,
-                  title: album.title,
-                  images: album.images,
-                  url: album.url,
-                  type: album.type,
-                  language: album.language,
-                  explicitContent: false,
-                  description: album.artist,
-                ),
-              ),
-            ),
-          ),
-
-        if (_artists.isNotEmpty)
-          _buildSection(
-            "Artists",
-            _artists,
-            (artist) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onArtistTap(artist),
-              child: _buildPlaylistRow(
-                Playlist(
-                  id: artist.id,
-                  title: artist.title,
-                  images: artist.images,
-                  url: '',
-                  type: artist.type,
-                  language: '',
-                  explicitContent: false,
-                  description: artist.description,
-                ),
-              ),
-            ),
-          ),
-
-        if (_playlists.isNotEmpty)
-          _buildSection(
-            "Playlists",
-            _playlists,
-            (playlist) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onPlaylistTap(playlist),
-              child: _buildPlaylistRow(
-                Playlist(
-                  id: playlist.id,
-                  title: playlist.title,
-                  images: playlist.images,
-                  url: playlist.url,
-                  type: playlist.type,
-                  language: playlist.language,
-                  explicitContent: playlist.explicitContent,
-                  description: playlist.description,
-                ),
-              ),
-            ),
+        // LOADING SHIMMER or RESULTS
+        if (_isLoading)
+          buildSearchShimmerSliver()
+        else
+          SliverList(
+            delegate: SliverChildListDelegate([
+              if (isEmpty) ...[
+                _buildSearchHistoryRow(),
+                _buildRecentSection(),
+                _buildNoResults(),
+                const SizedBox(height: 100),
+              ] else ...[
+                if (_showSuggestions && _controller.text.isNotEmpty)
+                  ..._buildSuggestions(),
+                if (_songs.isNotEmpty)
+                  _buildSection(
+                    "Songs",
+                    _songs,
+                    (s) => GestureDetector(
+                      onTap: () => _onSongTap(s),
+                      child: _buildPlaylistRow(
+                        Playlist(
+                          id: s.id,
+                          title: s.title,
+                          images: s.images,
+                          url: s.url,
+                          type: s.type,
+                          language: s.language,
+                          explicitContent: false,
+                          description: s.album,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_albums.isNotEmpty)
+                  _buildSection(
+                    "Albums",
+                    _albums,
+                    (a) => GestureDetector(
+                      onTap: () => _onAlbumTap(a),
+                      child: _buildPlaylistRow(
+                        Playlist(
+                          id: a.id,
+                          title: a.title,
+                          images: a.images,
+                          url: a.url,
+                          type: a.type,
+                          language: a.language,
+                          explicitContent: false,
+                          description: a.artist,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_artists.isNotEmpty)
+                  _buildSection(
+                    "Artists",
+                    _artists,
+                    (a) => GestureDetector(
+                      onTap: () => _onArtistTap(a),
+                      child: _buildPlaylistRow(
+                        Playlist(
+                          id: a.id,
+                          title: a.title,
+                          images: a.images,
+                          url: '',
+                          type: a.type,
+                          language: '',
+                          explicitContent: false,
+                          description: a.description,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_playlists.isNotEmpty)
+                  _buildSection(
+                    "Playlists",
+                    _playlists,
+                    (p) => GestureDetector(
+                      onTap: () => _onPlaylistTap(p),
+                      child: _buildPlaylistRow(p),
+                    ),
+                  ),
+                const SizedBox(height: 60),
+              ],
+            ]),
           ),
       ],
     );
@@ -695,21 +711,22 @@ class SearchState extends ConsumerState<Search> {
     }
     final loadedSong = details.first;
 
-    //  Save this song into SharedPreferences
-    await storeLastSongs([loadedSong]);
-
-    //  Reload to update UI
-    _lastSongs = await loadLastSongs();
-    if (mounted) setState(() {});
-
     String? imageUrl =
         loadedSong.images.isNotEmpty ? loadedSong.images.last.url : null;
+
     if (imageUrl != null) {
       final dominant = await getDominantColorFromImage(imageUrl);
       ref
           .read(playerColourProvider.notifier)
           .state = (Color.lerp(dominant, Colors.black, 0.85) ?? dominant)!
           .withAlpha(250);
+
+      // Save in background
+      Future(() async {
+        await storeLastSongs([loadedSong]);
+        _lastSongs = await loadLastSongs();
+        if (mounted) setState(() {});
+      });
     }
 
     final audioHandler = await ref.read(audioHandlerProvider.future);
@@ -717,8 +734,7 @@ class SearchState extends ConsumerState<Search> {
     final isCurrentSong = currentSong?.id == loadedSong.id;
 
     if (!isCurrentSong) {
-      await audioHandler.loadQueue([loadedSong], startIndex: 0);
-      await audioHandler.play();
+      await audioHandler.playSongNow(loadedSong, insertNext: true);
     } else {
       (await audioHandler.playerStateStream.first).playing
           ? await audioHandler.pause()
@@ -728,15 +744,11 @@ class SearchState extends ConsumerState<Search> {
     setState(() => _loadingSongId = null);
   }
 
-  void _onAlbumTap(Album album) async {
+  void _onAlbumTap(Album album) {
     FocusScope.of(context).unfocus();
-    //  Save album into SharedPreferences
-    await storeLastAlbums([album]);
 
-    //  Reload to update UI
-    _lastAlbums = await loadLastAlbums();
-    if (mounted) setState(() {});
     if (!mounted) return;
+
     Navigator.of(context).push(
       PageTransition(
         type: PageTransitionType.rightToLeft,
@@ -744,6 +756,13 @@ class SearchState extends ConsumerState<Search> {
         child: AlbumViewer(albumId: album.id),
       ),
     );
+
+    // Save and reload in background
+    Future(() async {
+      await storeLastAlbums([album]);
+      _lastAlbums = await loadLastAlbums();
+      if (mounted) setState(() {});
+    });
   }
 
   void _onPlaylistTap(Playlist p) {
@@ -765,5 +784,41 @@ class SearchState extends ConsumerState<Search> {
         child: ArtistViewer(artistId: artist.id),
       ),
     );
+  }
+}
+
+// ---------------- STICKY HEADER --------------------
+class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+
+  StickyHeaderDelegate({required this.child, this.height = 60});
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    // SizedBox.expand ensures the returned child fills the header's allocated height
+    return SizedBox(
+      height: height,
+      child: Material(
+        // optional: keep background / elevation behavior consistent
+        color: Colors.black,
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant StickyHeaderDelegate old) {
+    return old.height != height || old.child != child;
   }
 }

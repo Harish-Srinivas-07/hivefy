@@ -6,7 +6,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../components/snackbar.dart';
 import '../models/datamodel.dart';
-import '../models/shimmers.dart';
+import '../components/shimmers.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
@@ -137,7 +137,13 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
               // Respect shuffle mode if enabled
               final isShuffle = ref.read(shuffleProvider);
-              if (isShuffle) audioHandler.toggleShuffle();
+              if (isShuffle) {
+                if (!audioHandler.isShuffle) {
+                  audioHandler.toggleShuffle();
+                } else {
+                  audioHandler.regenerateShuffle();
+                }
+              }
 
               await audioHandler.play();
             } else {
@@ -314,8 +320,12 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                       );
 
                       // If shuffle is enabled, apply it after loading
-                      if (isShuffle && !audioHandler.isShuffle) {
-                        audioHandler.toggleShuffle();
+                      if (isShuffle) {
+                        if (!audioHandler.isShuffle) {
+                          audioHandler.toggleShuffle();
+                        } else {
+                          audioHandler.regenerateShuffle();
+                        }
                       }
 
                       await audioHandler.play();

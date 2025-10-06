@@ -4,7 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
-import '../models/shimmers.dart';
+import '../models/datamodel.dart';
+import '../components/shimmers.dart';
 import '../shared/constants.dart';
 import '../utils/format.dart';
 import 'albumviewer.dart';
@@ -24,6 +25,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   int _allSongsCount = 0;
   bool isDefined = false;
   List<LibraryCardData> items = [];
+  List<Album> albums = [];
+  List<ArtistDetails> artists = [];
 
   LibraryFilter _currentFilter = LibraryFilter.all;
 
@@ -40,27 +43,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Future<void> _init() async {
-    await _loadAllSongsCount();
+    if (!mounted) return;
+    if (_currentFilter == LibraryFilter.all) {
+      if (!mounted) return;
+      albums = (ref.watch(frequentAlbumsProvider)).take(5).toList();
+      if (!mounted) return;
+      artists = (ref.watch(frequentArtistsProvider)).take(5).toList();
+    } else if (_currentFilter == LibraryFilter.albums) {
+      if (!mounted) return;
+      albums = ref.watch(frequentAlbumsProvider);
+    } else if (_currentFilter == LibraryFilter.artists) {
+      if (!mounted) return;
+      artists = ref.watch(frequentArtistsProvider);
+    }
 
-    final albumCache = AlbumCache();
-    final artistCache = ArtistCache();
-
-    // Ensure caches are initialized if they have async init
-    albums = await albumCache.getAll();
-    artists = await artistCache.getAll();
+    if (!mounted) return;
+    _allSongsCount = ref.watch(allSongsProvider).length;
 
     isDefined = true;
     if (mounted) setState(() {});
   }
 
-  Future<void> _loadAllSongsCount() async {
-    final allSongs = await AppDatabase.getAllSongs();
-    _allSongsCount = allSongs.length;
-  }
-
   Widget _buildFilterBar() {
     return Container(
-      color: Colors.black54,
+      decoration: const BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black54,
+            offset: Offset(0, 3),
+            blurRadius: 6,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Row(
         // mainAxisSize: MainAxisSize.min,
@@ -118,7 +133,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Now build items
+    _allSongsCount = ref.watch(allSongsProvider).length;
+    albums =
+        (_currentFilter == LibraryFilter.all)
+            ? (ref.watch(frequentAlbumsProvider)).take(5).toList()
+            : ref.watch(frequentAlbumsProvider);
+
+    artists =
+        (_currentFilter == LibraryFilter.all)
+            ? (ref.watch(frequentArtistsProvider)).take(5).toList()
+            : ref.watch(frequentArtistsProvider);
+
     items = [
       LibraryCardData(
         title: 'Liked Songs',
@@ -153,7 +178,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ),
       ),
     ];
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

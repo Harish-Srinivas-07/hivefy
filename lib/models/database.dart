@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'datamodel.dart';
@@ -16,10 +18,13 @@ class AppDatabase {
     _prefs = await SharedPreferences.getInstance();
 
     final stored = _prefs.getString(_songKey);
-    try {
-      _cache = stored != null ? jsonDecode(stored) : {};
-    } catch (_) {
-      _cache = {};
+    if (stored != null) {
+      final decoded = jsonDecode(stored);
+      if (decoded is Map<String, dynamic>) {
+        _cache = decoded;
+      } else {
+        _cache = {};
+      }
     }
 
     _initialized = true;
@@ -66,6 +71,7 @@ class AppDatabase {
 
     // Save the updated cache to SharedPreferences
     await _prefs.setString(_songKey, jsonEncode(_cache));
+    notifyChanges();
 
     debugPrint("--- Song '${song.title}' saved to cache successfully");
 
@@ -127,6 +133,12 @@ class AppDatabase {
     _cache.clear();
     await _prefs.remove(_songKey);
   }
+
+  static final StreamController<void> _changes = StreamController.broadcast();
+
+  static Stream<void> get changes => _changes.stream;
+
+  static void notifyChanges() => _changes.add(null);
 }
 
 // Artists
@@ -209,17 +221,20 @@ class PlaylistDB {
 // Artist cache with persistence
 class ArtistCache {
   static const _prefsKey = 'artist_cache';
+  static const _usageKey = 'artist_usage';
   static final ArtistCache _instance = ArtistCache._internal();
   factory ArtistCache() => _instance;
   ArtistCache._internal();
 
   final Map<String, ArtistDetails> _cache = {};
+  final Map<String, int> _usageCount = {};
   bool _initialized = false;
   late SharedPreferences _prefs;
 
   Future<void> _init() async {
     if (_initialized) return;
     _prefs = await SharedPreferences.getInstance();
+
     final stored = _prefs.getString(_prefsKey);
     if (stored != null) {
       final Map<String, dynamic> decoded = jsonDecode(stored);
@@ -227,11 +242,21 @@ class ArtistCache {
         _cache[key] = ArtistDetails.fromJson(Map<String, dynamic>.from(value));
       });
     }
+
+    final usageStored = _prefs.getString(_usageKey);
+    if (usageStored != null) {
+      final Map<String, dynamic> usageDecoded = jsonDecode(usageStored);
+      usageDecoded.forEach((key, value) {
+        _usageCount[key] = value;
+      });
+    }
+
     _initialized = true;
   }
 
   Future<ArtistDetails?> get(String artistId) async {
     await _init();
+    _incrementUsage(artistId);
     return _cache[artistId];
   }
 
@@ -239,17 +264,28 @@ class ArtistCache {
     await _init();
     _cache[artistId] = details;
     await _saveToPrefs();
+    notifyArtistChanges();
   }
 
-  Future<List<ArtistDetails>> getAll() async {
+  Future<List<ArtistDetails>> getAll({bool sortByUsage = false}) async {
     await _init();
-    return _cache.values.toList();
+    final list = _cache.values.toList();
+    if (sortByUsage) {
+      list.sort((a, b) {
+        final usageA = _usageCount[a.id] ?? 0;
+        final usageB = _usageCount[b.id] ?? 0;
+        return usageB.compareTo(usageA);
+      });
+    }
+    return list;
   }
 
   Future<void> clear() async {
     await _init();
     _cache.clear();
+    _usageCount.clear();
     await _prefs.remove(_prefsKey);
+    await _prefs.remove(_usageKey);
   }
 
   Future<void> _saveToPrefs() async {
@@ -258,23 +294,43 @@ class ArtistCache {
       toStore[key] = ArtistDetails.artistDetailsToJson(value);
     });
     await _prefs.setString(_prefsKey, jsonEncode(toStore));
+    await _prefs.setString(_usageKey, jsonEncode(_usageCount));
   }
+
+  Timer? _saveTimer;
+
+  void _incrementUsage(String artistId) {
+    _usageCount[artistId] = (_usageCount[artistId] ?? 0) + 1;
+    debugPrint(
+      "Artist usage incremented: $artistId → ${_usageCount[artistId]}",
+    );
+    _saveTimer?.cancel();
+    _saveTimer = Timer(Duration(seconds: 1), _saveToPrefs);
+  }
+
+  static final StreamController<void> _artistChanges =
+      StreamController.broadcast();
+  static Stream<void> get artistChanges => _artistChanges.stream;
+  static void notifyArtistChanges() => _artistChanges.add(null);
 }
 
 // Album cache with persistence
 class AlbumCache {
   static const _prefsKey = 'album_cache';
+  static const _usageKey = 'album_usage';
   static final AlbumCache _instance = AlbumCache._internal();
   factory AlbumCache() => _instance;
   AlbumCache._internal();
 
   final Map<String, Album> _cache = {};
+  final Map<String, int> _usageCount = {}; // track usage
   bool _initialized = false;
   late SharedPreferences _prefs;
 
   Future<void> _init() async {
     if (_initialized) return;
     _prefs = await SharedPreferences.getInstance();
+
     final stored = _prefs.getString(_prefsKey);
     if (stored != null) {
       final Map<String, dynamic> decoded = jsonDecode(stored);
@@ -282,11 +338,21 @@ class AlbumCache {
         _cache[key] = Album.fromJson(Map<String, dynamic>.from(value));
       });
     }
+
+    final usageStored = _prefs.getString(_usageKey);
+    if (usageStored != null) {
+      final Map<String, dynamic> usageDecoded = jsonDecode(usageStored);
+      usageDecoded.forEach((key, value) {
+        _usageCount[key] = value;
+      });
+    }
+
     _initialized = true;
   }
 
   Future<Album?> get(String albumId) async {
     await _init();
+    _incrementUsage(albumId);
     return _cache[albumId];
   }
 
@@ -294,17 +360,28 @@ class AlbumCache {
     await _init();
     _cache[albumId] = album;
     await _saveToPrefs();
+    notifyAlbumChanges();
   }
 
-  Future<List<Album>> getAll() async {
+  Future<List<Album>> getAll({bool sortByUsage = false}) async {
     await _init();
-    return _cache.values.toList();
+    final list = _cache.values.toList();
+    if (sortByUsage) {
+      list.sort((a, b) {
+        final usageA = _usageCount[a.id] ?? 0;
+        final usageB = _usageCount[b.id] ?? 0;
+        return usageB.compareTo(usageA); // most used first
+      });
+    }
+    return list;
   }
 
   Future<void> clear() async {
     await _init();
     _cache.clear();
+    _usageCount.clear();
     await _prefs.remove(_prefsKey);
+    await _prefs.remove(_usageKey);
   }
 
   Future<void> _saveToPrefs() async {
@@ -313,7 +390,24 @@ class AlbumCache {
       toStore[key] = Album.albumToJson(value);
     });
     await _prefs.setString(_prefsKey, jsonEncode(toStore));
+    await _prefs.setString(_usageKey, jsonEncode(_usageCount));
   }
+
+  Timer? _saveTimer;
+
+  void _incrementUsage(String albumId) {
+    _usageCount[albumId] = (_usageCount[albumId] ?? 0) + 1;
+    debugPrint("Album usage incremented: $albumId → ${_usageCount[albumId]}");
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(seconds: 1), () async {
+      await _saveToPrefs();
+    });
+  }
+
+  static final StreamController<void> _albumChanges =
+      StreamController.broadcast();
+  static Stream<void> get albumChanges => _albumChanges.stream;
+  static void notifyAlbumChanges() => _albumChanges.add(null);
 }
 
 // ---------------- SEARCH HISTORY ----------------
@@ -407,4 +501,129 @@ Future<void> removeLastAlbum(String albumId) async {
   final albumsJson =
       updated.map((a) => jsonEncode(Album.albumToJson(a))).toList();
   await prefs.setStringList('last_albums', albumsJson);
+}
+
+// ---------------- ALL SONGS PROVIDER -------------------
+final allSongsProvider =
+    StateNotifierProvider<AllSongsNotifier, List<SongDetail>>((ref) {
+      final notifier = AllSongsNotifier();
+      final sub = AppDatabase.changes.listen((_) {
+        notifier.refresh();
+      });
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
+
+class AllSongsNotifier extends StateNotifier<List<SongDetail>> {
+  AllSongsNotifier() : super([]) {
+    _loadSongs();
+  }
+
+  Future<void> _loadSongs() async {
+    state = await AppDatabase.getAllSongs();
+  }
+
+  Future<void> refresh() async {
+    await _loadSongs();
+  }
+}
+
+// ---------------- ARTIST CACHE PROVIDER ------------------
+final allArtistsProvider =
+    StateNotifierProvider<ArtistsNotifier, List<ArtistDetails>>((ref) {
+      final notifier = ArtistsNotifier();
+      final sub = ArtistCache.artistChanges.listen((_) {
+        notifier.refresh();
+      });
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
+
+class ArtistsNotifier extends StateNotifier<List<ArtistDetails>> {
+  ArtistsNotifier() : super([]) {
+    _loadArtists();
+  }
+  Future<void> _loadArtists() async {
+    state = await ArtistCache().getAll();
+  }
+
+  Future<void> refresh() async {
+    await _loadArtists();
+  }
+}
+
+// ----------------- ALBUM CACHE PROVIDER -------------------
+
+final allAlbumsProvider = StateNotifierProvider<AlbumsNotifier, List<Album>>((
+  ref,
+) {
+  final notifier = AlbumsNotifier();
+  final sub = AlbumCache.albumChanges.listen((_) {
+    notifier.refresh();
+  });
+  ref.onDispose(sub.cancel);
+  return notifier;
+});
+
+class AlbumsNotifier extends StateNotifier<List<Album>> {
+  AlbumsNotifier() : super([]) {
+    _loadAlbums();
+  }
+  Future<void> _loadAlbums() async {
+    state = await AlbumCache().getAll();
+  }
+
+  Future<void> refresh() async {
+    await _loadAlbums();
+  }
+}
+
+// ---------------- FREQUENT ARTISTS PROVIDER ------------------
+final frequentArtistsProvider =
+    StateNotifierProvider<FrequentArtistsNotifier, List<ArtistDetails>>((ref) {
+      final notifier = FrequentArtistsNotifier();
+      final sub = ArtistCache.artistChanges.listen((_) {
+        notifier.refresh();
+      });
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
+
+class FrequentArtistsNotifier extends StateNotifier<List<ArtistDetails>> {
+  FrequentArtistsNotifier() : super([]) {
+    _loadFrequentArtists();
+  }
+
+  Future<void> _loadFrequentArtists() async {
+    state = await ArtistCache().getAll(sortByUsage: true);
+  }
+
+  Future<void> refresh() async {
+    await _loadFrequentArtists();
+  }
+}
+
+// ---------------- FREQUENT ALBUMS PROVIDER ------------------
+final frequentAlbumsProvider =
+    StateNotifierProvider<FrequentAlbumsNotifier, List<Album>>((ref) {
+      final notifier = FrequentAlbumsNotifier();
+      final sub = AlbumCache.albumChanges.listen((_) {
+        notifier.refresh();
+      });
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
+
+class FrequentAlbumsNotifier extends StateNotifier<List<Album>> {
+  FrequentAlbumsNotifier() : super([]) {
+    _loadFrequentAlbums();
+  }
+
+  Future<void> _loadFrequentAlbums() async {
+    state = await AlbumCache().getAll(sortByUsage: true);
+  }
+
+  Future<void> refresh() async {
+    await _loadFrequentAlbums();
+  }
 }

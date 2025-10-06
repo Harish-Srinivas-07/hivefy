@@ -7,7 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import '../components/snackbar.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
-import '../models/shimmers.dart';
+import '../components/shimmers.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';

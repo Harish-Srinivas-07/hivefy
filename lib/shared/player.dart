@@ -37,16 +37,23 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     _updatePlayerCardColour();
   }
 
+  final Map<String, Color> _dominantColorCache = {};
   Future<void> _updatePlayerCardColour() async {
     final song = ref.read(currentSongProvider);
     if (song?.images.isEmpty ?? true) return;
 
-    final dominant = await getDominantColorFromImage(song!.images.last.url);
-    if (dominant == null) return;
+    if (_dominantColorCache.containsKey(song!.id)) {
+      ref.read(playerColourProvider.notifier).state =
+          _dominantColorCache[song.id]!;
+      return;
+    }
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
-
-    if (mounted) setState(() {});
+    final dominant = await getDominantColorFromImage(song.images.last.url);
+    if (dominant != null) {
+      _dominantColorCache[song.id] = darken(dominant, 0.1);
+      ref.read(playerColourProvider.notifier).state =
+          _dominantColorCache[song.id]!;
+    }
   }
 
   @override
@@ -90,7 +97,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                         controller: controller,
                         expand: false,
                         initialChildSize: 1.0,
-                        minChildSize: 0.95,
+                        minChildSize: .95,
                         maxChildSize: 1.0,
                         builder: (context, scrollController) {
                           return FullPlayerScreen(
@@ -818,13 +825,17 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     return handlerAsync.when(
       data: (handler) {
         final queueAsync = ref.watch(queueStreamProvider(handler));
-        ref.listen<SongDetail?>(currentSongProvider, (_, __) {
-          _updateBgColor();
-          _fetchArtistDetails();
+        ref.read(audioHandlerProvider.future).then((handler) {
+          handler.playbackState.listen((state) {
+            final index = handler.currentIndex;
 
-          if (handler.currentIndex != _pageController.page?.round()) {
-            _pageController.jumpToPage(handler.currentIndex);
-          }
+            if (_pageController.hasClients &&
+                index >= 0 &&
+                index < handler.queueLength &&
+                index != _pageController.page?.round()) {
+              _pageController.jumpToPage(index);
+            }
+          });
         });
 
         return queueAsync.when(
@@ -875,8 +886,14 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                 controller: _pageController,
                                 itemCount: handler.queueLength,
                                 onPageChanged: (index) async {
-                                  await handler.skipToQueueItem(index);
+                                  final handler = await ref.read(
+                                    audioHandlerProvider.future,
+                                  );
+                                  if (handler.currentIndex != index) {
+                                    await handler.skipToQueueItem(index);
+                                  }
                                 },
+
                                 itemBuilder: (context, index) {
                                   final song = handler.queueSongs[index];
                                   return Column(

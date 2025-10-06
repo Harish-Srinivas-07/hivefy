@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hivefy/models/shimmers.dart';
+import 'package:hivefy/components/shimmers.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:readmore/readmore.dart';
 import '../components/snackbar.dart';

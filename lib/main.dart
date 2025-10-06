@@ -68,7 +68,6 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Optional: watch the provider to rebuild when it’s ready
     ref.watch(audioHandlerProvider);
 
     return ValueListenableBuilder<ThemeMode>(

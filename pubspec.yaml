@@ -39,6 +39,9 @@ dependencies:
   just_audio_background:
   drag_and_drop_lists:
   share_plus:
+  dio:
+  path_provider:
+  flutter_local_notifications:
 
 dev_dependencies:
   flutter_test:

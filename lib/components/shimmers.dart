@@ -97,58 +97,58 @@ Widget buildAlbumShimmer() {
   );
 }
 
-Widget buildSearchShimmer() {
-  return ListView.builder(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    itemCount: 6,
-    itemBuilder:
-        (_, __) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Shimmer.fromColors(
-            baseColor: Colors.grey[800]!,
-            highlightColor: Colors.grey[600]!,
-            child: Row(
-              children: [
-                // Image placeholder
-                Container(
-                  height: 60,
-                  width: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+Widget buildSearchShimmerSliver() {
+  return SliverList(
+    delegate: SliverChildBuilderDelegate(
+      (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Shimmer.fromColors(
+          baseColor: Colors.grey[800]!,
+          highlightColor: Colors.grey[600]!,
+          child: Row(
+            children: [
+              // Image placeholder
+              Container(
+                height: 60,
+                width: 60,
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 12),
+              ),
+              const SizedBox(width: 12),
 
-                // Text placeholders
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 16,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+              // Text placeholders
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 16,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        height: 14,
-                        width: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 14,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+      childCount: 6,
+    ),
   );
 }
 

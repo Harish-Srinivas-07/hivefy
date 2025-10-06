@@ -20,7 +20,7 @@ final audioHandlerProvider = FutureProvider<MyAudioHandler>((ref) async {
     builder: () => MyAudioHandler(ref),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.hivemind.hivefy.channel.audio',
-      androidNotificationChannelName: 'Hivefy Audio',
+      androidNotificationChannelName: 'Hivefy Audio Player',
       androidNotificationIcon: 'drawable/ic_launcher_foreground',
       androidShowNotificationBadge: true,
       androidResumeOnClick: true,
@@ -126,6 +126,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     ref.read(shuffleProvider.notifier).state = _shuffle;
   }
 
+  void regenerateShuffle() {
+    if (_shuffle) _generateShuffleOrder();
+  }
+
   Future<void> reorderQueue(int oldIndex, int newIndex) async {
     if (oldIndex < 0 ||
         newIndex < 0 ||
@@ -147,6 +151,13 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     queue.add(_queue.map(songToMediaItem).toList());
+  }
+
+  void _enforceQueueLimit() {
+    if (_queue.length > 50) {
+      _queue = _queue.sublist(_queue.length - 50);
+      _currentIndex = _queue.length - 1;
+    }
   }
 
   void toggleRepeatMode() {
@@ -205,6 +216,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (_queue.any((s) => s.id == song.id)) return;
 
     _queue.add(song);
+    _enforceQueueLimit();
 
     if (_shuffle) {
       _shuffleOrder ??= List.generate(_queue.length - 1, (i) => i);
@@ -328,6 +340,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     _queue.removeWhere((s) => s.id == song.id);
     _queue.add(song);
+    _enforceQueueLimit();
 
     if (_shuffle) {
       _shuffleOrder ??= List.generate(_queue.length - 1, (i) => i);
@@ -339,9 +352,18 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> loadQueue(List<SongDetail> songs, {int startIndex = 0}) async {
     _queue = List.from(songs);
-    if (_shuffle) _generateShuffleOrder();
+    _enforceQueueLimit();
+
+    if (_queue.isEmpty) return;
 
     _currentIndex = startIndex.clamp(0, _queue.length - 1);
+
+    if (_shuffle) {
+      _generateShuffleOrder(startAtCurrent: true);
+      // Start playback from the first in shuffle order
+      _currentIndex = _shuffleOrder!.first;
+    }
+
     queue.add(_queue.map(songToMediaItem).toList());
     await _playCurrent();
   }
@@ -350,17 +372,28 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final existingIndex = _queue.indexWhere((s) => s.id == song.id);
 
     if (existingIndex >= 0) {
+      // Song already in queue — just jump to it
       _currentIndex = existingIndex;
-    } else if (insertNext) {
-      final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
-      _queue.insert(insertIndex, song);
     } else {
-      _queue.insert(_currentIndex + 1, song);
-      _currentIndex++;
+      if (insertNext) {
+        final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
+        _queue.insert(insertIndex, song);
+        _currentIndex = insertIndex;
+      } else {
+        // Default: play immediately by inserting right after current
+        _queue.insert(_currentIndex + 1, song);
+        _currentIndex = _currentIndex + 1;
+      }
+
+      // Update the queue
+      queue.add(_queue.map(songToMediaItem).toList());
+
+      // Regenerate shuffle order if shuffle is on
+      if (_shuffle) _generateShuffleOrder();
     }
 
-    queue.add(_queue.map(songToMediaItem).toList());
-    await play();
+    // Play without replacing the whole queue
+    await _playCurrent();
   }
 
   // --- Helpers
@@ -441,8 +474,15 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     );
   }
 
-  void _generateShuffleOrder() {
+  void _generateShuffleOrder({bool startAtCurrent = true}) {
     _shuffleOrder = List.generate(_queue.length, (i) => i)..shuffle();
+
+    // Ensure current song stays consistent in shuffle context
+    if (startAtCurrent && _currentIndex >= 0 && _currentIndex < _queue.length) {
+      final current = _currentIndex;
+      _shuffleOrder!.remove(current);
+      _shuffleOrder!.insert(0, current);
+    }
   }
 
   Future<void> _initLastPlayed() async {
