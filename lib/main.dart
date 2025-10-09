@@ -87,8 +87,18 @@ class _MyAppState extends ConsumerState<MyApp> {
 
             return MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: ThemeData(colorScheme: lightScheme, useMaterial3: true),
-              darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+              theme: ThemeData(
+                colorScheme: lightScheme,
+                useMaterial3: true,
+                fontFamily: 'SpotifyMix',
+                textTheme: ThemeController().spotifyTextTheme,
+              ),
+              darkTheme: ThemeData(
+                colorScheme: darkScheme,
+                useMaterial3: true,
+                fontFamily: 'SpotifyMix',
+                textTheme: ThemeController().spotifyTextTheme,
+              ),
               themeMode: mode,
               onGenerateRoute: (settings) {
                 Widget page;

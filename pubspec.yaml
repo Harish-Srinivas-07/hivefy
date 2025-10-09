@@ -19,7 +19,6 @@ dependencies:
   cached_network_image:
   shimmer:
   app_links:
-  google_fonts:
   http:
   dart_des:
   html:
@@ -55,6 +54,58 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/fonts/
+
+  fonts:
+    - family: SpotifyMix
+      fonts:
+        - asset: assets/fonts/SpotifyMix-Thin.ttf
+          weight: 100
+        - asset: assets/fonts/SpotifyMix-ThinItalic.ttf
+          weight: 100
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Light.ttf
+          weight: 300
+        - asset: assets/fonts/SpotifyMix-LightItalic.ttf
+          weight: 300
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpotifyMix-RegularItalic.ttf
+          weight: 400
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpotifyMix-MediumItalic.ttf
+          weight: 500
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/SpotifyMix-BoldItalic.ttf
+          weight: 700
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Extrabold.ttf
+          weight: 800
+        - asset: assets/fonts/SpotifyMix-ExtraboldItalic.ttf
+          weight: 800
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Black.ttf
+          weight: 900
+        - asset: assets/fonts/SpotifyMix-BlackItalic.ttf
+          weight: 900
+          style: italic
+
+        - asset: assets/fonts/SpotifyMix-Ultra.ttf
+          weight: 900
+        - asset: assets/fonts/SpotifyMix-UltraItalic.ttf
+          weight: 900
+          style: italic
 
 flutter_launcher_icons:
   android: "launcher_icon"

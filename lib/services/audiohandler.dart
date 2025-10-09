@@ -350,7 +350,20 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     queue.add(_queue.map(songToMediaItem).toList());
   }
 
-  Future<void> loadQueue(List<SongDetail> songs, {int startIndex = 0}) async {
+  String? _queueSourceId;
+  String? _queueSourceName;
+
+  String? get queueSourceId => _queueSourceId;
+  String? get queueSourceName => _queueSourceName;
+
+  Future<void> loadQueue(
+    List<SongDetail> songs, {
+    int startIndex = 0,
+    String? sourceId,
+    String? sourceName,
+  }) async {
+    _queueSourceId = sourceId;
+    _queueSourceName = sourceName;
     _queue = List.from(songs);
     _enforceQueueLimit();
 
@@ -387,6 +400,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
       // Update the queue
       queue.add(_queue.map(songToMediaItem).toList());
+      _queueSourceName = song.albumName;
 
       // Regenerate shuffle order if shuffle is on
       if (_shuffle) _generateShuffleOrder();
@@ -491,6 +505,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _queue = [last];
       _currentIndex = 0;
       queue.add([songToMediaItem(last)]);
+      _queueSourceName = 'Last Played';
       ref.read(currentSongProvider.notifier).state = last;
 
       try {

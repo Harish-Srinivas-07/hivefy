@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
@@ -46,19 +45,19 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     if (!mounted) return;
     if (_currentFilter == LibraryFilter.all) {
       if (!mounted) return;
-      albums = (ref.watch(frequentAlbumsProvider)).take(5).toList();
+      albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
       if (!mounted) return;
-      artists = (ref.watch(frequentArtistsProvider)).take(5).toList();
+      artists = (ref.read(frequentArtistsProvider)).take(5).toList();
     } else if (_currentFilter == LibraryFilter.albums) {
       if (!mounted) return;
-      albums = ref.watch(frequentAlbumsProvider);
+      albums = ref.read(frequentAlbumsProvider);
     } else if (_currentFilter == LibraryFilter.artists) {
       if (!mounted) return;
-      artists = ref.watch(frequentArtistsProvider);
+      artists = ref.read(frequentArtistsProvider);
     }
 
     if (!mounted) return;
-    _allSongsCount = ref.watch(allSongsProvider).length;
+    _allSongsCount = ref.read(allSongsProvider).length;
 
     isDefined = true;
     if (mounted) setState(() {});
@@ -103,7 +102,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     ),
                     child: Text(
                       capitalize(filter.name),
-                      style: GoogleFonts.figtree(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w500,
                       ),
@@ -190,7 +189,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             const SizedBox(width: 10),
             Text(
               'Your Library',
-              style: GoogleFonts.figtree(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
@@ -356,7 +355,7 @@ class LibraryCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.figtree(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
@@ -368,10 +367,7 @@ class LibraryCard extends StatelessWidget {
                   type == LibraryItemType.artist
                       ? 'Artist'
                       : '$count ${count == 1 ? 'song' : 'songs'}',
-                  style: GoogleFonts.figtree(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:figma_squircle/figma_squircle.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:toastification/toastification.dart';
 
 enum Severity { error, warning, info, success }
@@ -38,10 +37,7 @@ Future<void> info(
       maxLines: 5,
       overflow: TextOverflow.ellipsis,
       softWrap: true,
-      style: GoogleFonts.figtree(
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-      ),
+      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
       textScaler: const TextScaler.linear(1),
     ),
     borderSide: const BorderSide(color: Colors.white54, width: 0.5),

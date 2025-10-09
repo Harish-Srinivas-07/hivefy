@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:iconly/iconly.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:page_transition/page_transition.dart';
 
 import '../models/database.dart';
@@ -174,7 +173,7 @@ class SearchState extends ConsumerState<Search> {
       );
 
       _extraSongsLoaded = true;
-      setState(() {});
+      if (mounted) setState(() {});
     }
   }
 
@@ -196,7 +195,7 @@ class SearchState extends ConsumerState<Search> {
       );
 
       _extraArtistsLoaded = true;
-      setState(() {});
+      if (mounted) setState(() {});
     }
   }
 
@@ -240,7 +239,7 @@ class SearchState extends ConsumerState<Search> {
     _artists = results.artists.results;
     _playlists = results.playlists.results;
     _isLoading = false;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _clearText() {
@@ -275,7 +274,7 @@ class SearchState extends ConsumerState<Search> {
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Text(
         title,
-        style: GoogleFonts.figtree(
+        style: TextStyle(
           fontSize: title.toLowerCase().contains('recently') ? 16 : 18,
           fontWeight: FontWeight.w600,
           color:
@@ -312,7 +311,7 @@ class SearchState extends ConsumerState<Search> {
               children: [
                 Text(
                   p.title,
-                  style: GoogleFonts.figtree(
+                  style: TextStyle(
                     color:
                         ref.watch(currentSongProvider)?.id == p.id
                             ? Colors.greenAccent
@@ -396,7 +395,7 @@ class SearchState extends ConsumerState<Search> {
       children: [
         Text(
           'Recent Search',
-          style: GoogleFonts.figtree(fontSize: 13, color: Colors.white54),
+          style: TextStyle(fontSize: 13, color: Colors.white54),
         ),
         const SizedBox(height: 2),
         SingleChildScrollView(
@@ -419,10 +418,7 @@ class SearchState extends ConsumerState<Search> {
                         color: Colors.grey[800],
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        term,
-                        style: GoogleFonts.figtree(color: Colors.white),
-                      ),
+                      child: Text(term, style: TextStyle(color: Colors.white)),
                     ),
                   );
                 }).toList(),
@@ -432,8 +428,7 @@ class SearchState extends ConsumerState<Search> {
     );
   }
 
-  TextStyle get _subtitleStyle =>
-      GoogleFonts.figtree(color: Colors.grey, fontSize: 12);
+  TextStyle get _subtitleStyle => TextStyle(color: Colors.grey, fontSize: 12);
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +453,7 @@ class SearchState extends ConsumerState<Search> {
         ),
         Text(
           'Search',
-          style: GoogleFonts.figtree(
+          style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -487,13 +482,13 @@ class SearchState extends ConsumerState<Search> {
             child: TextField(
               controller: _controller,
               cursorColor: Colors.greenAccent,
-              style: GoogleFonts.figtree(color: Colors.white),
+              style: TextStyle(color: Colors.white),
               onTapOutside: (_) => FocusScope.of(context).unfocus(),
               onChanged: _onTextChanged,
               onSubmitted: (value) => _onSuggestionTap(value.trim()),
               decoration: InputDecoration(
                 hintText: "What do you want to listen to?",
-                hintStyle: GoogleFonts.figtree(color: Colors.grey),
+                hintStyle: TextStyle(color: Colors.grey),
                 border: InputBorder.none,
               ),
             ),
@@ -636,7 +631,7 @@ class SearchState extends ConsumerState<Search> {
           const SizedBox(height: 30),
           Text(
             'Play what you love',
-            style: GoogleFonts.figtree(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -645,7 +640,7 @@ class SearchState extends ConsumerState<Search> {
           const SizedBox(height: 2),
           Text(
             'Search for artists, songs, and more',
-            style: GoogleFonts.figtree(fontSize: 13, color: Colors.grey),
+            style: TextStyle(fontSize: 13, color: Colors.grey),
           ),
         ],
       ),
@@ -674,7 +669,7 @@ class SearchState extends ConsumerState<Search> {
               Expanded(
                 child: Text(
                   s,
-                  style: GoogleFonts.figtree(
+                  style: TextStyle(
                     color: Colors.grey,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
@@ -716,10 +711,10 @@ class SearchState extends ConsumerState<Search> {
 
     if (imageUrl != null) {
       final dominant = await getDominantColorFromImage(imageUrl);
-      ref
-          .read(playerColourProvider.notifier)
-          .state = (Color.lerp(dominant, Colors.black, 0.85) ?? dominant)!
-          .withAlpha(250);
+      if (dominant == null) return;
+      if (!mounted) return;
+
+      ref.read(playerColourProvider.notifier).state = dominant;
 
       // Save in background
       Future(() async {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+
+import 'package:iconly/iconly.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flashy_tab_bar2/flashy_tab_bar2.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:iconly/iconly.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shared/constants.dart';
@@ -92,19 +92,19 @@ class _HomeState extends ConsumerState<Home>
       items: [
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.home, size: 30),
-          title: Text('Home', style: GoogleFonts.figtree(fontSize: 16)),
+          title: Text('Home', style: TextStyle(fontSize: 16)),
           activeColor: Colors.greenAccent,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyLight.search, size: 30),
-          title: Text('Search', style: GoogleFonts.figtree(fontSize: 16)),
+          title: Text('Search', style: TextStyle(fontSize: 16)),
           activeColor: Colors.greenAccent,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.chart, size: 30),
-          title: Text('Library', style: GoogleFonts.figtree(fontSize: 16)),
+          title: Text('Library', style: TextStyle(fontSize: 16)),
           activeColor: Colors.greenAccent,
           inactiveColor: Colors.grey,
         ),

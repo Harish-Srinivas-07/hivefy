@@ -1,14 +1,10 @@
-// ignore_for_file: unnecessary_null_comparison
-
 import 'package:audio_service/audio_service.dart';
 import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:marquee/marquee.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:readmore/readmore.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/datamodel.dart';
@@ -35,25 +31,28 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     // Initial update
     _updatePlayerCardColour();
+    // Schedule a delayed update after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _updatePlayerCardColour();
+      }
+    });
+    // Also handle current song when widget initializes
+    final song = ref.read(currentSongProvider);
+    if (song != null && mounted) {
+      _updatePlayerCardColour();
+    }
   }
 
-  final Map<String, Color> _dominantColorCache = {};
   Future<void> _updatePlayerCardColour() async {
     final song = ref.read(currentSongProvider);
     if (song?.images.isEmpty ?? true) return;
 
-    if (_dominantColorCache.containsKey(song!.id)) {
-      ref.read(playerColourProvider.notifier).state =
-          _dominantColorCache[song.id]!;
-      return;
-    }
+    final dominant = await getDominantColorFromImage(song!.images.last.url);
+    if (dominant == null) return;
+    if (!mounted) return;
 
-    final dominant = await getDominantColorFromImage(song.images.last.url);
-    if (dominant != null) {
-      _dominantColorCache[song.id] = darken(dominant, 0.1);
-      ref.read(playerColourProvider.notifier).state =
-          _dominantColorCache[song.id]!;
-    }
+    ref.read(playerColourProvider.notifier).state = dominant;
   }
 
   @override
@@ -67,8 +66,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
 
     // Listen for changes in currentSongProvider to update color
-    ref.listen<SongDetail?>(currentSongProvider, (_, __) {
-      _updatePlayerCardColour();
+    ref.listen<SongDetail?>(currentSongProvider, (previous, next) {
+      if (next != null && next != previous) {
+        _updatePlayerCardColour();
+      }
     });
 
     return audioHandlerAsync.when(
@@ -156,7 +157,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                               ),
                               Text(
                                 song.contributors.primary.first.title,
-                                style: GoogleFonts.gabarito(
+                                style: TextStyle(
                                   color: Colors.white.withAlpha(190),
                                   fontSize: 12,
                                 ),
@@ -307,7 +308,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final dominant = await getDominantColorFromImage(song!.images.last.url);
     if (dominant == null) return;
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
+    ref.read(playerColourProvider.notifier).state = dominant;
 
     if (mounted) setState(() {});
   }
@@ -327,7 +328,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
 
     if (mounted && details != null) {
       _artistDetails = details;
-      setState(() {});
+      _isBioExpanded.value = false;
+      if (mounted) setState(() {});
       debugPrint('--> loaded artist details: $_artistDetails');
     }
   }
@@ -401,7 +403,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                             children: [
                               Text(
                                 "Queue",
-                                style: GoogleFonts.figtree(
+                                style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
@@ -412,7 +414,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                 children: [
                                   Text(
                                     "Playing ",
-                                    style: GoogleFonts.figtree(
+                                    style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       color: Colors.white60,
@@ -421,7 +423,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                   Expanded(
                                     child: Text(
                                       song?.album ?? 'Now',
-                                      style: GoogleFonts.figtree(
+                                      style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                         color: Colors.white54,
@@ -510,7 +512,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                           Expanded(
                             child: Text(
                               _artistDetails!.title,
-                              style: GoogleFonts.figtree(
+                              style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
@@ -539,7 +541,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                       right: 16,
                       child: Text(
                         'About the artist',
-                        style: GoogleFonts.figtree(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -571,10 +573,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     if (_artistDetails!.dominantLanguage.isNotEmpty)
                       "Language: ${_artistDetails!.dominantLanguage}",
                   ].join(" • "),
-                  style: GoogleFonts.figtree(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
 
@@ -586,36 +585,46 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  child: GestureDetector(
-                    onTap: () {
-                      _isBioExpanded.value = !_isBioExpanded.value;
-                    },
-                    child: ReadMoreText(
-                      _artistDetails!.bio
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _isBioExpanded,
+                    builder: (context, expanded, _) {
+                      final fullBio = _artistDetails!.bio
                           .map((bio) => sanitizeBio(bio))
-                          .join("\n\n"),
-                      trimLines: 3,
-                      trimMode: TrimMode.Line,
-                      colorClickableText: Colors.greenAccent,
-                      trimCollapsedText: " ...more",
-                      trimExpandedText: " Show less",
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                      moreStyle: GoogleFonts.figtree(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.greenAccent,
-                      ),
-                      lessStyle: GoogleFonts.figtree(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.greenAccent,
-                      ),
-                      isExpandable: false,
-                      isCollapsed: _isBioExpanded,
-                    ),
+                          .join("\n\n");
+
+                      final displayBio =
+                          expanded
+                              ? fullBio
+                              : (fullBio.length > 180
+                                  ? '${fullBio.substring(0, 180)}...'
+                                  : fullBio);
+
+                      return GestureDetector(
+                        onTap: () => _isBioExpanded.value = !expanded,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayBio,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              expanded ? "Show less" : "Read more",
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.greenAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
@@ -779,17 +788,11 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                       children: [
                         Text(
                           _fmt(pos),
-                          style: GoogleFonts.figtree(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         Text(
                           _fmt(total),
-                          style: GoogleFonts.figtree(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
                     ),
@@ -853,27 +856,71 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 50),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down,
-                            color: Colors.white,
+                    // header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                        Text(
-                          "Now Playing",
-                          style: GoogleFonts.figtree(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width * 0.6,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "Now Playing".toUpperCase(),
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                Consumer(
+                                  builder: (context, ref, _) {
+                                    final audioHandler =
+                                        ref
+                                            .watch(audioHandlerProvider)
+                                            .valueOrNull;
+                                    final sourceName =
+                                        audioHandler?.queueSourceName;
+
+                                    if (sourceName == null ||
+                                        sourceName.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    return _marqueeText(
+                                      sourceName,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 48),
-                      ],
+                          IconButton(
+                            icon: const Icon(
+                              Icons.more_vert,
+                              color: Colors.white70,
+                              size: 24,
+                            ),
+                            onPressed: () {
+                              // TODO: Show song menu
+                            },
+                          ),
+                        ],
+                      ),
                     ),
+                    //  scrollable player
                     Expanded(
                       child: SingleChildScrollView(
                         controller: widget.scrollController,
@@ -1040,8 +1087,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                       if (song.year != null) {
                                         details.writeln("Year: ${song.year}");
                                       }
-                                      if (song.url != null &&
-                                          song.url.isNotEmpty) {
+                                      if (song.url.isNotEmpty) {
                                         details.writeln("URL: ${song.url}");
                                       }
 
@@ -1147,7 +1193,7 @@ Widget _marqueeText(
   if (text.length <= 30) {
     return Text(
       text,
-      style: GoogleFonts.gabarito(
+      style: TextStyle(
         color: color,
         fontSize: fontSize,
         fontWeight: fontWeight,
@@ -1158,10 +1204,10 @@ Widget _marqueeText(
   }
 
   return SizedBox(
-    height: fontSize + 4,
+    height: fontSize,
     child: Marquee(
       text: text,
-      style: GoogleFonts.gabarito(
+      style: TextStyle(
         color: Colors.white,
         fontSize: fontSize,
         fontWeight: fontWeight,

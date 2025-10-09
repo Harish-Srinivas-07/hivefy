@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:readmore/readmore.dart';
 
@@ -13,6 +12,7 @@ import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
 import '../shared/player.dart';
 import '../utils/format.dart';
+import '../utils/theme.dart';
 
 class PlaylistViewer extends ConsumerStatefulWidget {
   final String playlistId;
@@ -56,30 +56,57 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     super.dispose();
   }
 
+  Future<void> _updateBgColor() async {
+    if (_playlist?.images.last.url.isEmpty ?? true) return;
+
+    final dominant = await getDominantColorFromImage(
+      _playlist!.images.last.url,
+    );
+    if (dominant == null) return;
+    if (!mounted) return;
+
+    ref.read(playerColourProvider.notifier).state = dominant;
+
+    if (mounted) setState(() {});
+  }
+
   Future<void> _fetchPlaylist() async {
     setState(() => _loading = true);
 
     try {
       final playlist = await SaavnAPI().fetchPlaylistById(
         playlistId: widget.playlistId,
+        limit: 50,
       );
 
-      if (playlist != null && playlist.songs.isNotEmpty) {
-        _playlistSongDetails = await SaavnAPI().getSongDetails(
-          ids: playlist.songs.map((s) => s.id).toList(),
-        );
-        _totalPlaylistDuration = getTotalDuration(_playlistSongDetails);
+      if (playlist == null || playlist.songs.isEmpty) {
+        setState(() => _loading = false);
+        return;
       }
 
-      if (mounted) {
-        setState(() {
-          _playlist = playlist;
-          _loading = false;
-        });
+      _playlist = playlist;
+      await _updateBgColor();
+      _playlistSongDetails = [];
+      _totalPlaylistDuration = 0;
+
+      const batchSize = 20;
+      final totalSongs = playlist.songs.length;
+
+      for (int start = 0; start < totalSongs; start += batchSize) {
+        final end = (start + batchSize).clamp(0, totalSongs);
+        final batchIds =
+            playlist.songs.sublist(start, end).map((s) => s.id).toList();
+
+        final batchDetails = await SaavnAPI().getSongDetails(ids: batchIds);
+        _playlistSongDetails.addAll(batchDetails);
+
+        _totalPlaylistDuration = getTotalDuration(_playlistSongDetails);
+        if (mounted) setState(() => _loading = false);
       }
     } catch (e, st) {
       debugPrint("Error fetching playlist: $e\n$st");
-      setState(() => _loading = false);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -122,7 +149,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           const SizedBox(height: 24),
           Text(
             _playlist!.title,
-            style: GoogleFonts.figtree(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Colors.white,
@@ -135,10 +162,13 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
   }
 
   Widget _buildSongList() {
-    final songs = _playlist?.songs ?? [];
-    if (_loading) return buildAlbumShimmer();
+    if (_loading && _playlistSongDetails.isEmpty) {
+      return buildAlbumShimmer();
+    }
 
-    if (songs.isEmpty) return const SizedBox.shrink();
+    if (_playlistSongDetails.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,7 +177,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             "Songs",
-            style: GoogleFonts.figtree(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -155,8 +185,12 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           ),
         ),
         const SizedBox(height: 8),
-        ...songs.map(
-          (song) => SongRow(song: song, allSongs: _playlistSongDetails),
+        ..._playlistSongDetails.map(
+          (song) => SongRow(
+            song: song,
+            allSongs: _playlistSongDetails,
+            playlist: _playlist!,
+          ),
         ),
       ],
     );
@@ -196,57 +230,51 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
             builder: (context, snapshot) {
               final isPlaying = snapshot.data?.playing ?? false;
               final currentSong = ref.watch(currentSongProvider);
+              final audioHandlerFuture = ref.read(audioHandlerProvider.future);
 
-              final bool isCurrentAlbumSong =
+              final bool isCurrentPlaylistSong =
                   currentSong != null &&
                   _playlistSongDetails.any((s) => s.id == currentSong.id);
 
-              // --- Icon logic ---
-              IconData icon;
-              if (isCurrentAlbumSong) {
-                icon = isPlaying ? Icons.pause : Icons.play_arrow;
-              } else {
-                icon = Icons.play_arrow;
-              }
+              final icon =
+                  isCurrentPlaylistSong
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : Icons.play_arrow;
 
               return GestureDetector(
                 onTap: () async {
-                  try {
-                    final audioHandler = await ref.read(
-                      audioHandlerProvider.future,
-                    );
+                  final audioHandler = await audioHandlerFuture;
 
-                    if (isCurrentAlbumSong) {
-                      // If this album’s song is already playing -> toggle pause/play
-                      if (isPlaying) {
-                        await audioHandler.pause();
-                      } else {
-                        await audioHandler.play();
-                      }
+                  if (isCurrentPlaylistSong) {
+                    // 🔁 toggle playback
+                    if (isPlaying) {
+                      await audioHandler.pause();
                     } else {
-                      // Load full album queue
-                      int startIndex = 0;
-                      if (isShuffle) {
-                        startIndex =
-                            DateTime.now().millisecondsSinceEpoch %
-                            _playlistSongDetails.length;
-                      }
-
-                      await audioHandler.loadQueue(
-                        _playlistSongDetails,
-                        startIndex: startIndex,
-                      );
-
-                      // If shuffle is enabled, apply it after loading
-                      if (isShuffle && !audioHandler.isShuffle) {
-                        audioHandler.toggleShuffle();
-                      }
-
                       await audioHandler.play();
                     }
-                  } catch (e, st) {
-                    debugPrint("Error handling album play: $e\n$st");
+                    return;
                   }
+
+                  // 🚀 new playlist or empty queue
+                  int startIndex = 0;
+                  if (isShuffle) {
+                    startIndex =
+                        DateTime.now().millisecondsSinceEpoch %
+                        _playlistSongDetails.length;
+                  }
+
+                  await audioHandler.loadQueue(
+                    _playlistSongDetails,
+                    startIndex: startIndex,
+                    sourceId: widget.playlistId,
+                    sourceName: _playlist?.title,
+                  );
+
+                  if (isShuffle && !audioHandler.isShuffle) {
+                    audioHandler.toggleShuffle();
+                  }
+
+                  await audioHandler.play();
                 },
                 child: Container(
                   padding: const EdgeInsets.all(10),
@@ -320,7 +348,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                               duration: const Duration(milliseconds: 200),
                               child: Text(
                                 _playlist?.title ?? "",
-                                style: GoogleFonts.figtree(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -354,7 +382,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                       colorClickableText: Colors.greenAccent,
                                       trimCollapsedText: " ...more",
                                       trimExpandedText: " Show less",
-                                      style: GoogleFonts.figtree(
+                                      style: TextStyle(
                                         color: Colors.white54,
                                         fontSize: 14,
                                       ),
@@ -365,7 +393,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                       padding: const EdgeInsets.only(top: 2.0),
                                       child: Text(
                                         formatDuration(_totalPlaylistDuration),
-                                        style: GoogleFonts.figtree(
+                                        style: TextStyle(
                                           color: Colors.white54,
                                           fontSize: 12,
                                         ),
@@ -401,8 +429,14 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
 class SongRow extends ConsumerWidget {
   final SongDetail song;
   final List<SongDetail> allSongs;
+  final Playlist playlist;
 
-  const SongRow({super.key, required this.song, required this.allSongs});
+  const SongRow({
+    super.key,
+    required this.song,
+    required this.allSongs,
+    required this.playlist,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -422,8 +456,8 @@ class SongRow extends ConsumerWidget {
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
-            await audioHandler.addSongToQueue(song);
-            info('${song.title} added to queue', Severity.success);
+            await audioHandler.addSongNext(song);
+            info('${song.title} will play next', Severity.success);
             await handler(false);
           },
         ),
@@ -432,7 +466,27 @@ class SongRow extends ConsumerWidget {
         behavior: HitTestBehavior.opaque,
         onTap: () async {
           final audioHandler = await ref.read(audioHandlerProvider.future);
-          await audioHandler.loadQueue(allSongs, startIndex: 0);
+          final currentQueue = audioHandler.queueSongs;
+          final currentSource = audioHandler.queueSourceId;
+
+          final isSamePlaylist = currentSource == playlist.id;
+          final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+
+          if (tappedIndex == -1) return;
+
+          if (isSamePlaylist && currentQueue.isNotEmpty) {
+            // 🎯 Already playing this playlist → jump to that song
+            await audioHandler.skipToQueueItem(tappedIndex);
+          } else {
+            // 🚀 Load new queue for this playlist
+            await audioHandler.loadQueue(
+              allSongs,
+              startIndex: tappedIndex,
+              sourceId: playlist.id,
+              sourceName: playlist.title,
+            );
+          }
+
           await audioHandler.play();
         },
         child: Container(
@@ -455,7 +509,7 @@ class SongRow extends ConsumerWidget {
                   children: [
                     Text(
                       song.title,
-                      style: GoogleFonts.figtree(
+                      style: TextStyle(
                         color: isPlaying ? Colors.greenAccent : Colors.white,
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
@@ -466,10 +520,7 @@ class SongRow extends ConsumerWidget {
                       song.primaryArtists.isNotEmpty
                           ? song.primaryArtists
                           : song.album,
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],

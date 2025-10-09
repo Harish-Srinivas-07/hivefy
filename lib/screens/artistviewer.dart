@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:hivefy/components/shimmers.dart';
+
+import 'package:just_audio/just_audio.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:readmore/readmore.dart';
+
+import '../components/shimmers.dart';
 import '../components/snackbar.dart';
 import '../models/datamodel.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
-import '../shared/player.dart';
+import '../utils/theme.dart';
 import 'albumviewer.dart';
 
 class ArtistViewer extends ConsumerStatefulWidget {
@@ -25,6 +27,7 @@ class ArtistViewer extends ConsumerStatefulWidget {
 class _ArtistViewerState extends ConsumerState<ArtistViewer> {
   ArtistDetails? _artist;
   bool _loading = true;
+  Color artistCoverColour = Colors.pink;
 
   final ScrollController _scrollController = ScrollController();
   bool _isTitleCollapsed = false;
@@ -46,6 +49,18 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     });
   }
 
+  Future<void> _updateBgColor() async {
+    if (_artist?.images.last.url.isEmpty ?? true) return;
+
+    final dominant = await getDominantColorFromImage(_artist!.images.last.url);
+    if (dominant == null) return;
+    if (!mounted) return;
+
+    artistCoverColour = dominant;
+
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -57,11 +72,11 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     final details = await SaavnAPI().fetchArtistDetailsById(
       artistId: widget.artistId,
     );
+    await _updateBgColor();
     if (mounted) {
-      setState(() {
-        _artist = details;
-        _loading = false;
-      });
+      _artist = details;
+      _loading = false;
+      setState(() {});
     }
   }
 
@@ -108,7 +123,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                 Expanded(
                   child: Text(
                     _artist!.title,
-                    style: GoogleFonts.figtree(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -129,7 +144,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
             const SizedBox(height: 2),
             Text(
               '${_artist!.followerCount ?? 0} followers',
-              style: GoogleFonts.figtree(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
             if (_artist!.bio.isNotEmpty)
               Padding(
@@ -144,10 +159,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                   colorClickableText: Colors.greenAccent,
                   trimCollapsedText: " ...more",
                   trimExpandedText: " Show less",
-                  style: GoogleFonts.figtree(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
                   moreStyle: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -177,18 +189,138 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
       children: [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            "Top Songs",
-            style: GoogleFonts.figtree(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Top Songs",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    _artist?.dominantLanguage ??
+                        _artist?.language ??
+                        'Artist Favs',
+                    style: TextStyle(
+                      color: Colors.white30,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              _buildShufflePlayButtons(),
+            ],
           ),
         ),
         const SizedBox(height: 8),
-        ...songs.map((song) => SongRow(song: song)),
+        ...songs.map(
+          (song) => ArtistSongRow(song: song, allSongs: _artist!.topSongs),
+        ),
       ],
+    );
+  }
+
+  Widget _buildShufflePlayButtons() {
+    final isShuffle = ref.watch(shuffleProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Shuffle button
+          GestureDetector(
+            onTap: () async {
+              final handler = await ref.read(audioHandlerProvider.future);
+              handler.toggleShuffle();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(shape: BoxShape.circle),
+              child: Icon(
+                isShuffle ? Icons.shuffle : Icons.shuffle,
+                color: isShuffle ? Colors.greenAccent : Colors.grey[600],
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Play Album / Play First / Shuffle
+          StreamBuilder<PlayerState>(
+            stream: ref
+                .read(audioHandlerProvider.future)
+                .asStream()
+                .asyncExpand((h) => h.playerStateStream),
+            builder: (context, snapshot) {
+              final isPlaying = snapshot.data?.playing ?? false;
+              final currentSong = ref.watch(currentSongProvider);
+              final audioHandlerFuture = ref.read(audioHandlerProvider.future);
+
+              final bool isCurrentPlaylistSong =
+                  currentSong != null &&
+                  _artist != null &&
+                  _artist!.topSongs.any((s) => s.id == currentSong.id);
+
+              final icon =
+                  isCurrentPlaylistSong
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : Icons.play_arrow;
+
+              return GestureDetector(
+                onTap: () async {
+                  final audioHandler = await audioHandlerFuture;
+
+                  if (isCurrentPlaylistSong) {
+                    // 🔁 toggle playback
+                    if (isPlaying) {
+                      await audioHandler.pause();
+                    } else {
+                      await audioHandler.play();
+                    }
+                    return;
+                  }
+
+                  // 🚀 new playlist or empty queue
+                  int startIndex = 0;
+                  if (isShuffle) {
+                    startIndex =
+                        DateTime.now().millisecondsSinceEpoch %
+                        _artist!.topSongs.length;
+                  }
+
+                  await audioHandler.loadQueue(
+                    _artist!.topSongs,
+                    startIndex: startIndex,
+                    sourceId: _artist?.id,
+                    sourceName: _artist?.title,
+                  );
+
+                  if (isShuffle && !audioHandler.isShuffle) {
+                    audioHandler.toggleShuffle();
+                  }
+
+                  await audioHandler.play();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.green,
+                  ),
+                  child: Icon(icon, color: Colors.black, size: 30),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -203,7 +335,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             title,
-            style: GoogleFonts.figtree(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -233,7 +365,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ref.watch(playerColourProvider),
+      backgroundColor: artistCoverColour,
       body: Container(
         decoration: BoxDecoration(color: Colors.black),
         child:
@@ -266,10 +398,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [
-                                  ref.watch(playerColourProvider),
-                                  Colors.black,
-                                ],
+                                colors: [artistCoverColour, Colors.black],
                               ),
                             ),
                           ),
@@ -286,7 +415,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                               duration: const Duration(milliseconds: 200),
                               child: Text(
                                 _artist?.title ?? "",
-                                style: GoogleFonts.figtree(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -306,6 +435,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                         children: [
                           const SizedBox(height: 16),
                           _buildSongList(),
+
                           const SizedBox(height: 16),
                           _buildAlbumList(
                             "Top Albums",
@@ -324,10 +454,11 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
   }
 }
 
-class SongRow extends ConsumerWidget {
+class ArtistSongRow extends ConsumerWidget {
   final SongDetail song;
+  final List<SongDetail> allSongs;
 
-  const SongRow({super.key, required this.song});
+  const ArtistSongRow({super.key, required this.song, required this.allSongs});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -356,9 +487,40 @@ class SongRow extends ConsumerWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () async {
-          final audioHandler = await ref.read(audioHandlerProvider.future);
-          await audioHandler.loadQueue([song], startIndex: 0);
-          await audioHandler.play();
+          try {
+            final audioHandler = await ref.read(audioHandlerProvider.future);
+            final queue = audioHandler.queue.valueOrNull ?? [];
+            final queueIds = queue.map((m) => m.id).toList();
+            final isSameQueue =
+                queueIds.length == allSongs.length &&
+                queueIds.every((id) => allSongs.any((s) => s.id == id));
+
+            final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+            if (tappedIndex == -1) return;
+
+            // 1️⃣ Same song toggle play/pause
+            if (isPlaying) {
+              if (audioHandler.playbackState.value.playing) {
+                await audioHandler.pause();
+              } else {
+                await audioHandler.play();
+              }
+              return;
+            }
+
+            // 2️⃣ Same queue → just skip
+            if (isSameQueue) {
+              await audioHandler.skipToQueueItem(tappedIndex);
+              await audioHandler.play();
+              return;
+            }
+
+            // 3️⃣ Load artist songs as new queue
+            await audioHandler.loadQueue(allSongs, startIndex: tappedIndex);
+            await audioHandler.play();
+          } catch (e, st) {
+            debugPrint("Error playing artist song: $e\n$st");
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -378,33 +540,47 @@ class SongRow extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      song.title,
-                      style: GoogleFonts.figtree(
-                        color: isPlaying ? Colors.greenAccent : Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        if (isPlaying)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Image(
+                              image: AssetImage('assets/player.gif'),
+                              height: 18,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            song.title,
+                            style: TextStyle(
+                              color:
+                                  isPlaying ? Colors.greenAccent : Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       song.primaryArtists.isNotEmpty
                           ? song.primaryArtists
                           : song.album,
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ],
                 ),
               ),
-              if (isPlaying) Image.asset('assets/player.gif', height: 18),
               if (isLiked)
-                Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: const Icon(Icons.check_circle, color: Colors.green),
+                const Padding(
+                  padding: EdgeInsets.only(left: 10),
+                  child: Icon(Icons.check_circle, color: Colors.green),
                 ),
             ],
           ),
@@ -457,7 +633,7 @@ class AlbumRow extends StatelessWidget {
           Flexible(
             child: Text(
               album.title,
-              style: GoogleFonts.figtree(
+              style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
@@ -470,7 +646,7 @@ class AlbumRow extends StatelessWidget {
             Flexible(
               child: Text(
                 album.artist,
-                style: GoogleFonts.figtree(color: Colors.white54, fontSize: 12),
+                style: TextStyle(color: Colors.white54, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),

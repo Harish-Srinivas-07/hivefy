@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:just_audio/just_audio.dart';
 
 import '../components/snackbar.dart';
 import '../models/database.dart';
@@ -49,45 +48,72 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
   }
 
   Future<void> _fetchSongs() async {
-    _loading = true;
-    if (widget.showLikedSongs) {
-      final ids = ref.read(likedSongsProvider);
-      if (ids.isEmpty) {
-        _songs = [];
-        _loading = false;
-        if (mounted) setState(() {});
-        return;
-      }
-      try {
-        final freshDetails = await SaavnAPI().getSongDetails(ids: ids);
-        _songs =
-            ids.map((id) {
-              return freshDetails.firstWhere(
-                (s) => s.id == id,
-                orElse:
-                    () => SongDetail(
-                      id: id,
-                      title: "Unknown Song",
-                      type: "",
-                      url: "",
-                      images: [],
-                    ),
-              );
-            }).toList();
-      } catch (e) {
-        debugPrint("Failed to fetch liked songs: $e");
-        _songs = [];
-      }
-    } else {
-      _songs = await AppDatabase.getAllSongs();
-    }
+    setState(() => _loading = true);
 
-    _totalDuration = _songs.fold(
-      0,
-      (sum, s) => sum + (int.tryParse(s.duration ?? '0') ?? 0),
-    );
-    _loading = false;
-    if (mounted) setState(() {});
+    try {
+      if (widget.showLikedSongs) {
+        final ids = ref.read(likedSongsProvider);
+        if (ids.isEmpty) {
+          _songs = [];
+          _totalDuration = 0;
+          setState(() => _loading = false);
+          return;
+        }
+
+        _songs = [];
+        _totalDuration = 0;
+
+        const batchSize = 20;
+        final total = ids.length;
+
+        for (int start = 0; start < total; start += batchSize) {
+          final end = (start + batchSize).clamp(0, total);
+          final batchIds = ids.sublist(start, end);
+
+          // Fetch this batch of song details
+          final freshDetails = await SaavnAPI().getSongDetails(ids: batchIds);
+
+          // Keep original liked order
+          final orderedBatch =
+              batchIds.map((id) {
+                return freshDetails.firstWhere(
+                  (s) => s.id == id,
+                  orElse:
+                      () => SongDetail(
+                        id: id,
+                        title: "Unknown Song",
+                        type: "",
+                        url: "",
+                        images: [],
+                      ),
+                );
+              }).toList();
+
+          _songs.addAll(orderedBatch);
+
+          // Recalculate total duration
+          _totalDuration = _songs.fold(
+            0,
+            (sum, s) => sum + (int.tryParse(s.duration ?? '0') ?? 0),
+          );
+
+          // Update UI progressively
+          if (mounted) setState(() {});
+        }
+      } else {
+        // For offline songs, no batching needed
+        _songs = await AppDatabase.getAllSongs();
+        _totalDuration = _songs.fold(
+          0,
+          (sum, s) => sum + (int.tryParse(s.duration ?? '0') ?? 0),
+        );
+      }
+    } catch (e, st) {
+      debugPrint("Failed to fetch songs: $e\n$st");
+      _songs = [];
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Widget _buildItemImage(String url) => Padding(
@@ -116,8 +142,8 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
-            await audioHandler.addSongToQueue(song);
-            info('${song.title} added to queue', Severity.success);
+            await audioHandler.addSongNext(song);
+            info('${song.title} will play next', Severity.success);
             await handler(false);
           },
         ),
@@ -127,18 +153,42 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
         onTap: () async {
           try {
             final audioHandler = await ref.read(audioHandlerProvider.future);
+            final currentQueue = audioHandler.queueSongs;
+            final sourceId = audioHandler.queueSourceId;
             final idx = _songs.indexWhere((s) => s.id == song.id);
             if (idx == -1) return;
 
-            // If tapped song is already current, toggle play/pause
+            final isSameLikedQueue =
+                sourceId == "liked_songs" && currentQueue.isNotEmpty;
+
             if (isPlaying) {
-              await audioHandler.pause();
-            } else {
-              await audioHandler.loadQueue(_songs, startIndex: idx);
-              await audioHandler.play();
+              // 🎧 Toggle pause/play
+              final playing =
+                  (await audioHandler.playerStateStream.first).playing;
+              if (playing) {
+                await audioHandler.pause();
+              } else {
+                await audioHandler.play();
+              }
+              return;
             }
+
+            if (isSameLikedQueue) {
+              // 🎯 Already playing liked songs → skip to this song
+              await audioHandler.skipToQueueItem(idx);
+            } else {
+              // 🚀 New queue → load liked songs fresh
+              await audioHandler.loadQueue(
+                _songs,
+                startIndex: idx,
+                sourceId: "7777777",
+                sourceName: "Liked Songs",
+              );
+            }
+
+            await audioHandler.play();
           } catch (e, st) {
-            debugPrint("Error playing song: $e\n$st");
+            debugPrint("Error playing liked song: $e\n$st");
           }
         },
         child: Container(
@@ -167,7 +217,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                         Expanded(
                           child: Text(
                             song.title,
-                            style: GoogleFonts.figtree(
+                            style: TextStyle(
                               color:
                                   isPlaying ? Colors.greenAccent : Colors.white,
                               fontWeight: FontWeight.w500,
@@ -183,10 +233,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       song.primaryArtists.isNotEmpty
                           ? song.primaryArtists
                           : song.album,
-                      style: GoogleFonts.figtree(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
@@ -249,7 +296,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             widget.showLikedSongs ? "Liked Songs" : "All Songs",
-            style: GoogleFonts.figtree(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -260,7 +307,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           padding: const EdgeInsets.only(left: 16, top: 3),
           child: Text(
             "${_songs.length} songs • ${formatDuration(_totalDuration)}",
-            style: GoogleFonts.figtree(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ),
         Padding(
@@ -299,16 +346,14 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                   final isPlaying = snapshot.data?.playing ?? false;
                   final currentSong = ref.watch(currentSongProvider);
 
-                  final bool isCurrentSongInQueue =
+                  final bool isCurrentLikedSong =
                       currentSong != null &&
                       _songs.any((s) => s.id == currentSong.id);
 
-                  IconData icon;
-                  if (isCurrentSongInQueue) {
-                    icon = isPlaying ? Icons.pause : Icons.play_arrow;
-                  } else {
-                    icon = Icons.play_arrow;
-                  }
+                  final icon =
+                      isCurrentLikedSong
+                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                          : Icons.play_arrow;
 
                   return GestureDetector(
                     onTap: () async {
@@ -317,22 +362,27 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           audioHandlerProvider.future,
                         );
 
-                        if (isCurrentSongInQueue) {
+                        if (isCurrentLikedSong) {
+                          // 🔁 Toggle play/pause
                           if (isPlaying) {
                             await audioHandler.pause();
                           } else {
                             await audioHandler.play();
                           }
                         } else {
+                          // 🚀 Load liked songs queue
                           int startIndex = 0;
                           if (isShuffle) {
                             startIndex =
                                 DateTime.now().millisecondsSinceEpoch %
                                 _songs.length;
                           }
+
                           await audioHandler.loadQueue(
                             _songs,
                             startIndex: startIndex,
+                            sourceId: "liked_songs",
+                            sourceName: "Liked Songs",
                           );
 
                           if (isShuffle && !audioHandler.isShuffle) {
@@ -342,7 +392,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           await audioHandler.play();
                         }
                       } catch (e, st) {
-                        debugPrint("Error handling play button: $e\n$st");
+                        debugPrint("Error handling liked play button: $e\n$st");
                       }
                     },
                     child: Container(
@@ -402,10 +452,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [
-                                  ref.watch(playerColourProvider),
-                                  Colors.black,
-                                ],
+                                colors: [Colors.pink, Colors.black],
                               ),
                             ),
                           ),
@@ -424,7 +471,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                                 widget.showLikedSongs
                                     ? "Liked Songs"
                                     : "All Songs",
-                                style: GoogleFonts.figtree(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,

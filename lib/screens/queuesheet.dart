@@ -1,8 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:drag_and_drop_lists/drag_and_drop_lists.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../services/audiohandler.dart';
 
@@ -62,7 +61,7 @@ class QueueList extends ConsumerWidget {
                           children: [
                             Text(
                               song.title,
-                              style: GoogleFonts.figtree(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.normal,
                                 color: Colors.white,
@@ -71,7 +70,7 @@ class QueueList extends ConsumerWidget {
                             ),
                             Text(
                               song.contributors.all.first.title,
-                              style: GoogleFonts.figtree(
+                              style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.white70,
                               ),
@@ -122,7 +121,7 @@ class QueueList extends ConsumerWidget {
                           children: [
                             Text(
                               currentSong.title,
-                              style: GoogleFonts.figtree(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.greenAccent,
@@ -131,7 +130,7 @@ class QueueList extends ConsumerWidget {
                             ),
                             Text(
                               currentSong.contributors.all.first.title,
-                              style: GoogleFonts.figtree(
+                              style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.white70,
                               ),
@@ -200,7 +199,7 @@ class QueueList extends ConsumerWidget {
               (_, __) => Center(
                 child: Text(
                   'Error loading queue',
-                  style: GoogleFonts.figtree(color: Colors.white),
+                  style: TextStyle(color: Colors.white),
                 ),
               ),
         );
@@ -210,7 +209,7 @@ class QueueList extends ConsumerWidget {
           (_, __) => Center(
             child: Text(
               'Error loading handler',
-              style: GoogleFonts.figtree(color: Colors.white),
+              style: TextStyle(color: Colors.white),
             ),
           ),
     );

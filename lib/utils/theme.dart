@@ -6,6 +6,44 @@ class ThemeController {
     ThemeMode.system,
   );
 
+  TextTheme spotifyTextTheme = const TextTheme(
+    displayLarge: TextStyle(
+      fontWeight: FontWeight.w900,
+      letterSpacing: -1.2,
+      height: 1.1,
+    ),
+    headlineLarge: TextStyle(
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.6,
+      height: 1.1,
+    ),
+    titleLarge: TextStyle(
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+      height: 1.2,
+    ),
+    titleMedium: TextStyle(
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.2,
+      height: 1.2,
+    ),
+    bodyLarge: TextStyle(
+      fontWeight: FontWeight.w400,
+      height: 1.25,
+      letterSpacing: -0.1,
+    ),
+    bodyMedium: TextStyle(
+      fontWeight: FontWeight.w300,
+      height: 1.25,
+      letterSpacing: -0.05,
+    ),
+    labelLarge: TextStyle(
+      fontWeight: FontWeight.w500,
+      letterSpacing: -0.2,
+      height: 1.1,
+    ),
+  );
+
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final isDark = prefs.getBool('isDarkTheme');

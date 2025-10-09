@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../components/snackbar.dart';
@@ -10,7 +9,6 @@ import '../components/shimmers.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
-import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 
@@ -27,6 +25,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
   List<SongDetail> _albumSongDetails = [];
   bool _loading = true;
   int _totalAlbumDuration = 0;
+  Color albumCoverColour = Colors.black;
 
   final ScrollController _scrollController = ScrollController();
   bool _isTitleCollapsed = false;
@@ -74,7 +73,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     }
 
     _loading = false;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _updateBgColor() async {
@@ -84,7 +83,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     if (dominant == null) return;
     if (!mounted) return;
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
+    albumCoverColour = dominant;
 
     if (mounted) setState(() {});
   }
@@ -106,8 +105,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
-            await audioHandler.addSongToQueue(song);
-            info('${song.title} added to queue', Severity.success);
+            await audioHandler.addSongNext(song);
+            info('${song.title} will play next', Severity.success);
             await handler(false);
           },
         ),
@@ -124,32 +123,62 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             if (tappedIndex == -1) return;
 
             final audioHandler = await ref.read(audioHandlerProvider.future);
+            final currentSong = ref.read(currentSongProvider);
+            final currentQueue = audioHandler.queueSongs;
 
-            // Check if tapped song is currently playing
-            final isCurrentSong = currentSong?.id == song.id;
+            bool isSameAlbumQueue = false;
 
-            if (!isCurrentSong) {
-              // Load album queue starting at tapped song
+            // 🔹 Check if current queue belongs to the same album source
+            if (audioHandler.queueSourceId == widget.albumId) {
+              isSameAlbumQueue = true;
+            } else if (currentQueue.isNotEmpty &&
+                _albumSongDetails.isNotEmpty) {
+              // Fallback: compare IDs if no source match
+              final currentIds = currentQueue.map((s) => s.id).toSet();
+              final albumIds = _albumSongDetails.map((s) => s.id).toSet();
+              final overlap = currentIds.intersection(albumIds).length;
+              final ratio = overlap / albumIds.length;
+              if (ratio > 0.8) isSameAlbumQueue = true;
+            }
+
+            final bool isCurrentSong = currentSong?.id == song.id;
+
+            if (isCurrentSong) {
+              // 🎵 Toggle play/pause
+              final playing =
+                  (await audioHandler.playerStateStream.first).playing;
+              if (playing) {
+                await audioHandler.pause();
+              } else {
+                await audioHandler.play();
+              }
+              return;
+            }
+
+            if (isSameAlbumQueue) {
+              // 🎯 Same album → jump to tapped song
+              await audioHandler.skipToQueueItem(tappedIndex);
+            } else {
+              // 🚀 New album → replace queue with new album songs
               await audioHandler.loadQueue(
                 _albumSongDetails,
                 startIndex: tappedIndex,
+                sourceId: widget.albumId,
+                sourceName: _album?.title,
               );
-
-              // Respect shuffle mode if enabled
-              final isShuffle = ref.read(shuffleProvider);
-              if (isShuffle) {
-                if (!audioHandler.isShuffle) {
-                  audioHandler.toggleShuffle();
-                } else {
-                  audioHandler.regenerateShuffle();
-                }
-              }
-
-              await audioHandler.play();
-            } else {
-              // Toggle play/pause for current song
-              await audioHandler.pause();
             }
+
+            // 🔁 Handle shuffle toggle
+            final isShuffle = ref.read(shuffleProvider);
+            if (isShuffle) {
+              if (!audioHandler.isShuffle) {
+                audioHandler.toggleShuffle();
+              } else {
+                audioHandler.regenerateShuffle();
+              }
+            }
+
+            await audioHandler.play();
           } catch (e, st) {
             debugPrint("Error playing tapped album song: $e\n$st");
           }
@@ -183,7 +212,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                               Expanded(
                                 child: Text(
                                   song.title,
-                                  style: GoogleFonts.figtree(
+                                  style: TextStyle(
                                     color:
                                         isPlaying
                                             ? Colors.greenAccent
@@ -201,7 +230,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                             song.primaryArtists.isNotEmpty
                                 ? song.primaryArtists
                                 : _album!.artist,
-                            style: GoogleFonts.figtree(
+                            style: TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
                             ),
@@ -357,7 +386,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     });
 
     return Scaffold(
-      backgroundColor: ref.watch(playerColourProvider),
+      backgroundColor: albumCoverColour,
       body: Container(
         decoration: BoxDecoration(color: Colors.black),
         child:
@@ -390,10 +419,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [
-                                  ref.watch(playerColourProvider),
-                                  Colors.black,
-                                ],
+                                colors: [albumCoverColour, Colors.black],
                               ),
                             ),
                           ),
@@ -410,7 +436,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                               duration: const Duration(milliseconds: 200),
                               child: Text(
                                 _album!.title,
-                                style: GoogleFonts.figtree(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -461,7 +487,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                   if (!_isTitleCollapsed)
                                     Text(
                                       _album!.title,
-                                      style: GoogleFonts.figtree(
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 20,
@@ -473,7 +499,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                       padding: const EdgeInsets.only(top: 4.0),
                                       child: Text(
                                         _album!.artist,
-                                        style: GoogleFonts.figtree(
+                                        style: TextStyle(
                                           color: Colors.white70,
                                           fontSize: 14,
                                         ),
@@ -484,7 +510,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                       padding: const EdgeInsets.only(top: 2.0),
                                       child: Text(
                                         _album!.description,
-                                        style: GoogleFonts.figtree(
+                                        style: TextStyle(
                                           color: Colors.white54,
                                           fontSize: 12,
                                         ),
@@ -495,7 +521,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                       padding: const EdgeInsets.only(top: 2.0),
                                       child: Text(
                                         formatDuration(_totalAlbumDuration),
-                                        style: GoogleFonts.figtree(
+                                        style: TextStyle(
                                           color: Colors.white54,
                                           fontSize: 12,
                                         ),
