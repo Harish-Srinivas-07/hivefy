@@ -3,14 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:just_audio/just_audio.dart';
 
-import '../components/snackbar.dart';
-import '../models/datamodel.dart';
-import '../components/shimmers.dart';
-import '../services/audiohandler.dart';
-import '../services/jiosaavn.dart';
-import '../shared/constants.dart';
-import '../utils/format.dart';
-import '../utils/theme.dart';
+import '../../components/snackbar.dart';
+import '../../models/datamodel.dart';
+import '../../components/shimmers.dart';
+import '../../services/offlinemanager.dart';
+import '../../services/audiohandler.dart';
+import '../../services/jiosaavn.dart';
+import '../../shared/constants.dart';
+import '../../utils/format.dart';
+import '../../utils/theme.dart';
 
 class AlbumViewer extends ConsumerStatefulWidget {
   final String albumId;
@@ -40,9 +41,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
           _scrollController.offset > (350 - kToolbarHeight - 20);
 
       if (isCollapsed != _isTitleCollapsed) {
-        setState(() {
-          _isTitleCollapsed = isCollapsed;
-        });
+        _isTitleCollapsed = isCollapsed;
+        setState(() {});
       }
     });
   }
@@ -204,7 +204,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                 Padding(
                                   padding: const EdgeInsets.only(right: 8.0),
                                   child: Image.asset(
-                                    'assets/player.gif',
+                                    'assets/icons/player.gif',
                                     height: 18,
                                     fit: BoxFit.contain,
                                   ),
@@ -381,6 +381,87 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     );
   }
 
+  Widget _downloadAlbumSong(Album album) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.albumStatusNotifier(album.id),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: offlineManager.albumDownloadedCountNotifier(
+            album.id,
+          ),
+          builder: (context, downloadedCount, _) {
+            Widget iconWidget;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              iconWidget = Image.asset(
+                'assets/icons/complete_download.png',
+                width: 32,
+                height: 32,
+                color: Colors.greenAccent,
+              );
+              onTap = () async {
+                for (final song in album.songs) {
+                  await offlineManager.deleteSong(song.id);
+                }
+                // Also unmark album as downloaded
+                offlineManager.unmarkAlbum(album.id);
+              };
+            } else if (status == DownloadStatus.downloading) {
+              // ✅ Use same size + padding
+              iconWidget = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: downloadedCount / album.songs.length,
+                    color: Colors.greenAccent,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              iconWidget = Image.asset(
+                'assets/icons/download.png',
+                width: 32,
+                height: 32,
+                color: Colors.white70,
+              );
+              onTap =
+                  () async => await offlineManager.downloadAlbumSongs(album);
+            }
+
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onTap,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  iconWidget,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "$downloadedCount of ${album.songs.length} downloaded"
+                        : status == DownloadStatus.completed
+                        ? "Offline Available"
+                        : "Download Album",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<SongDetail?>(currentSongProvider, (_, __) {
@@ -520,7 +601,18 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                 ],
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                    ),
 
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (_album != null) _downloadAlbumSong(_album!),
                             _buildShufflePlayButtons(),
                           ],
                         ),

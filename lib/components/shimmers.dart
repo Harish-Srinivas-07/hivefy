@@ -8,13 +8,13 @@ Widget buildAlbumShimmer() {
     children: [
       // Album cover shimmer
       Shimmer.fromColors(
-        baseColor: Colors.grey[800]!,
-        highlightColor: Colors.grey[600]!,
+        baseColor: Colors.grey[900]!,
+        highlightColor: Colors.grey[800]!,
         child: Container(
           height: 350,
           width: 350,
           decoration: BoxDecoration(
-            color: Colors.grey[800],
+            color: Colors.grey[900],
             borderRadius: BorderRadius.circular(16),
           ),
         ),
@@ -23,13 +23,13 @@ Widget buildAlbumShimmer() {
 
       // Album title shimmer
       Shimmer.fromColors(
-        baseColor: Colors.grey[800]!,
-        highlightColor: Colors.grey[600]!,
+        baseColor: Colors.grey[900]!,
+        highlightColor: Colors.grey[800]!,
         child: Container(
           height: 22,
           width: 200,
           decoration: BoxDecoration(
-            color: Colors.grey[800],
+            color: Colors.grey[900],
             borderRadius: BorderRadius.circular(4),
           ),
         ),
@@ -38,13 +38,13 @@ Widget buildAlbumShimmer() {
 
       // Album artist shimmer
       Shimmer.fromColors(
-        baseColor: Colors.grey[800]!,
-        highlightColor: Colors.grey[600]!,
+        baseColor: Colors.grey[900]!,
+        highlightColor: Colors.grey[800]!,
         child: Container(
           height: 14,
           width: 150,
           decoration: BoxDecoration(
-            color: Colors.grey[800],
+            color: Colors.grey[900],
             borderRadius: BorderRadius.circular(4),
           ),
         ),
@@ -58,13 +58,13 @@ Widget buildAlbumShimmer() {
           return Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: Shimmer.fromColors(
-              baseColor: Colors.grey[800]!,
-              highlightColor: Colors.grey[600]!,
+              baseColor: Colors.grey[900]!,
+              highlightColor: Colors.grey[800]!,
               child: Container(
                 height: 48,
                 width: 48,
                 decoration: BoxDecoration(
-                  color: Colors.grey[800],
+                  color: Colors.grey[900],
                   shape: BoxShape.circle,
                 ),
               ),
@@ -80,12 +80,12 @@ Widget buildAlbumShimmer() {
         (i) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: Shimmer.fromColors(
-            baseColor: Colors.grey[800]!,
-            highlightColor: Colors.grey[600]!,
+            baseColor: Colors.grey[900]!,
+            highlightColor: Colors.grey[800]!,
             child: Container(
               height: 50,
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: Colors.grey[900],
                 borderRadius: BorderRadius.circular(8),
               ),
             ),

@@ -3,15 +3,15 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 
-import '../components/snackbar.dart';
-import '../models/database.dart';
-import '../models/datamodel.dart';
-import '../components/shimmers.dart';
-import '../services/audiohandler.dart';
-import '../services/jiosaavn.dart';
-import '../shared/constants.dart';
-import '../shared/player.dart';
-import '../utils/format.dart';
+import '../../components/snackbar.dart';
+import '../../models/database.dart';
+import '../../models/datamodel.dart';
+import '../../components/shimmers.dart';
+import '../../services/audiohandler.dart';
+import '../../services/jiosaavn.dart';
+import '../../shared/constants.dart';
+import '../../shared/player.dart';
+import '../../utils/format.dart';
 
 class SongsViewer extends ConsumerStatefulWidget {
   final bool showLikedSongs;
@@ -212,7 +212,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           const Padding(
                             padding: EdgeInsets.only(right: 8),
                             child: Image(
-                              image: AssetImage('assets/player.gif'),
+                              image: AssetImage('assets/icons/player.gif'),
                               height: 18,
                               fit: BoxFit.contain,
                             ),

@@ -1,20 +1,25 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:hivefy/components/snackbar.dart';
+import 'package:hivefy/shared/constants.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../components/shimmers.dart';
-import '../models/dailyfetches.dart';
+import '../services/defaultfetcher.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
+import '../services/offlinemanager.dart';
 import '../services/latestsaavnfetcher.dart';
 
+import '../services/localnotification.dart';
 import '../utils/theme.dart';
-import 'albumviewer.dart';
-import 'artistviewer.dart';
-import 'playlistviewer.dart';
-import 'songsviewer.dart';
+import 'views/albumviewer.dart';
+import 'views/artistviewer.dart';
+import 'views/playlistviewer.dart';
+import 'views/songsviewer.dart';
 
 class Dashboard extends ConsumerStatefulWidget {
   const Dashboard({super.key});
@@ -42,6 +47,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Future<void> _init() async {
     loading = true;
     if (mounted) setState(() {});
+    _initInternetChecker();
+
+    await Future.delayed(const Duration(seconds: 2));
 
     // Refresh daily caches
     await DailyFetches.refreshAllDaily();
@@ -49,6 +57,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
     // Load cached data
     playlists = await DailyFetches.getPlaylistsFromCache();
     artists = await DailyFetches.getArtistsAsListFromCache();
+
+    // offline manager init
+    await offlineManager.init();
 
     // Frequent items
     freqplaylists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
@@ -89,6 +100,24 @@ class _DashboardState extends ConsumerState<Dashboard> {
 
     loading = false;
     if (mounted) setState(() {});
+    await Future.delayed(const Duration(seconds: 30));
+    await requestNotificationPermission();
+  }
+
+  Future<void> _initInternetChecker() async {
+    InternetConnection().onStatusChange.listen((status) {
+      if (status == InternetStatus.disconnected) {
+        hasInternet == false;
+        info(
+          'Network is unstable.\nKindly switch to a better network.',
+          Severity.error,
+        );
+        if (mounted) setState(() {});
+      } else {
+        hasInternet == true;
+        if (mounted) setState(() {});
+      }
+    });
   }
 
   @override
@@ -128,15 +157,22 @@ class _DashboardState extends ConsumerState<Dashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _sectionGrid(freqRecentPlaylists),
-                    _sectionList("Top Latest", topLatest),
+                    _sectionList(
+                      "Top Latest",
+
+                      List.of(topLatest)..shuffle(Random()),
+                    ),
                     _sectionAlbumList(
                       "Today's biggest hits",
                       List.of(topLatestAlbum)..shuffle(Random()),
                     ),
-                    _sectionList("Fresh", fresh),
+                    _sectionList("Fresh", List.of(fresh)..shuffle(Random())),
                     _sectionArtistList("Fav Artists", artists),
                     _sectionAlbumList("Recent Albums", albums),
-                    _sectionAlbumList("Recommeneded for today", freshAlbum),
+                    _sectionAlbumList(
+                      "Recommeneded for today",
+                      List.of(freshAlbum)..shuffle(Random()),
+                    ),
                     _sectionList(
                       "Century Playlist",
                       List.of(playlists)..shuffle(Random()),
@@ -177,7 +213,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
                                   ),
                                   const SizedBox(width: 5),
                                   Image.asset(
-                                    'assets/heart.png',
+                                    'assets/icons/heart.png',
                                     height: 40,
                                     alignment: Alignment.center,
                                   ),
@@ -208,9 +244,13 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const CircleAvatar(
-          radius: 18,
-          backgroundImage: AssetImage('assets/logo.png'),
+        GestureDetector(
+          onTap: () => Scaffold.of(context).openDrawer(),
+          behavior: HitTestBehavior.opaque,
+          child: const CircleAvatar(
+            radius: 18,
+            backgroundImage: AssetImage('assets/icons/logo.png'),
+          ),
         ),
         const SizedBox(width: 15),
         Text(

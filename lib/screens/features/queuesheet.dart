@@ -3,8 +3,8 @@ import 'package:audio_service/audio_service.dart';
 import 'package:drag_and_drop_lists/drag_and_drop_lists.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../components/shimmers.dart';
-import '../services/audiohandler.dart';
+import '../../components/shimmers.dart';
+import '../../services/audiohandler.dart';
 
 final queueStreamProvider = StreamProvider.autoDispose
     .family<List<MediaItem>, MyAudioHandler>((ref, handler) => handler.queue);
@@ -141,7 +141,7 @@ class QueueList extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: Image.asset(
-                          'assets/player.gif',
+                          'assets/icons/player.gif',
                           height: 18,
                           fit: BoxFit.contain,
                         ),

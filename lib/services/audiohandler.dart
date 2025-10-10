@@ -1,14 +1,18 @@
 // lib/shared/audio_handler.dart
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../components/snackbar.dart';
-import '../models/dailyfetches.dart';
+import '../shared/player.dart';
+import '../utils/theme.dart';
+import 'defaultfetcher.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
+import 'offlinemanager.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
 
@@ -421,21 +425,31 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       await skipToNext();
       return;
     }
+
     ref.read(currentSongProvider.notifier).state = song;
     await LastPlayedSongStorage.save(song);
 
     try {
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(song.downloadUrls.last.url),
-          tag: songToMediaItem(song),
-        ),
-      );
-      mediaItem.add(songToMediaItem(song));
+      final localPath = offlineManager.getLocalPath(song.id);
 
+      if (localPath != null && File(localPath).existsSync()) {
+        debugPrint("▶ Playing offline: $localPath");
+        await _player.setAudioSource(
+          AudioSource.uri(Uri.file(localPath), tag: songToMediaItem(song)),
+        );
+      } else {
+        debugPrint("▶ Playing online: ${song.downloadUrls.last.url}");
+        await _player.setAudioSource(
+          AudioSource.uri(
+            Uri.parse(song.downloadUrls.last.url),
+            tag: songToMediaItem(song),
+          ),
+        );
+      }
+
+      mediaItem.add(songToMediaItem(song));
       await _player.play();
     } catch (e, st) {
-      // skip to next if error
       debugPrint("Error loading song: $e\n$st");
       await skipToNext();
     }
@@ -500,14 +514,30 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       ref.read(currentSongProvider.notifier).state = last;
 
       try {
-        await _player.setAudioSource(
-          AudioSource.uri(
-            Uri.parse(last.downloadUrls.last.url),
-            tag: songToMediaItem(last),
-          ),
-        );
+        final localPath = offlineManager.getLocalPath(last.id);
+
+        if (localPath != null && File(localPath).existsSync()) {
+          debugPrint("▶ Playing offline (last played): $localPath");
+          await _player.setAudioSource(
+            AudioSource.uri(Uri.file(localPath), tag: songToMediaItem(last)),
+          );
+        } else {
+          debugPrint(
+            "▶ Playing online (last played): ${last.downloadUrls.last.url}",
+          );
+          await _player.setAudioSource(
+            AudioSource.uri(
+              Uri.parse(last.downloadUrls.last.url),
+              tag: songToMediaItem(last),
+            ),
+          );
+        }
 
         mediaItem.add(songToMediaItem(last));
+
+        final dominant = await getDominantColorFromImage(last.images.last.url);
+        if (dominant == null) return;
+        ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
       } catch (e) {
         debugPrint('--> initLastPlayed catch: $e');
       }

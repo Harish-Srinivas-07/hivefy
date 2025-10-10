@@ -4,14 +4,14 @@ import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:readmore/readmore.dart';
 
-import '../components/snackbar.dart';
-import '../models/datamodel.dart';
-import '../components/shimmers.dart';
-import '../services/audiohandler.dart';
-import '../services/jiosaavn.dart';
-import '../shared/constants.dart';
-import '../utils/format.dart';
-import '../utils/theme.dart';
+import '../../components/snackbar.dart';
+import '../../models/datamodel.dart';
+import '../../components/shimmers.dart';
+import '../../services/audiohandler.dart';
+import '../../services/jiosaavn.dart';
+import '../../shared/constants.dart';
+import '../../utils/format.dart';
+import '../../utils/theme.dart';
 
 class PlaylistViewer extends ConsumerStatefulWidget {
   final String playlistId;
@@ -40,7 +40,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     _scrollController.addListener(() {
       bool isCollapsed =
           _scrollController.hasClients &&
-          _scrollController.offset > (350 - kToolbarHeight - 20);
+          _scrollController.offset > (400 - kToolbarHeight - 20);
 
       if (isCollapsed != _isTitleCollapsed) {
         setState(() {
@@ -131,47 +131,29 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           left: 16,
           right: 16,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child:
-                  imageUrl.isNotEmpty
-                      ? CacheNetWorkImg(
-                        url: imageUrl,
-                        width: 300,
-                        height: 300,
-                        fit: BoxFit.cover,
-                        borderRadius: BorderRadius.circular(20),
-                      )
-                      : Container(
-                        width: 300,
-                        height: 300,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade800,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          Icons.playlist_play,
-                          size: 100,
-                          color: Colors.white,
-                        ),
-                      ),
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: Text(
-                _playlist!.title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        child: Center(
+          child:
+              imageUrl.isNotEmpty
+                  ? CacheNetWorkImg(
+                    url: imageUrl,
+                    width: 300,
+                    height: 300,
+                    fit: BoxFit.cover,
+                    borderRadius: BorderRadius.circular(20),
+                  )
+                  : Container(
+                    width: 300,
+                    height: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.playlist_play,
+                      size: 100,
+                      color: Colors.white,
+                    ),
+                  ),
         ),
       ),
     );
@@ -333,7 +315,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                     SliverAppBar(
                       pinned: true,
                       backgroundColor: playlistCoverColor,
-                      expandedHeight: 420,
+                      expandedHeight: 400,
                       elevation: 0,
                       leading: const BackButton(color: Colors.white),
                       flexibleSpace: FlexibleSpaceBar(
@@ -366,43 +348,66 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                           horizontal: 16,
                           vertical: 12,
                         ),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (_playlist!.description.isNotEmpty)
-                                    ReadMoreText(
-                                      _playlist!.description,
-                                      trimLines: 3,
-                                      trimMode: TrimMode.Line,
-                                      colorClickableText: Colors.greenAccent,
-                                      trimCollapsedText: " ...more",
-                                      trimExpandedText: " Show less",
-                                      style: TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 4),
-                                  if (_totalPlaylistDuration > 0)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2.0),
-                                      child: Text(
-                                        formatDuration(_totalPlaylistDuration),
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                            if (!_isTitleCollapsed)
+                              Text(
+                                _playlist!.title,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (_playlist!.description.isNotEmpty)
+                                        ReadMoreText(
+                                          _playlist!.description,
+                                          trimLines: 3,
+                                          trimMode: TrimMode.Line,
+                                          colorClickableText:
+                                              Colors.greenAccent,
+                                          trimCollapsedText: " ...more",
+                                          trimExpandedText: " Show less",
+                                          style: TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      const SizedBox(height: 4),
+                                      if (_totalPlaylistDuration > 0)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 2.0,
+                                          ),
+                                          child: Text(
+                                            formatDuration(
+                                              _totalPlaylistDuration,
+                                            ),
+                                            style: TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
 
-                            _buildShufflePlayButtons(),
+                                _buildShufflePlayButtons(),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -510,7 +515,7 @@ class SongRow extends ConsumerWidget {
                           Padding(
                             padding: const EdgeInsets.only(right: 8.0),
                             child: Image.asset(
-                              'assets/player.gif',
+                              'assets/icons/player.gif',
                               height: 18,
                               fit: BoxFit.contain,
                             ),

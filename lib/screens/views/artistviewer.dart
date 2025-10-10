@@ -6,14 +6,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:readmore/readmore.dart';
 
-import '../components/shimmers.dart';
-import '../components/snackbar.dart';
-import '../models/datamodel.dart';
-import '../services/audiohandler.dart';
-import '../services/jiosaavn.dart';
-import '../shared/constants.dart';
-import '../utils/format.dart';
-import '../utils/theme.dart';
+import '../../components/shimmers.dart';
+import '../../components/snackbar.dart';
+import '../../models/datamodel.dart';
+import '../../services/audiohandler.dart';
+import '../../services/jiosaavn.dart';
+import '../../shared/constants.dart';
+import '../../utils/format.dart';
+import '../../utils/theme.dart';
 import 'albumviewer.dart';
 
 class ArtistViewer extends ConsumerStatefulWidget {
@@ -40,12 +40,11 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     _scrollController.addListener(() {
       bool isCollapsed =
           _scrollController.hasClients &&
-          _scrollController.offset > (350 - kToolbarHeight - 20);
+          _scrollController.offset > (400 - kToolbarHeight - 20);
 
       if (isCollapsed != _isTitleCollapsed) {
-        setState(() {
-          _isTitleCollapsed = isCollapsed;
-        });
+        _isTitleCollapsed = isCollapsed;
+        setState(() {});
       }
     });
   }
@@ -117,21 +116,26 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _artist!.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+          if (!_isTitleCollapsed)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _artist!.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              if (_artist!.isVerified == true)
-                const Icon(Icons.verified, size: 18, color: Colors.blueAccent),
-            ],
-          ),
+                if (_artist!.isVerified == true)
+                  const Icon(
+                    Icons.verified,
+                    size: 18,
+                    color: Colors.blueAccent,
+                  ),
+              ],
+            ),
           const SizedBox(height: 4),
           Text(
             '${followersFormatter(_artist?.followerCount ?? 0)} followers',
@@ -521,7 +525,7 @@ class ArtistSongRow extends ConsumerWidget {
                           const Padding(
                             padding: EdgeInsets.only(right: 8),
                             child: Image(
-                              image: AssetImage('assets/player.gif'),
+                              image: AssetImage('assets/icons/player.gif'),
                               height: 18,
                               fit: BoxFit.contain,
                             ),

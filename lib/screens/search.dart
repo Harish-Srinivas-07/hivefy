@@ -12,9 +12,11 @@ import '../shared/constants.dart';
 import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
-import 'albumviewer.dart';
-import 'artistviewer.dart';
-import 'playlistviewer.dart';
+import 'views/albumviewer.dart';
+import 'views/artistviewer.dart';
+import 'views/playlistviewer.dart';
+
+enum SearchFilter { songs, albums, artists, playlists }
 
 class Search extends ConsumerStatefulWidget {
   const Search({super.key});
@@ -34,6 +36,7 @@ class SearchState extends ConsumerState<Search> {
   List<Playlist> _playlists = [];
   List<SongDetail> _lastSongs = [];
   List<Album> _lastAlbums = [];
+  SearchFilter? _selectedFilter;
 
   final SaavnAPI saavn = SaavnAPI();
   bool _showSuggestions = false;
@@ -183,16 +186,25 @@ class SearchState extends ConsumerState<Search> {
     List<Album> albums = results.albums.results;
     List<Playlist> playlists = results.playlists.results;
 
+    _songs = songs;
+    _artists = artists;
+    _albums = albums;
+    _playlists = playlists;
+
+    _isLoading = false;
+    if (mounted) setState(() {});
+
     // Fetch extras
-    final extraSongs = await saavn.searchSongs(query: suggestion, limit: 7);
+    final extraSongs = await saavn.searchSongs(query: suggestion, limit: 10);
     if (extraSongs.isNotEmpty) {
       final existingIds = songs.map((s) => s.id).toSet();
       songs.addAll(extraSongs.where((s) => !existingIds.contains(s.id)));
+      if (mounted) setState(() {});
     }
 
     final extraArtistsResponse = await saavn.searchArtists(
       query: suggestion,
-      limit: 7,
+      limit: 10,
     );
     if (extraArtistsResponse != null &&
         extraArtistsResponse.results.isNotEmpty) {
@@ -200,11 +212,12 @@ class SearchState extends ConsumerState<Search> {
       artists.addAll(
         extraArtistsResponse.results.where((a) => !existingIds.contains(a.id)),
       );
+      if (mounted) setState(() {});
     }
 
     final extraPlaylistsResponse = await saavn.searchPlaylists(
       query: suggestion,
-      limit: 7,
+      limit: 10,
     );
 
     if (extraPlaylistsResponse != null &&
@@ -220,6 +233,7 @@ class SearchState extends ConsumerState<Search> {
       if (newPlaylists.isNotEmpty) {
         playlists.addAll(newPlaylists);
       }
+      if (mounted) setState(() {});
     }
 
     _songs = songs;
@@ -233,6 +247,7 @@ class SearchState extends ConsumerState<Search> {
 
   void _clearText() {
     _controller.clear();
+    _selectedFilter = null;
     _resetSearch();
     _init();
   }
@@ -360,8 +375,8 @@ class SearchState extends ConsumerState<Search> {
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: const SizedBox(
-              height: 15,
-              width: 15,
+              height: 10,
+              width: 10,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 color: Colors.greenAccent,
@@ -372,7 +387,7 @@ class SearchState extends ConsumerState<Search> {
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: Image.asset(
-              'assets/player.gif',
+              'assets/icons/player.gif',
               height: 16,
               width: 16,
               fit: BoxFit.contain,
@@ -397,6 +412,7 @@ class SearchState extends ConsumerState<Search> {
         ),
         const SizedBox(height: 2),
         SingleChildScrollView(
+          padding: EdgeInsets.only(left: 12),
           scrollDirection: Axis.horizontal,
           child: Row(
             children:
@@ -404,7 +420,7 @@ class SearchState extends ConsumerState<Search> {
                   return GestureDetector(
                     onTap: () => _onSuggestionTap(term),
                     child: Container(
-                      margin: const EdgeInsets.only(left: 10, top: 3),
+                      margin: const EdgeInsets.only(right: 3, top: 3),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 6,
@@ -423,6 +439,73 @@ class SearchState extends ConsumerState<Search> {
     );
   }
 
+  Widget _buildFilterBar() {
+    return ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(left: 16),
+      children: [
+        if (_selectedFilter != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: ChoiceChip(
+              label: const Icon(
+                Icons.close_rounded,
+                size: 20,
+                color: Colors.white70,
+              ),
+              selected: false,
+              onSelected: (_) => setState(() => _selectedFilter = null),
+              backgroundColor: Colors.white10,
+              color: WidgetStateProperty.resolveWith<Color?>((states) {
+                return Colors.grey.shade900;
+              }),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.grey.shade800, width: 0),
+              ),
+              visualDensity: const VisualDensity(vertical: -2, horizontal: 0),
+              padding: const EdgeInsets.all(3),
+            ),
+          ),
+
+        for (final type in SearchFilter.values)
+          Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: ChoiceChip(
+              label: Text(type.name[0].toUpperCase() + type.name.substring(1)),
+              selected: _selectedFilter == type,
+              selectedColor: Colors.greenAccent.withAlpha(51),
+              checkmarkColor: Colors.greenAccent,
+              onSelected:
+                  (_) => setState(() {
+                    _selectedFilter = _selectedFilter == type ? null : type;
+                  }),
+              labelStyle: TextStyle(
+                color:
+                    _selectedFilter == type ? Colors.greenAccent : Colors.white,
+              ),
+              backgroundColor: Colors.grey[900],
+              showCheckmark: false,
+              visualDensity: const VisualDensity(vertical: -2, horizontal: 0),
+              color: WidgetStateProperty.resolveWith<Color?>((states) {
+                return Colors.grey.shade900;
+              }),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color:
+                      _selectedFilter == type
+                          ? Colors.greenAccent
+                          : Colors.grey.shade800,
+                  width: _selectedFilter == type ? 1 : 0,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   TextStyle get _subtitleStyle => TextStyle(color: Colors.grey, fontSize: 12);
 
   @override
@@ -437,9 +520,13 @@ class SearchState extends ConsumerState<Search> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundImage: AssetImage('assets/logo.png'),
+        GestureDetector(
+          onTap: () => Scaffold.of(context).openDrawer(),
+          behavior: HitTestBehavior.opaque,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundImage: AssetImage('assets/icons/logo.png'),
+          ),
         ),
         Text(
           'Search',
@@ -487,7 +574,7 @@ class SearchState extends ConsumerState<Search> {
             GestureDetector(
               onTap: _clearText,
               child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
+                padding: EdgeInsets.only(right: 16, left: 8),
                 child: Icon(Icons.close, color: Colors.grey),
               ),
             ),
@@ -513,7 +600,7 @@ class SearchState extends ConsumerState<Search> {
         SliverPersistentHeader(
           pinned: true,
           delegate: StickyHeaderDelegate(
-            height: 60,
+            height: 65,
             child: Container(
               color: spotifyBgColor,
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -521,6 +608,16 @@ class SearchState extends ConsumerState<Search> {
             ),
           ),
         ),
+
+        // Filter bar
+        if (!isEmpty && !_showSuggestions)
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: StickyHeaderDelegate(
+              height: 45,
+              child: _buildFilterBar(),
+            ),
+          ),
 
         // LOADING SHIMMER or RESULTS
         if (_isLoading)
@@ -536,11 +633,12 @@ class SearchState extends ConsumerState<Search> {
               ] else ...[
                 if (_showSuggestions && _controller.text.isNotEmpty)
                   ..._buildSuggestions(),
-                if (_songs.isNotEmpty)
-                  _buildSection(
-                    "Songs",
-                    _songs,
-                    (s) => GestureDetector(
+                if (_songs.isNotEmpty &&
+                    (_selectedFilter == null ||
+                        _selectedFilter == SearchFilter.songs))
+                  _buildSection("Songs", _songs, (s) {
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => _onSongTap(s),
                       child: _buildPlaylistRow(
                         Playlist(
@@ -554,13 +652,15 @@ class SearchState extends ConsumerState<Search> {
                           description: s.album,
                         ),
                       ),
-                    ),
-                  ),
-                if (_albums.isNotEmpty)
-                  _buildSection(
-                    "Albums",
-                    _albums,
-                    (a) => GestureDetector(
+                    );
+                  }),
+
+                if (_albums.isNotEmpty &&
+                    (_selectedFilter == null ||
+                        _selectedFilter == SearchFilter.albums))
+                  _buildSection("Albums", _albums, (a) {
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => _onAlbumTap(a),
                       child: _buildPlaylistRow(
                         Playlist(
@@ -574,13 +674,15 @@ class SearchState extends ConsumerState<Search> {
                           description: a.artist,
                         ),
                       ),
-                    ),
-                  ),
-                if (_artists.isNotEmpty)
-                  _buildSection(
-                    "Artists",
-                    _artists,
-                    (a) => GestureDetector(
+                    );
+                  }),
+
+                if (_artists.isNotEmpty &&
+                    (_selectedFilter == null ||
+                        _selectedFilter == SearchFilter.artists))
+                  _buildSection("Artists", _artists, (a) {
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => _onArtistTap(a),
                       child: _buildPlaylistRow(
                         Playlist(
@@ -594,17 +696,19 @@ class SearchState extends ConsumerState<Search> {
                           description: a.description,
                         ),
                       ),
-                    ),
-                  ),
-                if (_playlists.isNotEmpty)
-                  _buildSection(
-                    "Playlists",
-                    _playlists,
-                    (p) => GestureDetector(
+                    );
+                  }),
+
+                if (_playlists.isNotEmpty &&
+                    (_selectedFilter == null ||
+                        _selectedFilter == SearchFilter.playlists))
+                  _buildSection("Playlists", _playlists, (p) {
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => _onPlaylistTap(p),
                       child: _buildPlaylistRow(p),
-                    ),
-                  ),
+                    );
+                  }),
                 const SizedBox(height: 100),
               ],
             ]),

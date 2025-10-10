@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/jiosaavn.dart';
-import 'database.dart';
-import 'datamodel.dart';
+import 'jiosaavn.dart';
+import '../models/database.dart';
+import '../models/datamodel.dart';
 
 class DailyFetches {
   static const _artistsKey = 'daily_cache_artists_v1';

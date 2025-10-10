@@ -32,3 +32,6 @@ PackageInfo packageInfo = PackageInfo(
   version: '1.0.0',
   buildNumber: 'h07',
 );
+
+// internet value
+bool hasInternet = true;

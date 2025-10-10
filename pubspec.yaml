@@ -41,6 +41,8 @@ dependencies:
   dio:
   path_provider:
   flutter_local_notifications:
+  permission_handler:
+  internet_connection_checker_plus:
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +57,7 @@ flutter:
   assets:
     - assets/
     - assets/fonts/
+    - assets/icons/
 
   fonts:
     - family: SpotifyMix
@@ -109,8 +112,8 @@ flutter:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  image_path_android: "assets/logo.png"
-  adaptive_icon_foreground: "assets/radio.png"
+  image_path_android: "assets/icons/logo.png"
+  adaptive_icon_foreground: "assets/icons/radio.png"
   adaptive_icon_background: "#1DDA63"
-  adaptive_icon_monochrome: "assets/radio.png"
+  adaptive_icon_monochrome: "assets/icons/radio.png"
   adaptive_icon_foreground_inset: 24

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -74,14 +75,24 @@ class ThemeController {
 }
 
 Future<Color?> getDominantColorFromImage(String imageUrl) async {
-  final colorScheme = await ColorScheme.fromImageProvider(
-    provider: NetworkImage(imageUrl),
-  );
-  debugPrint(
-    '--> here the colur ${colorScheme.primary} & ${colorScheme.brightness}',
-  );
-  // The dominant color is usually the 'primary' field
-  return colorScheme.primary;
+  try {
+    // Use CachedNetworkImageProvider to leverage cache
+    final imageProvider = CachedNetworkImageProvider(imageUrl);
+
+    final colorScheme = await ColorScheme.fromImageProvider(
+      provider: imageProvider,
+    );
+
+    debugPrint(
+      '--> Dominant color: ${colorScheme.primary}, Brightness: ${colorScheme.brightness}',
+    );
+
+    // Return the primary color as the dominant one
+    return colorScheme.primary;
+  } catch (e) {
+    debugPrint('Error getting dominant color: $e');
+    return null;
+  }
 }
 
 // darker

@@ -9,7 +9,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../components/shimmers.dart';
 import '../models/datamodel.dart';
-import '../screens/queuesheet.dart';
+import '../services/offlinemanager.dart';
+import '../screens/features/queuesheet.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../utils/format.dart';
@@ -276,7 +277,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
 class FullPlayerScreen extends ConsumerStatefulWidget {
   final ScrollController? scrollController;
-  // const FullPlayerScreen({super.key});
   const FullPlayerScreen({super.key, this.scrollController});
 
   @override
@@ -637,7 +637,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final isShuffle = ref.watch(shuffleProvider);
     final repeatMode = ref.watch(repeatModeProvider);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: FutureBuilder<MyAudioHandler>(
         future: ref.read(audioHandlerProvider.future),
         builder: (context, snapshot) {
@@ -657,9 +657,14 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                 children: [
                   // Shuffle
                   _ControlButton(
-                    icon: Icons.shuffle,
+                    iconWidget: Image.asset(
+                      'assets/icons/shuffle.png',
+                      color: isShuffle ? Colors.greenAccent : Colors.white70,
+                      height: 24,
+                      width: 24,
+                    ),
                     enabled: true,
-                    iconColor: isShuffle ? Colors.greenAccent : Colors.white70,
+                    isActiveDot: isShuffle,
                     onTap: () => audioHandler.toggleShuffle(),
                   ),
 
@@ -671,7 +676,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         audioHandler.hasPrevious
                             ? () => audioHandler.skipToPrevious()
                             : null,
-                    size: 45,
+                    size: 55,
                   ),
 
                   // Play / Pause
@@ -696,20 +701,22 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         audioHandler.hasNext
                             ? () => audioHandler.skipToNext()
                             : null,
-                    size: 45,
+                    size: 55,
                   ),
 
                   // Repeat
                   _ControlButton(
-                    icon:
-                        repeatMode == RepeatMode.one
-                            ? Icons.repeat_one
-                            : Icons.repeat,
-                    iconColor:
-                        repeatMode == RepeatMode.none
-                            ? Colors.white70
-                            : Colors.greenAccent,
+                    iconWidget: Image.asset(
+                      'assets/icons/repeat.png',
+                      color:
+                          repeatMode == RepeatMode.none
+                              ? Colors.white70
+                              : Colors.greenAccent,
+                      height: 24,
+                      width: 24,
+                    ),
                     enabled: true,
+                    isActiveDot: repeatMode == RepeatMode.one,
                     onTap: () => audioHandler.toggleRepeatMode(),
                   ),
                 ],
@@ -747,7 +754,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     : 0.0;
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 5),
               child: Column(
                 children: [
                   // Slider
@@ -783,10 +790,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
 
                   // Position / Duration labels
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -799,6 +803,87 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _downloadSong(SongDetail song) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.statusNotifier(song.id),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<double>(
+          valueListenable: offlineManager.progressNotifier(song.id),
+          builder: (context, progress, _) {
+            Widget iconWidget;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              iconWidget = Image.asset(
+                'assets/icons/complete_download.png',
+                width: 32,
+                height: 32,
+                color: Colors.greenAccent,
+              );
+              onTap = () async => await offlineManager.deleteSong(song.id);
+            } else if (status == DownloadStatus.downloading) {
+              iconWidget = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: progress / 100,
+                    color: Colors.greenAccent,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              iconWidget = Image.asset(
+                'assets/icons/download.png',
+                width: 32,
+                height: 32,
+                color: Colors.white70,
+              );
+              onTap = () async {
+                offlineManager.updateStatus(
+                  song.id,
+                  DownloadStatus.downloading,
+                );
+                offlineManager.updateProgress(song.id, 0.0);
+                offlineManager.requestSongDownload(
+                  song.id,
+                  onProgress: (p) => offlineManager.updateProgress(song.id, p),
+                );
+              };
+            }
+
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onTap,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  iconWidget,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "Downloading ${progress.toStringAsFixed(0)}%"
+                        : status == DownloadStatus.completed
+                        ? "Offline available"
+                        : "Download",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white70,
                     ),
                   ),
                 ],
@@ -823,8 +908,10 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     if ((song.albumName ?? song.album).isNotEmpty) {
       secondaryParts.add(song.albumName ?? song.album);
     }
-    if (song.primaryArtists.isNotEmpty) {
-      secondaryParts.add(song.primaryArtists);
+    if (song.contributors.all.isNotEmpty) {
+      secondaryParts.add(
+        song.contributors.all.map((a) => a.title).toList().toSet().join(', '),
+      );
     }
 
     final handlerAsync = ref.watch(audioHandlerProvider);
@@ -930,9 +1017,9 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         controller: widget.scrollController,
                         child: Column(
                           children: [
-                            const SizedBox(height: 30),
+                            const SizedBox(height: 45),
                             SizedBox(
-                              height: 300,
+                              height: 320,
                               child: PageView.builder(
                                 controller: _pageController,
                                 itemCount: handler.queueLength,
@@ -950,21 +1037,15 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                   return Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      SizedBox(
+                                      CacheNetWorkImg(
+                                        url:
+                                            song.images.isNotEmpty
+                                                ? song.images.last.url
+                                                : '',
                                         width: 300,
                                         height: 300,
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          child: CacheNetWorkImg(
-                                            url:
-                                                song.images.isNotEmpty
-                                                    ? song.images.last.url
-                                                    : '',
-                                            fit: BoxFit.contain,
-                                          ),
-                                        ),
+                                        fit: BoxFit.contain,
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
                                     ],
                                   );
@@ -998,11 +1079,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                             fontWeight: FontWeight.w600,
                                           ),
                                           if (secondaryParts.isNotEmpty)
-                                            _marqueeText(
-                                              secondaryParts.join(" • "),
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w300,
-                                              color: Colors.white70,
+                                            ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxHeight: 30,
+                                              ),
+                                              child: _marqueeText(
+                                                secondaryParts.join(" • "),
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w300,
+                                                color: Colors.white70,
+                                              ),
                                             ),
                                         ],
                                       ),
@@ -1031,32 +1117,29 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                             ),
 
                             _streamProgressBar(),
-                            const SizedBox(height: 15),
                             _playBackControl(),
                             const SizedBox(height: 12),
 
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 20,
+                                vertical: 10,
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
+                                  // Download Button + Status Indicator
+                                  _downloadSong(song),
+
+                                  const Spacer(),
+                                  // queue & share
                                   IconButton(
-                                    icon: const Icon(
-                                      Icons.queue_music,
-                                      size: 24,
+                                    icon: Image.asset(
+                                      'assets/icons/share.png',
+                                      height: 22,
+                                      width: 22,
+                                      color: Colors.white70,
                                     ),
-                                    color: Colors.white70,
-                                    tooltip: "Queue",
-                                    onPressed: () {
-                                      openQueueBottomSheet();
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(Icons.share, size: 24),
-                                    color: Colors.white70,
                                     tooltip: "Share",
                                     onPressed: () async {
                                       debugPrint('--> Share pressed');
@@ -1065,7 +1148,6 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                           context.findRenderObject()
                                               as RenderBox?;
 
-                                      // Prepare nice user-friendly share text
                                       final details = StringBuffer();
                                       details.writeln(
                                         "Sharing from Hivefy 🎵\n",
@@ -1122,10 +1204,22 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                       );
                                     },
                                   ),
+                                  IconButton(
+                                    icon: Image.asset(
+                                      'assets/icons/queue.png',
+                                      height: 18,
+                                      width: 18,
+                                      color: Colors.white70,
+                                    ),
+                                    tooltip: "Queue",
+                                    onPressed: () {
+                                      openQueueBottomSheet();
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 45),
 
                             if (_artistDetails != null) ...[
                               _artistInfoWidget(),
@@ -1152,21 +1246,28 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
 
 // control button
 class _ControlButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final Widget? iconWidget;
   final VoidCallback? onTap;
   final bool enabled;
+  final bool isActiveDot;
   final double size;
   final Color background;
   final Color iconColor;
 
   const _ControlButton({
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     this.onTap,
     this.enabled = true,
+    this.isActiveDot = false,
     this.size = 40,
     this.background = Colors.transparent,
     this.iconColor = Colors.white,
-  });
+  }) : assert(
+         icon != null || iconWidget != null,
+         "Either icon or iconWidget must be provided",
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -1176,10 +1277,31 @@ class _ControlButton extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-        child: Icon(
-          icon,
-          color: enabled ? iconColor : Colors.white24,
-          size: size * 0.6,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Center(
+              child:
+                  iconWidget ??
+                  Icon(
+                    icon,
+                    color: enabled ? iconColor : Colors.white24,
+                    size: size * 0.6,
+                  ),
+            ),
+            if (isActiveDot)
+              Positioned(
+                bottom: 2,
+                child: Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1215,7 +1337,7 @@ Widget _marqueeText(
         fontSize: fontSize,
         fontWeight: fontWeight,
       ),
-      velocity: 25,
+      velocity: 20,
       blankSpace: 50,
       fadingEdgeStartFraction: .5,
       fadingEdgeEndFraction: .5,

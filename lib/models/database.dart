@@ -650,8 +650,17 @@ class ArtistsNotifier extends StateNotifier<List<ArtistDetails>> {
   ArtistsNotifier() : super([]) {
     _loadArtists();
   }
+
   Future<void> _loadArtists() async {
-    state = await ArtistCache().getAll();
+    final artists = await ArtistCache().getAll();
+
+    // ✅ Remove duplicates by artist ID while preserving order
+    final uniqueArtists = <String, ArtistDetails>{};
+    for (var artist in artists) {
+      uniqueArtists[artist.id] = artist;
+    }
+
+    state = uniqueArtists.values.toList();
   }
 
   Future<void> refresh() async {
@@ -702,7 +711,15 @@ class FrequentArtistsNotifier extends StateNotifier<List<ArtistDetails>> {
   }
 
   Future<void> _loadFrequentArtists() async {
-    state = await ArtistCache().getAll(sortByUsage: true);
+    final artists = await ArtistCache().getAll(sortByUsage: true);
+
+    // ✅ Remove duplicates by artist ID
+    final uniqueArtists = <String, ArtistDetails>{};
+    for (var artist in artists) {
+      uniqueArtists[artist.id] = artist;
+    }
+
+    state = uniqueArtists.values.toList();
   }
 
   Future<void> refresh() async {
@@ -727,7 +744,15 @@ class FrequentAlbumsNotifier extends StateNotifier<List<Album>> {
   }
 
   Future<void> _loadFrequentAlbums() async {
-    state = await AlbumCache().getAll(sortByUsage: true);
+    final albums = await AlbumCache().getAll(sortByUsage: true);
+
+    // ✅ Filter out duplicates by ID while preserving order
+    final uniqueAlbums = <String, Album>{};
+    for (var album in albums) {
+      uniqueAlbums[album.id] = album;
+    }
+
+    state = uniqueAlbums.values.toList();
   }
 
   Future<void> refresh() async {
@@ -752,7 +777,15 @@ class FrequentPlaylistsNotifier extends StateNotifier<List<Playlist>> {
   }
 
   Future<void> _loadFrequentPlaylists() async {
-    state = await PlaylistCache().getAll(sortByUsage: true);
+    final playlists = await PlaylistCache().getAll(sortByUsage: true);
+
+    // ✅ Remove duplicates by playlist ID
+    final uniquePlaylists = <String, Playlist>{};
+    for (var playlist in playlists) {
+      uniquePlaylists[playlist.id] = playlist;
+    }
+
+    state = uniquePlaylists.values.toList();
   }
 
   Future<void> refresh() async {

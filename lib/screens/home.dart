@@ -49,6 +49,8 @@ class _HomeState extends ConsumerState<Home>
     );
   }
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -68,6 +70,8 @@ class _HomeState extends ConsumerState<Home>
         }
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _buildSideDrawer(),
         body: Stack(
           children: [
             IndexedStack(index: tabIndex, children: _navigators),
@@ -111,4 +115,41 @@ class _HomeState extends ConsumerState<Home>
       ],
     );
   }
+}
+
+Widget _buildSideDrawer() {
+  return Drawer(
+    backgroundColor: const Color(0xFF121212),
+    child: ListView(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      children: [
+        Row(
+          children: const [
+            CircleAvatar(
+              radius: 25,
+              backgroundImage: AssetImage('assets/icons/logo.png'),
+            ),
+            SizedBox(width: 12),
+            Text('Hivefy', style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        const SizedBox(height: 30),
+        _drawerItem(Icons.home, "Home"),
+        _drawerItem(Icons.library_music, "Your Library"),
+        _drawerItem(Icons.favorite, "Liked Songs"),
+        _drawerItem(Icons.settings, "Settings"),
+      ],
+    ),
+  );
+}
+
+Widget _drawerItem(IconData icon, String title) {
+  return ListTile(
+    leading: Icon(icon, color: Colors.white70),
+    title: Text(title, style: const TextStyle(color: Colors.white)),
+    onTap: () {
+      // Navigator.pop(context);
+      // handle your navigation logic if needed
+    },
+  );
 }

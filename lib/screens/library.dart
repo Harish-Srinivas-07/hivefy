@@ -5,13 +5,14 @@ import 'package:page_transition/page_transition.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
 import '../components/shimmers.dart';
+import '../services/offlinemanager.dart';
 import '../shared/constants.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
-import 'albumviewer.dart';
-import 'artistviewer.dart';
-import 'playlistviewer.dart';
-import 'songsviewer.dart';
+import 'views/albumviewer.dart';
+import 'views/artistviewer.dart';
+import 'views/playlistviewer.dart';
+import 'views/songsviewer.dart';
 
 enum LibraryFilter { all, playlist, artists, albums }
 
@@ -73,37 +74,46 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildFilterBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
-        // mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.start,
         children:
             LibraryFilter.values.map((filter) {
               final isSelected = _currentFilter == filter;
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _currentFilter = filter);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color:
-                        isSelected
-                            ? Colors.green.withAlpha(160)
-                            : Colors.grey.withAlpha(100),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: ChoiceChip(
+                  label: Text(
                     capitalize(filter.name),
                     style: TextStyle(
-                      color: Colors.white,
+                      color: isSelected ? Colors.greenAccent : Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  selected: isSelected,
+                  selectedColor: Colors.greenAccent.withAlpha(51),
+                  backgroundColor: Colors.grey[900],
+                  selectedShadowColor: Colors.grey.shade900,
+                  color: WidgetStateProperty.resolveWith<Color?>((states) {
+                    return Colors.grey.shade900;
+                  }),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color:
+                          isSelected
+                              ? Colors.greenAccent
+                              : Colors.grey.shade800,
+                      width: isSelected ? 1 : 0,
+                    ),
+                  ),
+                  visualDensity: const VisualDensity(
+                    vertical: -2,
+                    horizontal: 0,
+                  ),
+                  showCheckmark: false,
+
+                  onSelected: (_) => setState(() => _currentFilter = filter),
                 ),
               );
             }).toList(),
@@ -150,6 +160,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
     items = [
       LibraryCardData(
+        id: 'h_liked',
         title: 'Liked Songs',
         count: ref.watch(likedSongsProvider).length,
         subtitle: 'Playlist',
@@ -157,6 +168,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         type: LibraryItemType.likedSongs,
       ),
       LibraryCardData(
+        id: 'h_all',
         title: 'All Songs',
         count: _allSongsCount,
         subtitle: 'Playlist',
@@ -165,6 +177,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       ),
       ...albums.map(
         (album) => LibraryCardData(
+          id: album.id,
           title: album.title,
           count: album.songs.length,
           subtitle:
@@ -174,7 +187,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           imageUrl: album.images.isNotEmpty ? album.images.last.url : null,
           fallbackColor: Colors.grey,
           type: LibraryItemType.album,
-          id: album.id,
         ),
       ),
       ...playlists.map(
@@ -209,9 +221,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       appBar: AppBar(
         title: Row(
           children: [
-            const CircleAvatar(
-              radius: 18,
-              backgroundImage: AssetImage('assets/logo.png'),
+            GestureDetector(
+              onTap: () => Scaffold.of(context).openDrawer(),
+              behavior: HitTestBehavior.opaque,
+              child: const CircleAvatar(
+                radius: 18,
+                backgroundImage: AssetImage('assets/icons/logo.png'),
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -247,6 +263,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                         final item = _filteredItems()[index];
 
                         return LibraryCard(
+                          id: item.id,
                           title: item.title,
                           count: item.count,
                           imageUrl: item.imageUrl,
@@ -275,7 +292,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   PageTransition(
                                     type: PageTransitionType.rightToLeft,
                                     duration: const Duration(milliseconds: 300),
-                                    child: AlbumViewer(albumId: item.id!),
+                                    child: AlbumViewer(albumId: item.id),
                                   ),
                                 );
                                 break;
@@ -285,7 +302,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   PageTransition(
                                     type: PageTransitionType.rightToLeft,
                                     duration: const Duration(milliseconds: 300),
-                                    child: ArtistViewer(artistId: item.id!),
+                                    child: ArtistViewer(artistId: item.id),
                                   ),
                                 );
                                 break;
@@ -295,7 +312,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   PageTransition(
                                     type: PageTransitionType.rightToLeft,
                                     duration: const Duration(milliseconds: 300),
-                                    child: PlaylistViewer(playlistId: item.id!),
+                                    child: PlaylistViewer(playlistId: item.id),
                                   ),
                                 );
                                 break;
@@ -314,26 +331,27 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 enum LibraryItemType { likedSongs, allSongs, album, artist, playlist }
 
 class LibraryCardData {
+  final String id;
   final String title;
   final int count;
   final String? imageUrl;
   final String? subtitle;
   final Color fallbackColor;
   final LibraryItemType type;
-  final String? id;
 
   LibraryCardData({
+    required this.id,
     required this.title,
     required this.count,
     this.imageUrl,
     this.subtitle,
     required this.fallbackColor,
     required this.type,
-    this.id,
   });
 }
 
 class LibraryCard extends StatelessWidget {
+  final String id;
   final String title;
   final int count;
   final String? imageUrl;
@@ -344,6 +362,7 @@ class LibraryCard extends StatelessWidget {
 
   const LibraryCard({
     super.key,
+    required this.id,
     required this.title,
     required this.count,
     this.imageUrl,
@@ -357,9 +376,16 @@ class LibraryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitleText = _buildSubtitle();
 
+    // Determine if this item should be clickable
+    bool isEnabled = true;
+
+    if (!hasInternet && type == LibraryItemType.album && imageUrl != null) {
+      isEnabled = offlineManager.isAvailableOffline(albumId: id);
+    }
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: isEnabled ? onTap : null,
       child: Row(
         children: [
           Container(
@@ -399,10 +425,10 @@ class LibraryCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: isEnabled ? Colors.white : Colors.white38,
                     fontWeight: FontWeight.w500,
-                    fontSize: 16,
+                    fontSize: 17,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
@@ -410,7 +436,10 @@ class LibraryCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   subtitleText,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: TextStyle(
+                    color: isEnabled ? Colors.white70 : Colors.white38,
+                    fontSize: 13,
+                  ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),

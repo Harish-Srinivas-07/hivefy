@@ -37,7 +37,7 @@ Future<void> info(
       maxLines: 5,
       overflow: TextOverflow.ellipsis,
       softWrap: true,
-      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+      style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
       textScaler: const TextScaler.linear(1),
     ),
     borderSide: const BorderSide(color: Colors.white54, width: 0.5),

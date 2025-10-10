@@ -12,6 +12,7 @@ import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/search.dart';
 import 'services/audiohandler.dart';
+import 'services/localnotification.dart';
 import 'shared/constants.dart';
 import 'utils/theme.dart';
 
@@ -19,6 +20,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.init();
   packageInfo = await PackageInfo.fromPlatform();
+
+  await initNotifications();
 
   runApp(ToastificationWrapper(child: ProviderScope(child: const MyApp())));
 }
