@@ -7,11 +7,13 @@ import '../models/datamodel.dart';
 import '../components/shimmers.dart';
 import '../shared/constants.dart';
 import '../utils/format.dart';
+import '../utils/theme.dart';
 import 'albumviewer.dart';
 import 'artistviewer.dart';
+import 'playlistviewer.dart';
 import 'songsviewer.dart';
 
-enum LibraryFilter { all, artists, albums }
+enum LibraryFilter { all, playlist, artists, albums }
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -25,6 +27,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   bool isDefined = false;
   List<LibraryCardData> items = [];
   List<Album> albums = [];
+  List<Playlist> playlists = [];
   List<ArtistDetails> artists = [];
 
   LibraryFilter _currentFilter = LibraryFilter.all;
@@ -48,9 +51,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
       if (!mounted) return;
       artists = (ref.read(frequentArtistsProvider)).take(5).toList();
+      if (!mounted) return;
+      playlists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
     } else if (_currentFilter == LibraryFilter.albums) {
       if (!mounted) return;
       albums = ref.read(frequentAlbumsProvider);
+    } else if (_currentFilter == LibraryFilter.playlist) {
+      if (!mounted) return;
+      playlists = ref.read(frequentPlaylistsProvider);
     } else if (_currentFilter == LibraryFilter.artists) {
       if (!mounted) return;
       artists = ref.read(frequentArtistsProvider);
@@ -65,16 +73,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildFilterBar() {
     return Container(
-      decoration: const BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black54,
-            offset: Offset(0, 3),
-            blurRadius: 6,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Row(
         // mainAxisSize: MainAxisSize.min,
@@ -82,30 +80,28 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         children:
             LibraryFilter.values.map((filter) {
               final isSelected = _currentFilter == filter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() => _currentFilter = filter);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected
-                              ? Colors.green.withAlpha(160)
-                              : Colors.white38.withAlpha(100),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      capitalize(filter.name),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
+              return GestureDetector(
+                onTap: () {
+                  setState(() => _currentFilter = filter);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected
+                            ? Colors.green.withAlpha(160)
+                            : Colors.grey.withAlpha(100),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    capitalize(filter.name),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -125,6 +121,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         return items
             .where((item) => item.type == LibraryItemType.album)
             .toList();
+      case LibraryFilter.playlist:
+        return items
+            .where((item) => item.type == LibraryItemType.playlist)
+            .toList();
       case LibraryFilter.all:
         return items;
     }
@@ -143,16 +143,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             ? (ref.watch(frequentArtistsProvider)).take(5).toList()
             : ref.watch(frequentArtistsProvider);
 
+    playlists =
+        (_currentFilter == LibraryFilter.all)
+            ? (ref.watch(frequentPlaylistsProvider)).take(5).toList()
+            : ref.watch(frequentPlaylistsProvider);
+
     items = [
       LibraryCardData(
         title: 'Liked Songs',
         count: ref.watch(likedSongsProvider).length,
+        subtitle: 'Playlist',
         fallbackColor: Colors.redAccent,
         type: LibraryItemType.likedSongs,
       ),
       LibraryCardData(
         title: 'All Songs',
         count: _allSongsCount,
+        subtitle: 'Playlist',
         fallbackColor: Colors.greenAccent,
         type: LibraryItemType.allSongs,
       ),
@@ -160,10 +167,29 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         (album) => LibraryCardData(
           title: album.title,
           count: album.songs.length,
+          subtitle:
+              album.artists.isNotEmpty
+                  ? album.artists.map((a) => a.title).join(', ')
+                  : 'Unknown Artist',
           imageUrl: album.images.isNotEmpty ? album.images.last.url : null,
           fallbackColor: Colors.grey,
           type: LibraryItemType.album,
           id: album.id,
+        ),
+      ),
+      ...playlists.map(
+        (playlist) => LibraryCardData(
+          title: playlist.title,
+          count: playlist.songs.length,
+          subtitle:
+              playlist.artists.isNotEmpty
+                  ? playlist.artists.map((a) => a.title).join(', ')
+                  : 'Unknown Artist',
+          imageUrl:
+              playlist.images.isNotEmpty ? playlist.images.last.url : null,
+          fallbackColor: Colors.grey,
+          type: LibraryItemType.playlist,
+          id: playlist.id,
         ),
       ),
       ...artists.map(
@@ -177,8 +203,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ),
       ),
     ];
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: spotifyBgColor,
       appBar: AppBar(
         title: Row(
           children: [
@@ -224,6 +251,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                           count: item.count,
                           imageUrl: item.imageUrl,
                           fallbackColor: item.fallbackColor,
+                          subtitle: item.subtitle,
                           type: item.type,
                           onTap: () {
                             switch (item.type) {
@@ -261,6 +289,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   ),
                                 );
                                 break;
+
+                              case LibraryItemType.playlist:
+                                Navigator.of(context).push(
+                                  PageTransition(
+                                    type: PageTransitionType.rightToLeft,
+                                    duration: const Duration(milliseconds: 300),
+                                    child: PlaylistViewer(playlistId: item.id!),
+                                  ),
+                                );
+                                break;
                             }
                           },
                         );
@@ -273,12 +311,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 }
 
-enum LibraryItemType { likedSongs, allSongs, album, artist }
+enum LibraryItemType { likedSongs, allSongs, album, artist, playlist }
 
 class LibraryCardData {
   final String title;
   final int count;
   final String? imageUrl;
+  final String? subtitle;
   final Color fallbackColor;
   final LibraryItemType type;
   final String? id;
@@ -287,6 +326,7 @@ class LibraryCardData {
     required this.title,
     required this.count,
     this.imageUrl,
+    this.subtitle,
     required this.fallbackColor,
     required this.type,
     this.id,
@@ -297,6 +337,7 @@ class LibraryCard extends StatelessWidget {
   final String title;
   final int count;
   final String? imageUrl;
+  final String? subtitle;
   final Color fallbackColor;
   final VoidCallback? onTap;
   final LibraryItemType? type;
@@ -306,6 +347,7 @@ class LibraryCard extends StatelessWidget {
     required this.title,
     required this.count,
     this.imageUrl,
+    this.subtitle,
     required this.fallbackColor,
     this.onTap,
     this.type,
@@ -313,20 +355,22 @@ class LibraryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final subtitleText = _buildSubtitle();
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Row(
         children: [
           Container(
-            width: 65,
-            height: 65,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
               color: imageUrl == null ? fallbackColor : null,
               borderRadius:
                   type == LibraryItemType.artist
-                      ? BorderRadius.circular(65)
-                      : BorderRadius.circular(8),
+                      ? BorderRadius.circular(60)
+                      : BorderRadius.circular(6),
             ),
             child:
                 imageUrl == null
@@ -339,13 +383,13 @@ class LibraryCard extends StatelessWidget {
                     )
                     : CacheNetWorkImg(
                       url: imageUrl!,
-                      width: 65,
-                      height: 65,
+                      width: 60,
+                      height: 60,
                       fit: BoxFit.cover,
                       borderRadius:
                           type == LibraryItemType.artist
-                              ? BorderRadius.circular(65)
-                              : BorderRadius.circular(8),
+                              ? BorderRadius.circular(60)
+                              : BorderRadius.circular(6),
                     ),
           ),
           const SizedBox(width: 12),
@@ -355,7 +399,7 @@ class LibraryCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
@@ -363,11 +407,10 @@ class LibraryCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  type == LibraryItemType.artist
-                      ? 'Artist'
-                      : '$count ${count == 1 ? 'song' : 'songs'}',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  subtitleText,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
@@ -377,5 +420,15 @@ class LibraryCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _buildSubtitle() {
+    if (type == LibraryItemType.artist) return 'Artist';
+
+    final songText = '$count ${count == 1 ? 'song' : 'songs'}';
+    if (subtitle != null && subtitle!.isNotEmpty) {
+      return '$subtitle • $songText';
+    }
+    return songText;
   }
 }

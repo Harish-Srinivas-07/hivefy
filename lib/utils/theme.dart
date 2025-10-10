@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Color spotifyBgColor = Color(0xFF121212);
+
 class ThemeController {
   static final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(
     ThemeMode.system,
@@ -89,4 +91,10 @@ Color darken(Color color, [double amount = .2]) {
       .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
       .withSaturation((hsl.saturation + 0.05).clamp(0.0, 1.0))
       .toColor();
+}
+
+// font family
+class FontFamilies {
+  static const spotifyMix = "SpotifyMix";
+  static const spotifyMixUltra = "SpotifyMixUltra";
 }

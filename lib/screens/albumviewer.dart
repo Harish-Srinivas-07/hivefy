@@ -25,7 +25,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
   List<SongDetail> _albumSongDetails = [];
   bool _loading = true;
   int _totalAlbumDuration = 0;
-  Color albumCoverColour = Colors.black;
+  Color albumCoverColour = spotifyBgColor;
 
   final ScrollController _scrollController = ScrollController();
   bool _isTitleCollapsed = false;
@@ -164,7 +164,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                 _albumSongDetails,
                 startIndex: tappedIndex,
                 sourceId: widget.albumId,
-                sourceName: _album?.title,
+                sourceName: '${_album?.title} Album',
               );
             }
 
@@ -346,6 +346,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                       await audioHandler.loadQueue(
                         _albumSongDetails,
                         startIndex: startIndex,
+                        sourceId: widget.albumId,
+                        sourceName: '${_album?.title} Album',
                       );
 
                       // If shuffle is enabled, apply it after loading
@@ -388,7 +390,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     return Scaffold(
       backgroundColor: albumCoverColour,
       body: Container(
-        decoration: BoxDecoration(color: Colors.black),
+        decoration: BoxDecoration(color: spotifyBgColor),
         child:
             _loading
                 ? Padding(
@@ -407,67 +409,55 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                   slivers: [
                     SliverAppBar(
                       pinned: true,
-                      backgroundColor: Colors.transparent,
+                      backgroundColor: albumCoverColour,
                       expandedHeight: 350,
                       elevation: 0,
                       leading: const BackButton(color: Colors.white),
-                      flexibleSpace: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [albumCoverColour, Colors.black],
+                      flexibleSpace: FlexibleSpaceBar(
+                        collapseMode: CollapseMode.pin,
+                        centerTitle: false,
+                        titlePadding: EdgeInsets.only(
+                          left: _isTitleCollapsed ? 72 : 16,
+                          bottom: 16,
+                          right: 16,
+                        ),
+                        title: AnimatedOpacity(
+                          opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Text(
+                            _album!.title,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        background: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [albumCoverColour, spotifyBgColor],
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: kToolbarHeight),
+                            child: Center(
+                              child: CacheNetWorkImg(
+                                url:
+                                    _album!.images.isNotEmpty
+                                        ? _album!.images.last.url
+                                        : "",
+                                width: 300,
+                                height: 300,
+                                fit: BoxFit.cover,
+                                borderRadius: BorderRadius.circular(16),
                               ),
                             ),
                           ),
-                          FlexibleSpaceBar(
-                            collapseMode: CollapseMode.pin,
-                            centerTitle: false,
-                            titlePadding: EdgeInsets.only(
-                              left: _isTitleCollapsed ? 72 : 16,
-                              bottom: 16,
-                              right: 16,
-                            ),
-                            title: AnimatedOpacity(
-                              opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                _album!.title,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            background: Padding(
-                              padding: const EdgeInsets.only(
-                                top: kToolbarHeight,
-                              ),
-                              child: Center(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: SizedBox(
-                                    width:
-                                        MediaQuery.of(context).size.width *
-                                        0.80,
-                                    height: 300,
-                                    child: Image.network(
-                                      _album!.images.isNotEmpty
-                                          ? _album!.images.last.url
-                                          : "",
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
 

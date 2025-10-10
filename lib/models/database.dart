@@ -102,7 +102,7 @@ class AppDatabase {
     return SongDetail.fromJson(Map<String, dynamic>.from(_cache[id]));
   }
 
-  /// ✅ NEW: Batch lookup to reduce multiple DB hits
+  /// Batch lookup to reduce multiple DB hits
   static Future<List<SongDetail>> getSongs(List<String> ids) async {
     await _init();
     final List<SongDetail> results = [];
@@ -410,6 +410,113 @@ class AlbumCache {
   static void notifyAlbumChanges() => _albumChanges.add(null);
 }
 
+// Playlist cache with persistence
+class PlaylistCache {
+  static const _prefsKey = 'playlist_cache';
+  static const _usageKey = 'playlist_usage';
+  static final PlaylistCache _instance = PlaylistCache._internal();
+  factory PlaylistCache() => _instance;
+  PlaylistCache._internal();
+
+  final Map<String, Playlist> _cache = {};
+  final Map<String, int> _usageCount = {}; // track usage
+  bool _initialized = false;
+  late SharedPreferences _prefs;
+
+  /// Initialize cache
+  Future<void> _init() async {
+    if (_initialized) return;
+    _prefs = await SharedPreferences.getInstance();
+
+    final stored = _prefs.getString(_prefsKey);
+    if (stored != null) {
+      final Map<String, dynamic> decoded = jsonDecode(stored);
+      decoded.forEach((key, value) {
+        _cache[key] = Playlist.fromJson(Map<String, dynamic>.from(value));
+      });
+    }
+
+    final usageStored = _prefs.getString(_usageKey);
+    if (usageStored != null) {
+      final Map<String, dynamic> usageDecoded = jsonDecode(usageStored);
+      usageDecoded.forEach((key, value) {
+        _usageCount[key] = value;
+      });
+    }
+
+    _initialized = true;
+  }
+
+  /// Get playlist by id
+  Future<Playlist?> get(String playlistId) async {
+    await _init();
+    _incrementUsage(playlistId);
+    return _cache[playlistId];
+  }
+
+  /// Set/update playlist
+  Future<void> set(String playlistId, Playlist playlist) async {
+    await _init();
+    _cache[playlistId] = playlist;
+    await _saveToPrefs();
+    notifyPlaylistChanges();
+  }
+
+  /// Get all playlists, optionally sorted by usage
+  Future<List<Playlist>> getAll({bool sortByUsage = false}) async {
+    await _init();
+    final list = _cache.values.toList();
+    if (sortByUsage) {
+      list.sort((a, b) {
+        final usageA = _usageCount[a.id] ?? 0;
+        final usageB = _usageCount[b.id] ?? 0;
+        return usageB.compareTo(usageA); // most used first
+      });
+    }
+    return list;
+  }
+
+  /// Clear cache
+  Future<void> clear() async {
+    await _init();
+    _cache.clear();
+    _usageCount.clear();
+    await _prefs.remove(_prefsKey);
+    await _prefs.remove(_usageKey);
+  }
+
+  /// Save current state to SharedPreferences
+  Future<void> _saveToPrefs() async {
+    final Map<String, dynamic> toStore = {};
+    _cache.forEach((key, value) {
+      toStore[key] = Playlist.playlistToJson(value);
+    });
+    await _prefs.setString(_prefsKey, jsonEncode(toStore));
+    await _prefs.setString(_usageKey, jsonEncode(_usageCount));
+  }
+
+  Timer? _saveTimer;
+
+  /// Increment usage count for a playlist
+  void _incrementUsage(String playlistId) {
+    _usageCount[playlistId] = (_usageCount[playlistId] ?? 0) + 1;
+    debugPrint(
+      "Playlist usage incremented: $playlistId → ${_usageCount[playlistId]}",
+    );
+
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(seconds: 1), () async {
+      await _saveToPrefs();
+    });
+  }
+
+  /// Notify listeners of changes
+  static final StreamController<void> _playlistChanges =
+      StreamController.broadcast();
+  static Stream<void> get playlistChanges => _playlistChanges.stream;
+  static void notifyPlaylistChanges() => _playlistChanges.add(null);
+}
+
 // ---------------- SEARCH HISTORY ----------------
 List<String> searchHistory = [];
 
@@ -625,5 +732,30 @@ class FrequentAlbumsNotifier extends StateNotifier<List<Album>> {
 
   Future<void> refresh() async {
     await _loadFrequentAlbums();
+  }
+}
+
+// ---------------- FREQUENT PLAYLISTS PROVIDER ------------------
+final frequentPlaylistsProvider =
+    StateNotifierProvider<FrequentPlaylistsNotifier, List<Playlist>>((ref) {
+      final notifier = FrequentPlaylistsNotifier();
+      final sub = PlaylistCache.playlistChanges.listen((_) {
+        notifier.refresh();
+      });
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
+
+class FrequentPlaylistsNotifier extends StateNotifier<List<Playlist>> {
+  FrequentPlaylistsNotifier() : super([]) {
+    _loadFrequentPlaylists();
+  }
+
+  Future<void> _loadFrequentPlaylists() async {
+    state = await PlaylistCache().getAll(sortByUsage: true);
+  }
+
+  Future<void> refresh() async {
+    await _loadFrequentPlaylists();
   }
 }

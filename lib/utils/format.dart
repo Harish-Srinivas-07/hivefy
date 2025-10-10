@@ -48,3 +48,18 @@ String sanitizeBio(String bio) {
     return bio;
   }
 }
+
+// artist followers conut
+String followersFormatter(int number) {
+  if (number >= 1000000000) {
+    return "${(number / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B";
+  } else if (number >= 1000000) {
+    return "${(number / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M";
+  } else if (number >= 1000) {
+    return "${(number / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K";
+  } else if (number > 0) {
+    return number.toString();
+  } else {
+    return "0";
+  }
+}

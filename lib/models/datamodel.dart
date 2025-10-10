@@ -317,7 +317,7 @@ class Album extends SongMediaItem {
   /// Old: just song IDs
   final List<String> songIds;
 
-  /// ✅ Use full SongDetail objects
+  /// Use full SongDetail objects
   final List<SongDetail> songs;
 
   final String label;
@@ -361,7 +361,7 @@ class Album extends SongMediaItem {
           (json['songIds'] as String).split(',').map((e) => e.trim()).toList();
     }
 
-    // ✅ full songs (SongDetail)
+    // full songs (SongDetail)
     final List<SongDetail> parsedSongs =
         (json['songs'] as List<dynamic>? ?? [])
             .map((e) => SongDetail.fromJson(e))

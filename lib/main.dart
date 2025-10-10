@@ -55,15 +55,15 @@ class _MyAppState extends ConsumerState<MyApp> {
     final audioHandler = await ref.read(audioHandlerProvider.future);
 
     debugPrint('--> AudioHandler initialized: $audioHandler');
-    // Listen to current media item
-    audioHandler.mediaItem.listen((mediaItem) {
-      debugPrint('Current MediaItem: $mediaItem');
-    });
+    // // Listen to current media item
+    // audioHandler.mediaItem.listen((mediaItem) {
+    //   debugPrint('Current MediaItem: $mediaItem');
+    // });
 
-    // Optionally, listen to the queue
-    audioHandler.queue.listen((queue) {
-      debugPrint('Queue: $queue');
-    });
+    // // Optionally, listen to the queue
+    // audioHandler.queue.listen((queue) {
+    //   debugPrint('Queue: $queue');
+    // });
   }
 
   @override

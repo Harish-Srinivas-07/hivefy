@@ -12,6 +12,7 @@ import '../models/datamodel.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
+import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'albumviewer.dart';
 
@@ -27,7 +28,7 @@ class ArtistViewer extends ConsumerStatefulWidget {
 class _ArtistViewerState extends ConsumerState<ArtistViewer> {
   ArtistDetails? _artist;
   bool _loading = true;
-  Color artistCoverColour = Colors.pink;
+  Color artistCoverColour = Colors.indigo;
 
   final ScrollController _scrollController = ScrollController();
   bool _isTitleCollapsed = false;
@@ -50,15 +51,16 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
   }
 
   Future<void> _updateBgColor() async {
-    if (_artist?.images.last.url.isEmpty ?? true) return;
+    if (_artist == null || _artist!.images.isEmpty) return;
 
-    final dominant = await getDominantColorFromImage(_artist!.images.last.url);
-    if (dominant == null) return;
-    if (!mounted) return;
+    final imageUrl = _artist!.images.last.url;
+    if (imageUrl.isEmpty) return;
 
-    artistCoverColour = dominant;
-
-    if (mounted) setState(() {});
+    final dominant = await getDominantColorFromImage(imageUrl);
+    if (dominant != null && mounted) {
+      artistCoverColour = dominant;
+      setState(() {});
+    }
   }
 
   @override
@@ -72,108 +74,87 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     final details = await SaavnAPI().fetchArtistDetailsById(
       artistId: widget.artistId,
     );
-    await _updateBgColor();
+
     if (mounted) {
       _artist = details;
       _loading = false;
       setState(() {});
     }
+    await _updateBgColor();
   }
 
-  Widget _buildHeader() {
-    if (_artist == null) return const SizedBox.shrink();
-
+  Widget _buildHeaderImage() {
     final imageUrl = _artist!.images.isNotEmpty ? _artist!.images.last.url : '';
 
-    return SingleChildScrollView(
-      physics: const NeverScrollableScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.only(
-          top: kToolbarHeight + 16,
-          bottom: 16,
-          left: 16,
-          right: 16,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [artistCoverColour, spotifyBgColor],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.80,
-                height: 300,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child:
-                      imageUrl.isNotEmpty
-                          ? Image.network(imageUrl, fit: BoxFit.contain)
-                          : Container(
-                            color: Colors.grey.shade800,
-                            child: const Icon(
-                              Icons.person,
-                              size: 100,
-                              color: Colors.white,
-                            ),
-                          ),
+      ),
+      child: Center(
+        child: SizedBox(
+          width: 300,
+          height: 300,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: CacheNetWorkImg(
+              url: imageUrl.isNotEmpty ? imageUrl : '',
+              fit: BoxFit.cover,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderDetails() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _artist!.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _artist!.title,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (_artist!.isVerified == true) ...[
-                  const SizedBox(width: 10),
-                  const Icon(
-                    Icons.verified,
-                    size: 18,
-                    color: Colors.blueAccent,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${_artist!.followerCount ?? 0} followers',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            if (_artist!.bio.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: ReadMoreText(
-                  _artist!.bio.join("\n\n"),
-                  trimLines: 3,
-                  trimMode: TrimMode.Line,
-                  colorClickableText: Colors.greenAccent,
-                  trimCollapsedText: " ...more",
-                  trimExpandedText: " Show less",
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                  moreStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.greenAccent,
-                  ),
-                  lessStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.greenAccent,
-                  ),
-                ),
+              if (_artist!.isVerified == true)
+                const Icon(Icons.verified, size: 18, color: Colors.blueAccent),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${followersFormatter(_artist?.followerCount ?? 0)} followers',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          Text(
+            'Known as ${_artist?.dominantType}',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          if (_artist!.bio.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ReadMoreText(
+                _artist!.bio.map((bio) => sanitizeBio(bio)).join("\n\n"),
+                trimLines: 3,
+                trimMode: TrimMode.Line,
+                colorClickableText: Colors.greenAccent,
+                trimCollapsedText: " ...more",
+                trimExpandedText: " Show less",
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -182,7 +163,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     final songs = _artist?.topSongs ?? [];
     if (_loading) return buildAlbumShimmer();
 
-    if (songs.isEmpty) return const SizedBox.shrink();
+    if (songs.isEmpty || _artist == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,39 +171,37 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Top Songs",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    _artist?.dominantLanguage ??
-                        _artist?.language ??
-                        'Artist Favs',
-                    style: TextStyle(
-                      color: Colors.white30,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              _buildShufflePlayButtons(),
-            ],
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [_buildShufflePlayButtons()],
           ),
         ),
         const SizedBox(height: 8),
-        ...songs.map(
-          (song) => ArtistSongRow(song: song, allSongs: _artist!.topSongs),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Top Songs",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                'Famous for ${_artist?.dominantLanguage} Language',
+                style: TextStyle(
+                  color: Colors.white30,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
+        ...songs.map((song) => ArtistSongRow(song: song, artist: _artist!)),
       ],
     );
   }
@@ -299,7 +278,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                     _artist!.topSongs,
                     startIndex: startIndex,
                     sourceId: _artist?.id,
-                    sourceName: _artist?.title,
+                    sourceName: '${_artist?.title} Artist',
                   );
 
                   if (isShuffle && !audioHandler.isShuffle) {
@@ -337,7 +316,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
             title,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 16,
+              fontSize: 22,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -367,7 +346,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     return Scaffold(
       backgroundColor: artistCoverColour,
       body: Container(
-        decoration: BoxDecoration(color: Colors.black),
+        decoration: BoxDecoration(color: spotifyBgColor),
         child:
             _loading
                 ? Padding(
@@ -386,48 +365,36 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                   slivers: [
                     SliverAppBar(
                       pinned: true,
-                      backgroundColor: Colors.transparent,
+                      backgroundColor: artistCoverColour,
                       expandedHeight: 400,
                       elevation: 0,
                       leading: const BackButton(color: Colors.white),
-                      flexibleSpace: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [artistCoverColour, Colors.black],
-                              ),
+                      flexibleSpace: FlexibleSpaceBar(
+                        collapseMode: CollapseMode.pin,
+                        centerTitle: false,
+                        titlePadding: EdgeInsets.only(
+                          left: _isTitleCollapsed ? 72 : 16,
+                          bottom: 16,
+                          right: 16,
+                        ),
+                        title: AnimatedOpacity(
+                          opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Text(
+                            _artist?.title ?? "",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          FlexibleSpaceBar(
-                            collapseMode: CollapseMode.pin,
-                            centerTitle: false,
-                            titlePadding: EdgeInsets.only(
-                              left: _isTitleCollapsed ? 72 : 16,
-                              bottom: 16,
-                              right: 16,
-                            ),
-                            title: AnimatedOpacity(
-                              opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                _artist?.title ?? "",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            background: _buildHeader(),
-                          ),
-                        ],
+                        ),
+                        background: _buildHeaderImage(),
                       ),
                     ),
+
+                    SliverToBoxAdapter(child: _buildHeaderDetails()),
 
                     SliverToBoxAdapter(
                       child: Column(
@@ -442,7 +409,10 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                             _artist?.topAlbums ?? [],
                           ),
                           const SizedBox(height: 16),
-                          _buildAlbumList("Singles", _artist?.singles ?? []),
+                          _buildAlbumList(
+                            "Top Singles",
+                            _artist?.singles ?? [],
+                          ),
                           const SizedBox(height: 100),
                         ],
                       ),
@@ -456,9 +426,9 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
 
 class ArtistSongRow extends ConsumerWidget {
   final SongDetail song;
-  final List<SongDetail> allSongs;
+  final ArtistDetails artist;
 
-  const ArtistSongRow({super.key, required this.song, required this.allSongs});
+  const ArtistSongRow({super.key, required this.song, required this.artist});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -492,10 +462,12 @@ class ArtistSongRow extends ConsumerWidget {
             final queue = audioHandler.queue.valueOrNull ?? [];
             final queueIds = queue.map((m) => m.id).toList();
             final isSameQueue =
-                queueIds.length == allSongs.length &&
-                queueIds.every((id) => allSongs.any((s) => s.id == id));
+                queueIds.length == artist.topSongs.length &&
+                queueIds.every((id) => artist.topSongs.any((s) => s.id == id));
 
-            final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+            final tappedIndex = artist.topSongs.indexWhere(
+              (s) => s.id == song.id,
+            );
             if (tappedIndex == -1) return;
 
             // 1️⃣ Same song toggle play/pause
@@ -516,7 +488,12 @@ class ArtistSongRow extends ConsumerWidget {
             }
 
             // 3️⃣ Load artist songs as new queue
-            await audioHandler.loadQueue(allSongs, startIndex: tappedIndex);
+            await audioHandler.loadQueue(
+              artist.topSongs,
+              startIndex: tappedIndex,
+              sourceId: artist.id,
+              sourceName: '${artist.title} Artist',
+            );
             await audioHandler.play();
           } catch (e, st) {
             debugPrint("Error playing artist song: $e\n$st");
@@ -526,14 +503,12 @@ class ArtistSongRow extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           child: Row(
             children: [
-              ClipRRect(
+              CacheNetWorkImg(
+                url: song.images.isNotEmpty ? song.images.last.url : '',
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  song.images.isNotEmpty ? song.images.last.url : '',
-                  width: 50,
-                  height: 50,
-                  fit: BoxFit.cover,
-                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -614,19 +589,10 @@ class AlbumRow extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 1,
-            child: ClipRRect(
+            child: CacheNetWorkImg(
+              url: imageUrl,
+              fit: BoxFit.cover,
               borderRadius: BorderRadius.circular(8),
-              child:
-                  imageUrl.isNotEmpty
-                      ? Image.network(imageUrl, fit: BoxFit.cover)
-                      : Container(
-                        color: Colors.grey.shade800,
-                        child: const Icon(
-                          Icons.album,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
             ),
           ),
           const SizedBox(height: 6),

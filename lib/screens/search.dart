@@ -23,9 +23,6 @@ class Search extends ConsumerStatefulWidget {
 }
 
 class SearchState extends ConsumerState<Search> {
-  bool _extraSongsLoaded = false;
-  bool _extraArtistsLoaded = false;
-
   final TextEditingController _controller = TextEditingController();
   List<String> _suggestions = [];
   bool _isLoading = false;
@@ -73,7 +70,6 @@ class SearchState extends ConsumerState<Search> {
     await loadSearchHistory();
     _lastSongs = await loadLastSongs();
     _lastAlbums = await loadLastAlbums();
-    debugPrint('--> her ethe data $_lastSongs & $_lastAlbums');
     if (mounted) setState(() {});
   }
 
@@ -148,57 +144,6 @@ class SearchState extends ConsumerState<Search> {
     );
   }
 
-  Future<void> _fetchExtraSongs() async {
-    if (_extraSongsLoaded) return;
-
-    final extraSongs = await saavn.searchSongs(query: _controller.text.trim());
-
-    if (extraSongs.isNotEmpty) {
-      final existingIds = _songs.map((s) => s.id).toSet();
-
-      _songs.addAll(
-        extraSongs
-            .where((s) => !existingIds.contains(s.id))
-            .map(
-              (s) => Song(
-                id: s.id,
-                title: s.title,
-                images: s.images,
-                url: s.url,
-                type: s.type,
-                language: s.language,
-                description: s.description,
-              ),
-            ),
-      );
-
-      _extraSongsLoaded = true;
-      if (mounted) setState(() {});
-    }
-  }
-
-  Future<void> _fetchExtraArtists() async {
-    if (_extraArtistsLoaded) return;
-
-    final extraArtistsResponse = await saavn.searchArtists(
-      query: _controller.text.trim(),
-    );
-
-    if (extraArtistsResponse != null &&
-        extraArtistsResponse.results.isNotEmpty) {
-      final existingIds = _artists.map((a) => a.id).toSet();
-
-      _artists.addAll(
-        extraArtistsResponse.results
-            .where((a) => !existingIds.contains(a.id))
-            .toList(),
-      );
-
-      _extraArtistsLoaded = true;
-      if (mounted) setState(() {});
-    }
-  }
-
   void _onTextChanged(String value) async {
     if (value.isEmpty) {
       _resetSearch();
@@ -229,15 +174,59 @@ class SearchState extends ConsumerState<Search> {
     });
 
     final results = await saavn.globalSearch(suggestion);
-    await _fetchExtraSongs();
-    await _fetchExtraArtists();
 
     if (!mounted || results == null) return;
 
-    _songs = results.songs.results;
-    _albums = results.albums.results;
-    _artists = results.artists.results;
-    _playlists = results.playlists.results;
+    // Assign results first
+    List<Song> songs = results.songs.results;
+    List<Artist> artists = results.artists.results;
+    List<Album> albums = results.albums.results;
+    List<Playlist> playlists = results.playlists.results;
+
+    // Fetch extras
+    final extraSongs = await saavn.searchSongs(query: suggestion, limit: 7);
+    if (extraSongs.isNotEmpty) {
+      final existingIds = songs.map((s) => s.id).toSet();
+      songs.addAll(extraSongs.where((s) => !existingIds.contains(s.id)));
+    }
+
+    final extraArtistsResponse = await saavn.searchArtists(
+      query: suggestion,
+      limit: 7,
+    );
+    if (extraArtistsResponse != null &&
+        extraArtistsResponse.results.isNotEmpty) {
+      final existingIds = artists.map((a) => a.id).toSet();
+      artists.addAll(
+        extraArtistsResponse.results.where((a) => !existingIds.contains(a.id)),
+      );
+    }
+
+    final extraPlaylistsResponse = await saavn.searchPlaylists(
+      query: suggestion,
+      limit: 7,
+    );
+
+    if (extraPlaylistsResponse != null &&
+        extraPlaylistsResponse.results.isNotEmpty) {
+      final existingIds = playlists.map((p) => p.id).toSet();
+
+      // Only add playlists that are not already in the list
+      final newPlaylists =
+          extraPlaylistsResponse.results
+              .where((p) => !existingIds.contains(p.id))
+              .toList();
+
+      if (newPlaylists.isNotEmpty) {
+        playlists.addAll(newPlaylists);
+      }
+    }
+
+    _songs = songs;
+    _artists = artists;
+    _albums = albums;
+    _playlists = playlists;
+
     _isLoading = false;
     if (mounted) setState(() {});
   }
@@ -271,7 +260,7 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: Text(
         title,
         style: TextStyle(
@@ -291,8 +280,14 @@ class SearchState extends ConsumerState<Search> {
       borderRadius:
           type.toLowerCase().contains('artist')
               ? BorderRadius.circular(50)
-              : BorderRadius.circular(8),
-      child: Image.network(url, width: 60, height: 60, fit: BoxFit.cover),
+              : BorderRadius.circular(4),
+      child: CacheNetWorkImg(
+        url: url,
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+        borderRadius: BorderRadius.circular(6),
+      ),
     );
   }
 
@@ -300,7 +295,7 @@ class SearchState extends ConsumerState<Search> {
     final imageUrl = p.images.isNotEmpty ? p.images.last.url : '';
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           _buildItemImage(imageUrl, p.type),
@@ -322,7 +317,7 @@ class SearchState extends ConsumerState<Search> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 _buildSubtitleRow(p),
               ],
             ),
@@ -341,10 +336,10 @@ class SearchState extends ConsumerState<Search> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        if (p.language.isNotEmpty)
+        if (p.description.isNotEmpty)
           Flexible(
             child: Text(
-              '${capitalize(p.description)} ',
+              '${capitalize(p.type.toLowerCase().contains('playlist') ? p.language : p.description)} ',
               style: _subtitleStyle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -393,9 +388,12 @@ class SearchState extends ConsumerState<Search> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Recent Search',
-          style: TextStyle(fontSize: 13, color: Colors.white54),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Recent Search',
+            style: TextStyle(fontSize: 13, color: Colors.white54),
+          ),
         ),
         const SizedBox(height: 2),
         SingleChildScrollView(
@@ -406,10 +404,7 @@ class SearchState extends ConsumerState<Search> {
                   return GestureDetector(
                     onTap: () => _onSuggestionTap(term),
                     child: Container(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 3,
-                        vertical: 2,
-                      ),
+                      margin: const EdgeInsets.only(left: 10, top: 3),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 6,
@@ -433,13 +428,8 @@ class SearchState extends ConsumerState<Search> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: _buildSearchContent(),
-        ),
-      ),
+      backgroundColor: spotifyBgColor,
+      body: SafeArea(child: _buildSearchContent()),
     );
   }
 
@@ -466,7 +456,7 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildSearchBox() {
     return Container(
-      // padding: const EdgeInsets.symmetric(horizontal: 8),
+      // padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
@@ -514,7 +504,7 @@ class SearchState extends ConsumerState<Search> {
         // HEADER → normal scroll
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: _buildHeader(),
           ),
         ),
@@ -525,8 +515,8 @@ class SearchState extends ConsumerState<Search> {
           delegate: StickyHeaderDelegate(
             height: 60,
             child: Container(
-              color: Colors.black,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: spotifyBgColor,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: _buildSearchBox(),
             ),
           ),
@@ -615,7 +605,7 @@ class SearchState extends ConsumerState<Search> {
                       child: _buildPlaylistRow(p),
                     ),
                   ),
-                const SizedBox(height: 60),
+                const SizedBox(height: 100),
               ],
             ]),
           ),
@@ -654,7 +644,7 @@ class SearchState extends ConsumerState<Search> {
         child: Container(
           height: 50,
           margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               Container(
@@ -676,7 +666,14 @@ class SearchState extends ConsumerState<Search> {
                   ),
                 ),
               ),
-              const Icon(Icons.arrow_upward, color: Colors.grey, size: 18),
+              Transform.rotate(
+                angle: 45 * 3.1415926535 / 180,
+                child: const Icon(
+                  Icons.arrow_upward,
+                  color: Colors.grey,
+                  size: 18,
+                ),
+              ),
             ],
           ),
         ),
@@ -806,7 +803,7 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
       height: height,
       child: Material(
         // optional: keep background / elevation behavior consistent
-        color: Colors.black,
+        color: spotifyBgColor,
         child: child,
       ),
     );

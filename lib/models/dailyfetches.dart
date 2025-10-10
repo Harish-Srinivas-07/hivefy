@@ -7,7 +7,7 @@ import '../services/jiosaavn.dart';
 import 'database.dart';
 import 'datamodel.dart';
 
-class Dailyfetches {
+class DailyFetches {
   static const _artistsKey = 'daily_cache_artists_v1';
   static const _artistsTsKey = 'daily_cache_artists_ts_v1';
   static const _plKey = 'daily_cache_playlists_v1';
@@ -15,10 +15,11 @@ class Dailyfetches {
 
   static SharedPreferences? _prefs;
   static bool _initing = false;
+  static const _dayDuration = Duration(hours: 24);
 
-  // -------- Public API
+  // -------- Public API --------
 
-  /// Refresh both artists + playlists once per day (unless force=true).
+  /// Refresh both artists + playlists once per day (unless [force] is true).
   static Future<void> refreshAllDaily({
     bool force = false,
     List<String>? artistIds,
@@ -35,8 +36,8 @@ class Dailyfetches {
     ]);
   }
 
-  /// Fetch & cache ArtistDetails by id (once per day unless force=true).
-  /// Returns the cached map after refresh.
+  /// Fetch & cache ArtistDetails once per day (unless [force] is true).
+  /// Returns the updated artist map.
   static Future<Map<String, ArtistDetails>> refreshArtistsDaily({
     bool force = false,
     List<String>? artistIds,
@@ -50,9 +51,15 @@ class Dailyfetches {
             .where((e) => e.isNotEmpty)
             .toList();
 
-    // Fetch in parallel
     final results = await Future.wait(
-      ids.map((id) => saavn.fetchArtistDetailsById(artistId: id)),
+      ids.map((id) async {
+        try {
+          return await saavn.fetchArtistDetailsById(artistId: id);
+        } catch (e) {
+          debugPrint('Artist fetch error for $id: $e');
+          return null;
+        }
+      }),
     );
 
     final mapJson = <String, dynamic>{};
@@ -67,8 +74,8 @@ class Dailyfetches {
     return getArtistsFromCache();
   }
 
-  /// Fetch & cache Playlists by id (once per day unless force=true).
-  /// Returns the cached list after refresh.
+  /// Fetch & cache Playlists by id once per day (unless [force] is true).
+  /// Returns the updated playlist list.
   static Future<List<Playlist>> refreshPlaylistsDaily({
     bool force = false,
     List<String>? playlistIds,
@@ -80,42 +87,51 @@ class Dailyfetches {
 
     final ids =
         (playlistIds ??
-            PlaylistDB.playlists
-                .map((e) => e['id'] ?? '')
-                .where((e) => e.isNotEmpty)
-                .cast<String>()
-                .toList());
+                PlaylistDB.playlists
+                    .map((e) => e['id'] ?? '')
+                    .where((e) => e.isNotEmpty)
+                    .cast<String>()
+                    .toList())
+            .where((e) => e.isNotEmpty)
+            .toList();
 
     final results = await Future.wait(
-      ids.map(
-        (id) => saavn.fetchPlaylistById(
-          playlistId: id,
-          page: 0,
-          limit: playlistLimitPerFetch,
-        ),
-      ),
+      ids.map((id) async {
+        try {
+          return await saavn.fetchPlaylistById(
+            playlistId: id,
+            page: 0,
+            limit: playlistLimitPerFetch,
+          );
+        } catch (e) {
+          debugPrint('Playlist fetch error for $id: $e');
+          return null;
+        }
+      }),
     );
 
-    final listJson = <dynamic>[];
-    for (final p in results) {
-      if (p == null) continue;
-      listJson.add(Playlist.playlistToJson(p));
-    }
+    final validPlaylists = results.whereType<Playlist>().toList();
+    if (validPlaylists.isEmpty) return [];
 
-    await _prefs!.setString(_plKey, jsonEncode(listJson));
+    final jsonList =
+        validPlaylists.map((p) => Playlist.playlistToJson(p)).toList();
+
+    await _prefs!.setString(_plKey, jsonEncode(jsonList));
     await _prefs!.setString(_plTsKey, DateTime.now().toIso8601String());
 
-    return getPlaylistsFromCache();
+    return validPlaylists;
   }
 
-  // -------- Read from cache
+  // -------- Cache Readers --------
 
   static Future<Map<String, ArtistDetails>> getArtistsFromCache() async {
     await _init();
     final raw = _prefs!.getString(_artistsKey);
     if (raw == null || raw.isEmpty) return {};
+
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     final map = <String, ArtistDetails>{};
+
     decoded.forEach((id, v) {
       try {
         map[id] = ArtistDetails.fromJson(Map<String, dynamic>.from(v));
@@ -123,6 +139,7 @@ class Dailyfetches {
         debugPrint('ArtistDetails cache parse error for $id: $e');
       }
     });
+
     return map;
   }
 
@@ -130,13 +147,13 @@ class Dailyfetches {
     await _init();
     final raw = _prefs!.getString(_plKey);
     if (raw == null || raw.isEmpty) return [];
+
     final decoded = jsonDecode(raw) as List<dynamic>;
     return decoded
         .map((e) => Playlist.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
-  /// Optional helpers if you want different shapes
   static Future<List<ArtistDetails>> getArtistsAsListFromCache() async {
     final map = await getArtistsFromCache();
     return map.values.toList();
@@ -150,10 +167,17 @@ class Dailyfetches {
     await _prefs!.remove(_plTsKey);
   }
 
-  // -------- Internals
+  // -------- Internals --------
 
   static Future<void> _init() async {
-    if (_prefs != null || _initing) return;
+    if (_prefs != null) return;
+    if (_initing) {
+      while (_prefs == null) {
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+      return;
+    }
+
     _initing = true;
     _prefs = await SharedPreferences.getInstance();
     _initing = false;
@@ -162,14 +186,9 @@ class Dailyfetches {
   static bool _isStale(String? tsIso) {
     if (tsIso == null) return true;
     try {
-      final then = DateTime.parse(tsIso).toLocal();
+      final then = DateTime.parse(tsIso);
       final now = DateTime.now();
-      final differentDay =
-          then.year != now.year ||
-          then.month != now.month ||
-          then.day != now.day;
-      final olderThan24h = now.difference(then) > const Duration(hours: 24);
-      return differentDay || olderThan24h;
+      return now.difference(then) > _dayDuration;
     } catch (_) {
       return true;
     }

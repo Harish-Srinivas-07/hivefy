@@ -118,9 +118,12 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
 
   Widget _buildItemImage(String url) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 10),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(url, width: 50, height: 50, fit: BoxFit.cover),
+    child: CacheNetWorkImg(
+      url: url,
+      width: 50,
+      height: 50,
+      fit: BoxFit.cover,
+      borderRadius: BorderRadius.circular(6),
     ),
   );
 
@@ -229,6 +232,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       song.primaryArtists.isNotEmpty
                           ? song.primaryArtists
@@ -249,6 +253,18 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                     size: 20,
                   ),
                 ),
+
+              // Menu icon
+              IconButton(
+                icon: const Icon(
+                  Icons.more_vert,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+                onPressed: () {
+                  // TODO: Show song menu
+                },
+              ),
             ],
           ),
         ),
@@ -266,7 +282,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
       ),
       child: Center(
         child: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.70,
+          width: 250,
           height: 250,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),

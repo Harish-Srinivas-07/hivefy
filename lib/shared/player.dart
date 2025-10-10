@@ -7,6 +7,7 @@ import 'package:marquee/marquee.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../components/shimmers.dart';
 import '../models/datamodel.dart';
 import '../screens/queuesheet.dart';
 import '../services/audiohandler.dart';
@@ -52,7 +53,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     if (dominant == null) return;
     if (!mounted) return;
 
-    ref.read(playerColourProvider.notifier).state = dominant;
+    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
   }
 
   @override
@@ -132,16 +133,18 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         // Artwork
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: Image.network(
-                            song.images.isNotEmpty ? song.images.last.url : "",
-                            height: 40,
-                            width: 40,
-                            fit: BoxFit.cover,
-                          ),
+                        CacheNetWorkImg(
+                          url:
+                              song.images.isNotEmpty
+                                  ? song.images.last.url
+                                  : '',
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         const SizedBox(width: 10),
 
@@ -152,17 +155,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                             children: [
                               _marqueeText(
                                 song.title,
-                                fontSize: 14,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
-                              Text(
-                                song.contributors.primary.first.title,
-                                style: TextStyle(
-                                  color: Colors.white.withAlpha(190),
-                                  fontSize: 12,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              const SizedBox(height: 2),
+                              _marqueeText(
+                                '${song.contributors.all.first.title} • ${song.album}',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
                               ),
                             ],
                           ),
@@ -317,10 +317,10 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final song = ref.read(currentSongProvider);
     if (song == null) return;
 
-    final primaryContributors = song.contributors.primary;
-    if (primaryContributors.isEmpty) return;
+    final artistId = song.contributors.all.first.id;
+    // if (primaryContributors.isEmpty) return;
 
-    final artistId = primaryContributors.first.id;
+    // final artistId = primaryContributors.first.id;
     if (artistId.isEmpty) return;
 
     final api = SaavnAPI();
@@ -478,13 +478,12 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                           topLeft: Radius.circular(16),
                           topRight: Radius.circular(16),
                         ),
-                        child: Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.rotationZ(0),
-                          child: Image.network(
-                            _artistDetails!.images.last.url,
-                            fit: BoxFit.cover,
-                          ),
+                        child: CacheNetWorkImg(
+                          url:
+                              _artistDetails!.images.isNotEmpty
+                                  ? _artistDetails!.images.last.url
+                                  : '',
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ),
@@ -755,11 +754,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
                       thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                        pressedElevation: 8,
+                        enabledThumbRadius: 5,
+                        pressedElevation: 5,
+                        elevation: .5,
                       ),
                       overlayShape: SliderComponentShape.noOverlay,
-                      trackHeight: 2.5,
+                      trackShape: const CustomTrackShape(
+                        activeTrackHeight: 2,
+                        inactiveTrackHeight: 2,
+                      ),
+                      trackHeight: 2,
                     ),
                     child: Slider(
                       value: progress.clamp(0.0, 1.0),
@@ -947,18 +951,17 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       SizedBox(
-                                        width:
-                                            MediaQuery.of(context).size.width *
-                                            0.8,
+                                        width: 300,
                                         height: 300,
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(
                                             16,
                                           ),
-                                          child: Image.network(
-                                            song.images.isNotEmpty
-                                                ? song.images.last.url
-                                                : "",
+                                          child: CacheNetWorkImg(
+                                            url:
+                                                song.images.isNotEmpty
+                                                    ? song.images.last.url
+                                                    : '',
                                             fit: BoxFit.contain,
                                           ),
                                         ),
@@ -1220,4 +1223,83 @@ Widget _marqueeText(
       pauseAfterRound: const Duration(seconds: 1),
     ),
   );
+}
+
+class CustomTrackShape extends SliderTrackShape {
+  final double activeTrackHeight;
+  final double inactiveTrackHeight;
+
+  const CustomTrackShape({
+    required this.activeTrackHeight,
+    required this.inactiveTrackHeight,
+  });
+
+  @override
+  Rect getPreferredRect({
+    required RenderBox parentBox,
+    Offset offset = Offset.zero,
+    required SliderThemeData sliderTheme,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+  }) {
+    final double trackHeight = inactiveTrackHeight;
+    final double trackLeft =
+        offset.dx +
+        sliderTheme.overlayShape!
+                .getPreferredSize(isEnabled, isDiscrete)
+                .width /
+            2;
+    final double trackTop =
+        offset.dy + (parentBox.size.height - trackHeight) / 2;
+    final double trackWidth =
+        parentBox.size.width -
+        sliderTheme.overlayShape!.getPreferredSize(isEnabled, isDiscrete).width;
+    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required Offset thumbCenter,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+    required TextDirection textDirection,
+    Offset? secondaryOffset,
+  }) {
+    final Rect trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+
+    final Paint activePaint =
+        Paint()..color = sliderTheme.activeTrackColor ?? Colors.white;
+    final Paint inactivePaint =
+        Paint()..color = sliderTheme.inactiveTrackColor ?? Colors.grey;
+
+    // Active track
+    final Rect leftTrackSegment = Rect.fromLTRB(
+      trackRect.left,
+      trackRect.top + (trackRect.height - activeTrackHeight) / 2,
+      thumbCenter.dx,
+      trackRect.bottom - (trackRect.height - activeTrackHeight) / 2,
+    );
+
+    // Inactive track
+    final Rect rightTrackSegment = Rect.fromLTRB(
+      thumbCenter.dx,
+      trackRect.top + (trackRect.height - inactiveTrackHeight) / 2,
+      trackRect.right,
+      trackRect.bottom - (trackRect.height - inactiveTrackHeight) / 2,
+    );
+
+    context.canvas.drawRect(leftTrackSegment, activePaint);
+    context.canvas.drawRect(rightTrackSegment, inactivePaint);
+  }
 }

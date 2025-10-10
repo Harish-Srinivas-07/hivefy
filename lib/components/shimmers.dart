@@ -101,7 +101,7 @@ Widget buildSearchShimmerSliver() {
   return SliverList(
     delegate: SliverChildBuilderDelegate(
       (_, __) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Shimmer.fromColors(
           baseColor: Colors.grey[800]!,
           highlightColor: Colors.grey[600]!,
@@ -197,4 +197,145 @@ class CacheNetWorkImg extends StatelessWidget {
       ),
     );
   }
+}
+
+// PLaylist section & cards shimmer
+Widget heroGridShimmer() {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    child: Shimmer.fromColors(
+      baseColor: Colors.grey[900]!,
+      highlightColor: Colors.grey[800]!,
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 10,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 3.5,
+        ),
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Colors.grey,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 12,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 10,
+                        width: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+// Playlist section shimmer
+Widget buildPlaylistSectionShimmer() {
+  return Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: SizedBox(
+      height: 200,
+      child: PageView.builder(
+        controller: PageController(viewportFraction: 0.45),
+        padEnds: false,
+        physics: const BouncingScrollPhysics(),
+        itemCount: 5,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: EdgeInsets.only(left: 20),
+            child: buildPlaylistCardShimmer(),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+// Playlist card shimmer
+Widget buildPlaylistCardShimmer({double height = 200, double width = 150}) {
+  return Shimmer.fromColors(
+    baseColor: Colors.grey[900]!,
+    highlightColor: Colors.grey[800]!,
+    child: SizedBox(
+      height: height,
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(color: Colors.grey[900]),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 14,
+                  width: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: 12,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }

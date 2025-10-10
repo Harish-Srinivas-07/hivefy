@@ -3,6 +3,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:drag_and_drop_lists/drag_and_drop_lists.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../components/shimmers.dart';
 import '../services/audiohandler.dart';
 
 final queueStreamProvider = StreamProvider.autoDispose
@@ -45,14 +46,12 @@ class QueueList extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      ClipRRect(
+                      CacheNetWorkImg(
+                        url: song.images.isNotEmpty ? song.images.last.url : '',
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          song.images.isNotEmpty ? song.images.last.url : '',
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -103,17 +102,17 @@ class QueueList extends ConsumerWidget {
                   color: Colors.black26,
                   child: Row(
                     children: [
-                      ClipRRect(
+                      CacheNetWorkImg(
+                        url:
+                            currentSong.images.isNotEmpty
+                                ? currentSong.images.last.url
+                                : '',
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          currentSong.images.isNotEmpty
-                              ? currentSong.images.last.url
-                              : '',
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                        ),
                       ),
+
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(

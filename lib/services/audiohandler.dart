@@ -80,8 +80,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> _onSongEnded() async {
     if (_repeat == RepeatMode.one) {
       await _playCurrent();
-    } else if (hasNext || _repeat == RepeatMode.all) {
+      return;
+    }
+
+    if (hasNext) {
       await skipToNext();
+    } else if (_repeat == RepeatMode.all) {
+      _currentIndex = 0;
+      await _playCurrent();
     } else {
       await stop();
       _currentIndex = -1;
@@ -263,17 +269,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    if (!hasNext && _repeat != RepeatMode.all) {
-      await stop();
-      return;
-    }
-
-    if (_repeat == RepeatMode.one) {
-      await _playCurrent();
-      return;
-    }
-
-    if (_shuffle && _shuffleOrder != null) {
+    if (_shuffle && _shuffleOrder != null && _shuffleOrder!.isNotEmpty) {
       final idx = _shuffleOrder!.indexOf(_currentIndex);
       if (idx + 1 < _shuffleOrder!.length) {
         _currentIndex = _shuffleOrder![idx + 1];
@@ -286,12 +282,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     } else if (hasNext) {
       _currentIndex++;
     } else if (_repeat == RepeatMode.all) {
-      if (_shuffle) {
-        _generateShuffleOrder();
-        _currentIndex = _shuffleOrder!.first;
-      } else {
-        _currentIndex = 0;
-      }
+      _currentIndex = 0;
     } else {
       await stop();
       return;

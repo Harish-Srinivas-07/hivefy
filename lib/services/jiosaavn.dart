@@ -249,10 +249,10 @@ class SaavnAPI {
   }) async {
     final cache = ArtistCache();
 
-    // ✅ Check cache first (await async getter)
+    // Check cache first (await async getter)
     final cached = await cache.get(artistId);
     if (cached != null) {
-      debugPrint("✅ fetchArtistDetailsById: loaded from cache ($artistId)");
+      debugPrint("fetchArtistDetailsById: loaded from cache ($artistId)");
       return cached;
     }
 
@@ -270,7 +270,7 @@ class SaavnAPI {
             jsonBody['data'] as Map<String, dynamic>,
           );
 
-          // ✅ Save to cache (async)
+          // Save to cache (async)
           await cache.set(artistId, details);
 
           debugPrint("🎤 fetchArtistDetailsById: fetched from API ($artistId)");
@@ -302,6 +302,17 @@ class SaavnAPI {
       return null;
     }
 
+    final cache = PlaylistCache();
+
+    // Try cache first if playlistId is available
+    if (playlistId != null) {
+      final cached = await cache.get(playlistId);
+      if (cached != null) {
+        debugPrint("fetchPlaylistById: loaded from cache ($playlistId)");
+        return cached;
+      }
+    }
+
     final queryParams = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
@@ -322,14 +333,26 @@ class SaavnAPI {
       if (response.statusCode == 200) {
         final jsonBody = json.decode(response.body);
         if (jsonBody['success'] == true && jsonBody['data'] != null) {
-          return Playlist.fromJson(jsonBody['data']);
+          final playlist = Playlist.fromJson(jsonBody['data']);
+
+          // Save to cache if playlistId exists
+          if (playlistId != null) {
+            await cache.set(playlistId, playlist);
+          }
+
+          debugPrint(
+            "fetchPlaylistById: fetched from API (${playlistId ?? link})",
+          );
+          return playlist;
         }
       } else {
         debugPrint("fetchPlaylist failed: ${response.statusCode}");
       }
-    } catch (e) {
-      debugPrint("Error in fetchPlaylist: $e");
+    } catch (e, st) {
+      debugPrint("⚠️ Error in fetchPlaylist: $e");
+      debugPrint("$st");
     }
+
     return null;
   }
 
@@ -374,7 +397,7 @@ class SaavnAPI {
     // Await the async cache getter
     final cached = await cache.get(cacheKey);
     if (cached != null) {
-      debugPrint("✅ fetchAlbumById: loaded from cache ($cacheKey)");
+      debugPrint("fetchAlbumById: loaded from cache ($cacheKey)");
       return cached;
     }
 
