@@ -86,12 +86,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   label: Text(
                     capitalize(filter.name),
                     style: TextStyle(
-                      color: isSelected ? Colors.greenAccent : Colors.white,
+                      color: isSelected ? spotifyGreen : Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   selected: isSelected,
-                  selectedColor: Colors.greenAccent.withAlpha(51),
+                  selectedColor: spotifyGreen.withAlpha(51),
                   backgroundColor: Colors.grey[900],
                   selectedShadowColor: Colors.grey.shade900,
                   color: WidgetStateProperty.resolveWith<Color?>((states) {
@@ -100,10 +100,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                     side: BorderSide(
-                      color:
-                          isSelected
-                              ? Colors.greenAccent
-                              : Colors.grey.shade800,
+                      color: isSelected ? spotifyGreen : Colors.grey.shade800,
                       width: isSelected ? 1 : 0,
                     ),
                   ),
@@ -376,78 +373,93 @@ class LibraryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitleText = _buildSubtitle();
 
-    // Determine if this item should be clickable
-    bool isEnabled = true;
+    return ValueListenableBuilder(
+      valueListenable: hasInternet,
+      builder: (context, value, child) {
+        // Determine if this item should be clickable
+        bool isEnabled = true;
 
-    if (!hasInternet && type == LibraryItemType.album && imageUrl != null) {
-      isEnabled = offlineManager.isAvailableOffline(albumId: id);
-    }
+        if (!value) {
+          switch (type) {
+            case LibraryItemType.album:
+              isEnabled = offlineManager.isAvailableOffline(albumId: id);
+              break;
+            case LibraryItemType.likedSongs:
+            case LibraryItemType.allSongs:
+              isEnabled = true;
+              break;
+            default:
+              isEnabled = false;
+          }
+        }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: isEnabled ? onTap : null,
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: imageUrl == null ? fallbackColor : null,
-              borderRadius:
-                  type == LibraryItemType.artist
-                      ? BorderRadius.circular(60)
-                      : BorderRadius.circular(6),
-            ),
-            child:
-                imageUrl == null
-                    ? Icon(
-                      title.toLowerCase().contains('liked')
-                          ? Icons.favorite
-                          : Icons.music_note,
-                      color: Colors.black54,
-                      size: 24,
-                    )
-                    : CacheNetWorkImg(
-                      url: imageUrl!,
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                      borderRadius:
-                          type == LibraryItemType.artist
-                              ? BorderRadius.circular(60)
-                              : BorderRadius.circular(6),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: isEnabled ? onTap : null,
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: imageUrl == null ? fallbackColor : null,
+                  borderRadius:
+                      type == LibraryItemType.artist
+                          ? BorderRadius.circular(60)
+                          : BorderRadius.circular(6),
+                ),
+                child:
+                    imageUrl == null
+                        ? Icon(
+                          title.toLowerCase().contains('liked')
+                              ? Icons.favorite
+                              : Icons.music_note,
+                          color: Colors.black54,
+                          size: 24,
+                        )
+                        : CacheNetWorkImg(
+                          url: imageUrl!,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          borderRadius:
+                              type == LibraryItemType.artist
+                                  ? BorderRadius.circular(60)
+                                  : BorderRadius.circular(6),
+                        ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: isEnabled ? Colors.white : Colors.white38,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 17,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: isEnabled ? Colors.white : Colors.white38,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 17,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitleText,
+                      style: TextStyle(
+                        color: isEnabled ? Colors.white70 : Colors.white38,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitleText,
-                  style: TextStyle(
-                    color: isEnabled ? Colors.white70 : Colors.white38,
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

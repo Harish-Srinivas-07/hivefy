@@ -79,12 +79,11 @@ class _MyAppState extends ConsumerState<MyApp> {
         return DynamicColorBuilder(
           builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
             final ColorScheme lightScheme =
-                lightDynamic ??
-                ColorScheme.fromSeed(seedColor: Colors.greenAccent);
+                lightDynamic ?? ColorScheme.fromSeed(seedColor: spotifyGreen);
             final ColorScheme darkScheme =
                 darkDynamic ??
                 ColorScheme.fromSeed(
-                  seedColor: Colors.greenAccent,
+                  seedColor: spotifyGreen,
                   brightness: Brightness.dark,
                 );
 

@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shared/constants.dart';
 import '../shared/player.dart';
+import '../utils/theme.dart';
+import 'features/drawer.dart';
 import 'dashboard.dart';
 import 'library.dart';
 import 'search.dart';
@@ -71,7 +73,7 @@ class _HomeState extends ConsumerState<Home>
       },
       child: Scaffold(
         key: _scaffoldKey,
-        drawer: _buildSideDrawer(),
+        drawer: SideDrawer(),
         body: Stack(
           children: [
             IndexedStack(index: tabIndex, children: _navigators),
@@ -97,59 +99,22 @@ class _HomeState extends ConsumerState<Home>
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.home, size: 30),
           title: Text('Home', style: TextStyle(fontSize: 16)),
-          activeColor: Colors.greenAccent,
+          activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyLight.search, size: 30),
           title: Text('Search', style: TextStyle(fontSize: 16)),
-          activeColor: Colors.greenAccent,
+          activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.chart, size: 30),
           title: Text('Library', style: TextStyle(fontSize: 16)),
-          activeColor: Colors.greenAccent,
+          activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),
       ],
     );
   }
-}
-
-Widget _buildSideDrawer() {
-  return Drawer(
-    backgroundColor: const Color(0xFF121212),
-    child: ListView(
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-      children: [
-        Row(
-          children: const [
-            CircleAvatar(
-              radius: 25,
-              backgroundImage: AssetImage('assets/icons/logo.png'),
-            ),
-            SizedBox(width: 12),
-            Text('Hivefy', style: TextStyle(color: Colors.white, fontSize: 18)),
-          ],
-        ),
-        const SizedBox(height: 30),
-        _drawerItem(Icons.home, "Home"),
-        _drawerItem(Icons.library_music, "Your Library"),
-        _drawerItem(Icons.favorite, "Liked Songs"),
-        _drawerItem(Icons.settings, "Settings"),
-      ],
-    ),
-  );
-}
-
-Widget _drawerItem(IconData icon, String title) {
-  return ListTile(
-    leading: Icon(icon, color: Colors.white70),
-    title: Text(title, style: const TextStyle(color: Colors.white)),
-    onTap: () {
-      // Navigator.pop(context);
-      // handle your navigation logic if needed
-    },
-  );
 }

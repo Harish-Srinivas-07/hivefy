@@ -624,6 +624,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.7.2"
+  intl:
+    dependency: "direct main"
+    description:
+      name: intl
+      sha256: "3df61194eb431efc39c4ceba583b95633a403f46c9fd341e550ce0bfa50e9aa5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.20.2"
   io:
     dependency: transitive
     description:
@@ -808,6 +816,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.1"
+  palette_generator_master:
+    dependency: "direct main"
+    description:
+      name: palette_generator_master
+      sha256: "2b27a3d9f773c5bc407ed828589488777f73fa23cd24abe6a9b90249a41a7df0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   path:
     dependency: transitive
     description:

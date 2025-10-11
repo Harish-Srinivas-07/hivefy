@@ -536,8 +536,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         mediaItem.add(songToMediaItem(last));
 
         final dominant = await getDominantColorFromImage(last.images.last.url);
-        if (dominant == null) return;
-        ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
+        ref.read(playerColourProvider.notifier).state = dominant;
       } catch (e) {
         debugPrint('--> initLastPlayed catch: $e');
       }

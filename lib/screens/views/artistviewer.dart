@@ -56,10 +56,8 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     if (imageUrl.isEmpty) return;
 
     final dominant = await getDominantColorFromImage(imageUrl);
-    if (dominant != null && mounted) {
-      artistCoverColour = dominant;
-      setState(() {});
-    }
+    artistCoverColour = getDominantLighter(dominant);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -152,7 +150,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                 _artist!.bio.map((bio) => sanitizeBio(bio)).join("\n\n"),
                 trimLines: 3,
                 trimMode: TrimMode.Line,
-                colorClickableText: Colors.greenAccent,
+                colorClickableText: spotifyGreen,
                 trimCollapsedText: " ...more",
                 trimExpandedText: " Show less",
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
@@ -226,10 +224,11 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(shape: BoxShape.circle),
-              child: Icon(
-                isShuffle ? Icons.shuffle : Icons.shuffle,
-                color: isShuffle ? Colors.greenAccent : Colors.grey[600],
-                size: 24,
+              child: Image.asset(
+                'assets/icons/shuffle.png',
+                width: 24,
+                height: 24,
+                color: isShuffle ? spotifyGreen : Colors.grey[600],
               ),
             ),
           ),
@@ -447,8 +446,9 @@ class ArtistSongRow extends ConsumerWidget {
       editModeOffset: 2,
       leadingActions: [
         SwipeAction(
-          color: Colors.greenAccent.shade700,
-          icon: const Icon(Icons.playlist_add),
+          color: spotifyGreen,
+          icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
@@ -534,8 +534,7 @@ class ArtistSongRow extends ConsumerWidget {
                           child: Text(
                             song.title,
                             style: TextStyle(
-                              color:
-                                  isPlaying ? Colors.greenAccent : Colors.white,
+                              color: isPlaying ? spotifyGreen : Colors.white,
                               fontWeight: FontWeight.w500,
                               fontSize: 16,
                             ),
@@ -557,10 +556,16 @@ class ArtistSongRow extends ConsumerWidget {
                 ),
               ),
               if (isLiked)
-                const Padding(
-                  padding: EdgeInsets.only(left: 10),
-                  child: Icon(Icons.check_circle, color: Colors.green),
-                ),
+                if (isLiked)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: Image.asset(
+                      'assets/icons/tick.png',
+                      width: 20,
+                      height: 20,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
             ],
           ),
         ),

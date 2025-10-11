@@ -6,12 +6,14 @@ import 'package:just_audio/just_audio.dart';
 import '../../components/snackbar.dart';
 import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
+import '../../services/latestsaavnfetcher.dart';
 import '../../services/offlinemanager.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
+import 'artistviewer.dart';
 
 class AlbumViewer extends ConsumerStatefulWidget {
   final String albumId;
@@ -23,6 +25,7 @@ class AlbumViewer extends ConsumerStatefulWidget {
 
 class _AlbumViewerState extends ConsumerState<AlbumViewer> {
   Album? _album;
+  List<Album> _similarAlbum = [];
   List<SongDetail> _albumSongDetails = [];
   bool _loading = true;
   int _totalAlbumDuration = 0;
@@ -74,18 +77,64 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
     _loading = false;
     if (mounted) setState(() {});
+
+    if (!mounted) return;
+    _similarAlbum = (await LatestSaavnFetcher.getLatestAlbums('tamil'))
+      ..shuffle();
+    _similarAlbum = _similarAlbum.take(5).toList();
   }
 
   Future<void> _updateBgColor() async {
     if (_album?.images.last.url.isEmpty ?? true) return;
 
     final dominant = await getDominantColorFromImage(_album!.images.last.url);
-    if (dominant == null) return;
+
     if (!mounted) return;
 
-    albumCoverColour = dominant;
+    albumCoverColour = getDominantLighter(dominant);
 
     if (mounted) setState(() {});
+  }
+
+  Widget _buildAlbumList(String title, List<Album> albums) {
+    if (_loading) return buildAlbumShimmer();
+    if (albums.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: 200,
+            child: PageView.builder(
+              controller: PageController(viewportFraction: 0.45),
+              padEnds: false,
+              itemCount: albums.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: AlbumRow(album: albums[index]),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSwipeSongCard(SongDetail song) {
@@ -100,8 +149,9 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
       editModeOffset: 2,
       leadingActions: [
         SwipeAction(
-          color: Colors.greenAccent.shade700,
-          icon: const Icon(Icons.playlist_add),
+          color: spotifyGreen,
+          icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
@@ -214,9 +264,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                   song.title,
                                   style: TextStyle(
                                     color:
-                                        isPlaying
-                                            ? Colors.greenAccent
-                                            : Colors.white,
+                                        isPlaying ? spotifyGreen : Colors.white,
                                     fontWeight: FontWeight.w500,
                                     fontSize: 16,
                                   ),
@@ -243,12 +291,13 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
                     // Liked song indicator
                     if (isLiked)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 20,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Image.asset(
+                          'assets/icons/tick.png',
+                          width: 20,
+                          height: 20,
+                          fit: BoxFit.contain,
                         ),
                       ),
 
@@ -289,10 +338,11 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(shape: BoxShape.circle),
-              child: Icon(
-                isShuffle ? Icons.shuffle : Icons.shuffle,
-                color: isShuffle ? Colors.greenAccent : Colors.grey[600],
-                size: 24,
+              child: Image.asset(
+                'assets/icons/shuffle.png',
+                width: 24,
+                height: 24,
+                color: isShuffle ? spotifyGreen : Colors.grey[600],
               ),
             ),
           ),
@@ -398,7 +448,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                 'assets/icons/complete_download.png',
                 width: 32,
                 height: 32,
-                color: Colors.greenAccent,
+                color: spotifyGreen,
               );
               onTap = () async {
                 for (final song in album.songs) {
@@ -416,7 +466,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                   padding: const EdgeInsets.all(6.0),
                   child: CircularProgressIndicator(
                     value: downloadedCount / album.songs.length,
-                    color: Colors.greenAccent,
+                    color: spotifyGreen,
                     strokeWidth: 2.2,
                     backgroundColor: Colors.grey.shade800,
                   ),
@@ -624,6 +674,13 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                         final song = _album!.songs[index];
                         return _buildSwipeSongCard(song);
                       }, childCount: _album!.songs.length),
+                    ),
+
+                    SliverToBoxAdapter(
+                      child: _buildAlbumList(
+                        'You might also like',
+                        _similarAlbum,
+                      ),
                     ),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 100)),

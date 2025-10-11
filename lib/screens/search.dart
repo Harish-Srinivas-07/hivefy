@@ -324,7 +324,7 @@ class SearchState extends ConsumerState<Search> {
                   style: TextStyle(
                     color:
                         ref.watch(currentSongProvider)?.id == p.id
-                            ? Colors.greenAccent
+                            ? spotifyGreen
                             : Colors.white,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
@@ -379,7 +379,7 @@ class SearchState extends ConsumerState<Search> {
               width: 10,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.greenAccent,
+                color: spotifyGreen,
               ),
             ),
           )
@@ -474,15 +474,14 @@ class SearchState extends ConsumerState<Search> {
             child: ChoiceChip(
               label: Text(type.name[0].toUpperCase() + type.name.substring(1)),
               selected: _selectedFilter == type,
-              selectedColor: Colors.greenAccent.withAlpha(51),
-              checkmarkColor: Colors.greenAccent,
+              selectedColor: spotifyGreen.withAlpha(51),
+              checkmarkColor: spotifyGreen,
               onSelected:
                   (_) => setState(() {
                     _selectedFilter = _selectedFilter == type ? null : type;
                   }),
               labelStyle: TextStyle(
-                color:
-                    _selectedFilter == type ? Colors.greenAccent : Colors.white,
+                color: _selectedFilter == type ? spotifyGreen : Colors.white,
               ),
               backgroundColor: Colors.grey[900],
               showCheckmark: false,
@@ -495,7 +494,7 @@ class SearchState extends ConsumerState<Search> {
                 side: BorderSide(
                   color:
                       _selectedFilter == type
-                          ? Colors.greenAccent
+                          ? spotifyGreen
                           : Colors.grey.shade800,
                   width: _selectedFilter == type ? 1 : 0,
                 ),
@@ -558,7 +557,7 @@ class SearchState extends ConsumerState<Search> {
           Expanded(
             child: TextField(
               controller: _controller,
-              cursorColor: Colors.greenAccent,
+              cursorColor: spotifyGreen,
               style: TextStyle(color: Colors.white),
               onTapOutside: (_) => FocusScope.of(context).unfocus(),
               onChanged: _onTextChanged,
@@ -812,7 +811,7 @@ class SearchState extends ConsumerState<Search> {
 
     if (imageUrl != null) {
       final dominant = await getDominantColorFromImage(imageUrl);
-      if (dominant == null) return;
+
       if (!mounted) return;
 
       ref.read(playerColourProvider.notifier).state = dominant;

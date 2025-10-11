@@ -107,16 +107,15 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Future<void> _initInternetChecker() async {
     InternetConnection().onStatusChange.listen((status) {
       if (status == InternetStatus.disconnected) {
-        hasInternet == false;
+        hasInternet.value = false;
         info(
           'Network is unstable.\nKindly switch to a better network.',
           Severity.error,
         );
-        if (mounted) setState(() {});
       } else {
-        hasInternet == true;
-        if (mounted) setState(() {});
+        hasInternet.value = true;
       }
+      if (mounted) setState(() {});
     });
   }
 
@@ -382,7 +381,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
                             colors:
                                 p.id == 'liked'
                                     ? [Colors.purpleAccent, Colors.deepPurple]
-                                    : [Colors.greenAccent, Colors.teal],
+                                    : [spotifyGreen, Colors.teal],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),

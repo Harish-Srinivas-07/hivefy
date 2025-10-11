@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  intl:
   shared_preferences:
   package_info_plus:
   dynamic_color:
@@ -43,6 +44,7 @@ dependencies:
   flutter_local_notifications:
   permission_handler:
   internet_connection_checker_plus:
+  palette_generator_master:
 
 dev_dependencies:
   flutter_test:

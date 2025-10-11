@@ -62,10 +62,10 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     final dominant = await getDominantColorFromImage(
       _playlist!.images.last.url,
     );
-    if (dominant == null) return;
+
     if (!mounted) return;
 
-    playlistCoverColor = dominant;
+    playlistCoverColor = getDominantLighter(dominant);
 
     if (mounted) setState(() {});
   }
@@ -210,10 +210,11 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(shape: BoxShape.circle),
-              child: Icon(
-                isShuffle ? Icons.shuffle : Icons.shuffle,
-                color: isShuffle ? Colors.greenAccent : Colors.grey[600],
-                size: 24,
+              child: Image.asset(
+                'assets/icons/shuffle.png',
+                width: 24,
+                height: 24,
+                color: isShuffle ? spotifyGreen : Colors.grey[600],
               ),
             ),
           ),
@@ -376,8 +377,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                           _playlist!.description,
                                           trimLines: 3,
                                           trimMode: TrimMode.Line,
-                                          colorClickableText:
-                                              Colors.greenAccent,
+                                          colorClickableText: spotifyGreen,
                                           trimCollapsedText: " ...more",
                                           trimExpandedText: " Show less",
                                           style: TextStyle(
@@ -455,8 +455,8 @@ class SongRow extends ConsumerWidget {
       editModeOffset: 2,
       leadingActions: [
         SwipeAction(
-          color: Colors.greenAccent.shade700,
-          icon: const Icon(Icons.playlist_add),
+          color: spotifyGreen,
+          icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
@@ -524,8 +524,7 @@ class SongRow extends ConsumerWidget {
                           child: Text(
                             song.title,
                             style: TextStyle(
-                              color:
-                                  isPlaying ? Colors.greenAccent : Colors.white,
+                              color: isPlaying ? spotifyGreen : Colors.white,
                               fontWeight: FontWeight.w500,
                               fontSize: 16,
                             ),
@@ -547,7 +546,17 @@ class SongRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (isLiked) const Icon(Icons.check_circle, color: Colors.green),
+              if (isLiked)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Image.asset(
+                    'assets/icons/tick.png',
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+
               // Menu icon
               IconButton(
                 icon: const Icon(

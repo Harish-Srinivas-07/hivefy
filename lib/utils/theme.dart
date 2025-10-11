@@ -1,8 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:palette_generator_master/palette_generator_master.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Color spotifyBgColor = Color(0xFF121212);
+const Color spotifyBgColor = Color(0xFF121212);
+const Color spotifyGreen = Color(0xFF1DDA63);
 
 class ThemeController {
   static final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(
@@ -74,38 +76,47 @@ class ThemeController {
   }
 }
 
-Future<Color?> getDominantColorFromImage(String imageUrl) async {
+Future<Color> getDominantColorFromImage(String imageUrl) async {
   try {
-    // Use CachedNetworkImageProvider to leverage cache
     final imageProvider = CachedNetworkImageProvider(imageUrl);
 
-    final colorScheme = await ColorScheme.fromImageProvider(
-      provider: imageProvider,
+    final palette = await PaletteGeneratorMaster.fromImageProvider(
+      imageProvider,
+      maximumColorCount: 16,
+      colorSpace: ColorSpace.lab,
+      generateHarmony: false,
     );
 
-    debugPrint(
-      '--> Dominant color: ${colorScheme.primary}, Brightness: ${colorScheme.brightness}',
-    );
+    // Filter for colors that are dark but not black
+    final darkColors =
+        palette.paletteColors.map((e) => e.color).where((c) {
+          final hsl = HSLColor.fromColor(c);
+          return hsl.lightness < 0.35; // dark
+        }).toList();
 
-    // Return the primary color as the dominant one
-    return colorScheme.primary;
+    if (darkColors.isNotEmpty) {
+      // Pick the one with lowest lightness (darkest)
+      darkColors.sort(
+        (a, b) => HSLColor.fromColor(
+          a,
+        ).lightness.compareTo(HSLColor.fromColor(b).lightness),
+      );
+      return darkColors.first;
+    }
+
+    // fallback
+    return Colors.grey.shade900;
   } catch (e) {
-    debugPrint('Error getting dominant color: $e');
-    return null;
+    debugPrint('Error generating dark color: $e');
+    return Colors.grey.shade900;
   }
 }
 
-// darker
-Color darken(Color color, [double amount = .2]) {
-  final hsl = HSLColor.fromColor(color);
+// lighter version
+Color getDominantLighter(Color? color, {double lightenFactor = 0.3}) {
+  final baseColor = color ?? Colors.grey.shade800;
+  final hsl = HSLColor.fromColor(baseColor);
   return hsl
-      .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
-      .withSaturation((hsl.saturation + 0.05).clamp(0.0, 1.0))
+      .withLightness((hsl.lightness + lightenFactor).clamp(0.0, 1.0))
       .toColor();
-}
-
-// font family
-class FontFamilies {
-  static const spotifyMix = "SpotifyMix";
-  static const spotifyMixUltra = "SpotifyMixUltra";
 }

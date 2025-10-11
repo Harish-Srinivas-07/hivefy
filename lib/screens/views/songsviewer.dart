@@ -9,9 +9,11 @@ import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
+import '../../services/offlinemanager.dart';
 import '../../shared/constants.dart';
 import '../../shared/player.dart';
 import '../../utils/format.dart';
+import '../../utils/theme.dart';
 
 class SongsViewer extends ConsumerStatefulWidget {
   final bool showLikedSongs;
@@ -133,142 +135,163 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
     final isPlaying = currentSong?.id == song.id;
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
 
-    return SwipeActionCell(
-      backgroundColor: Colors.transparent,
-      key: ValueKey(song.id),
-      fullSwipeFactor: 0.01,
-      editModeOffset: 2,
-      leadingActions: [
-        SwipeAction(
-          color: Colors.greenAccent.shade700,
-          icon: const Icon(Icons.playlist_add),
-          performsFirstActionWithFullSwipe: true,
-          onTap: (handler) async {
-            final audioHandler = await ref.read(audioHandlerProvider.future);
-            await audioHandler.addSongNext(song);
-            info('${song.title} will play next', Severity.success);
-            await handler(false);
-          },
-        ),
-      ],
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () async {
-          try {
-            final audioHandler = await ref.read(audioHandlerProvider.future);
-            final currentQueue = audioHandler.queueSongs;
-            final sourceId = audioHandler.queueSourceId;
-            final idx = _songs.indexWhere((s) => s.id == song.id);
-            if (idx == -1) return;
+    return ValueListenableBuilder(
+      valueListenable: hasInternet,
+      builder: (context, value, child) {
+        bool isEnabled = true;
 
-            final isSameLikedQueue =
-                sourceId == "liked_songs" && currentQueue.isNotEmpty;
+        if (!value) {
+          isEnabled = offlineManager.isAvailableOffline(songId: song.id);
+        }
 
-            if (isPlaying) {
-              // 🎧 Toggle pause/play
-              final playing =
-                  (await audioHandler.playerStateStream.first).playing;
-              if (playing) {
-                await audioHandler.pause();
-              } else {
+        return SwipeActionCell(
+          backgroundColor: Colors.transparent,
+          key: ValueKey(song.id),
+          fullSwipeFactor: 0.01,
+          editModeOffset: 2,
+          leadingActions: [
+            SwipeAction(
+              color: spotifyGreen,
+              icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+              performsFirstActionWithFullSwipe: true,
+              onTap: (handler) async {
+                final audioHandler = await ref.read(
+                  audioHandlerProvider.future,
+                );
+                await audioHandler.addSongNext(song);
+                info('${song.title} will play next', Severity.success);
+                await handler(false);
+              },
+            ),
+          ],
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              if (!isEnabled) return; // when no internet
+              try {
+                final audioHandler = await ref.read(
+                  audioHandlerProvider.future,
+                );
+                final currentQueue = audioHandler.queueSongs;
+                final sourceId = audioHandler.queueSourceId;
+                final idx = _songs.indexWhere((s) => s.id == song.id);
+                if (idx == -1) return;
+
+                final isSameLikedQueue =
+                    sourceId == "liked_songs" && currentQueue.isNotEmpty;
+
+                if (isPlaying) {
+                  // 🎧 Toggle pause/play
+                  final playing =
+                      (await audioHandler.playerStateStream.first).playing;
+                  if (playing) {
+                    await audioHandler.pause();
+                  } else {
+                    await audioHandler.play();
+                  }
+                  return;
+                }
+
+                if (isSameLikedQueue) {
+                  // 🎯 Already playing liked songs → skip to this song
+                  await audioHandler.skipToQueueItem(idx);
+                } else {
+                  // 🚀 New queue → load liked songs fresh
+                  await audioHandler.loadQueue(
+                    _songs,
+                    startIndex: idx,
+                    sourceId: "7777777",
+                    sourceName: "Liked Songs",
+                  );
+                }
+
                 await audioHandler.play();
+              } catch (e, st) {
+                debugPrint("Error playing liked song: $e\n$st");
               }
-              return;
-            }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Row(
+                children: [
+                  _buildItemImage(
+                    song.images.isNotEmpty ? song.images.last.url : '',
+                  ),
 
-            if (isSameLikedQueue) {
-              // 🎯 Already playing liked songs → skip to this song
-              await audioHandler.skipToQueueItem(idx);
-            } else {
-              // 🚀 New queue → load liked songs fresh
-              await audioHandler.loadQueue(
-                _songs,
-                startIndex: idx,
-                sourceId: "7777777",
-                sourceName: "Liked Songs",
-              );
-            }
-
-            await audioHandler.play();
-          } catch (e, st) {
-            debugPrint("Error playing liked song: $e\n$st");
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Row(
-            children: [
-              _buildItemImage(
-                song.images.isNotEmpty ? song.images.last.url : '',
-              ),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (isPlaying)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: Image(
-                              image: AssetImage('assets/icons/player.gif'),
-                              height: 18,
-                              fit: BoxFit.contain,
+                        Row(
+                          children: [
+                            if (isPlaying)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Image(
+                                  image: AssetImage('assets/icons/player.gif'),
+                                  height: 18,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                song.title,
+                                style: TextStyle(
+                                  color:
+                                      isPlaying
+                                          ? spotifyGreen
+                                          : isEnabled
+                                          ? Colors.white
+                                          : Colors.white38,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
                             ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            song.title,
-                            style: TextStyle(
-                              color:
-                                  isPlaying ? Colors.greenAccent : Colors.white,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 16,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          song.primaryArtists.isNotEmpty
+                              ? song.primaryArtists
+                              : song.album,
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      song.primaryArtists.isNotEmpty
-                          ? song.primaryArtists
-                          : song.album,
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
-              ),
-              if (isLiked)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 20,
                   ),
-                ),
+                  if (isLiked)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Image.asset(
+                        'assets/icons/tick.png',
+                        width: 20,
+                        height: 20,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
 
-              // Menu icon
-              IconButton(
-                icon: const Icon(
-                  Icons.more_vert,
-                  color: Colors.white70,
-                  size: 20,
-                ),
-                onPressed: () {
-                  // TODO: Show song menu
-                },
+                  // Menu icon
+                  IconButton(
+                    icon: const Icon(
+                      Icons.more_vert,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      // TODO: Show song menu
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -342,10 +365,11 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: const BoxDecoration(shape: BoxShape.circle),
-                  child: Icon(
-                    Icons.shuffle,
-                    color: isShuffle ? Colors.greenAccent : Colors.grey[600],
-                    size: 24,
+                  child: Image.asset(
+                    'assets/icons/shuffle.png',
+                    width: 24,
+                    height: 24,
+                    color: isShuffle ? spotifyGreen : Colors.grey[600],
                   ),
                 ),
               ),

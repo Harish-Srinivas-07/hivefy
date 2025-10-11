@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
+import '../../utils/theme.dart';
 
 final queueStreamProvider = StreamProvider.autoDispose
     .family<List<MediaItem>, MyAudioHandler>((ref, handler) => handler.queue);
@@ -123,7 +124,7 @@ class QueueList extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.greenAccent,
+                                color: spotifyGreen,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),

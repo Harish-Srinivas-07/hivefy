@@ -51,10 +51,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     if (song?.images.isEmpty ?? true) return;
 
     final dominant = await getDominantColorFromImage(song!.images.last.url);
-    if (dominant == null) return;
+
     if (!mounted) return;
 
-    ref.read(playerColourProvider.notifier).state = darken(dominant, 0.1);
+    ref.read(playerColourProvider.notifier).state = dominant;
   }
 
   @override
@@ -132,7 +132,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -170,20 +173,22 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                         ),
 
                         // Like / Add button
-                        IconButton(
-                          onPressed: () {
+                        GestureDetector(
+                          onTap: () {
                             ref
                                 .read(likedSongsProvider.notifier)
                                 .toggle(song.id);
                           },
-                          icon: Icon(
+                          child: Image.asset(
                             isLiked
-                                ? Icons.check_circle
-                                : Icons.add_circle_outline,
-                            color: isLiked ? Colors.green : Colors.white,
-                            size: 28,
+                                ? 'assets/icons/tick.png'
+                                : 'assets/icons/add.png',
+                            width: 32,
+                            height: 32,
+                            color: isLiked ? spotifyGreen : Colors.white,
                           ),
                         ),
+                        const SizedBox(width: 3),
 
                         // Play / Pause / Loading button
                         SizedBox(
@@ -205,7 +210,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                                     height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.greenAccent,
+                                      color: spotifyGreen,
                                     ),
                                   );
                                 }
@@ -306,9 +311,9 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     if (song?.images.isEmpty ?? true) return;
 
     final dominant = await getDominantColorFromImage(song!.images.last.url);
-    if (dominant == null) return;
-
-    ref.read(playerColourProvider.notifier).state = dominant;
+    ref.read(playerColourProvider.notifier).state = getDominantLighter(
+      dominant,
+    );
 
     if (mounted) setState(() {});
   }
@@ -617,7 +622,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.greenAccent,
+                                color: spotifyGreen,
                               ),
                             ),
                           ],
@@ -659,7 +664,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   _ControlButton(
                     iconWidget: Image.asset(
                       'assets/icons/shuffle.png',
-                      color: isShuffle ? Colors.greenAccent : Colors.white70,
+                      color: isShuffle ? spotifyGreen : Colors.white70,
                       height: 24,
                       width: 24,
                     ),
@@ -711,7 +716,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                       color:
                           repeatMode == RepeatMode.none
                               ? Colors.white70
-                              : Colors.greenAccent,
+                              : spotifyGreen,
                       height: 24,
                       width: 24,
                     ),
@@ -829,7 +834,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                 'assets/icons/complete_download.png',
                 width: 32,
                 height: 32,
-                color: Colors.greenAccent,
+                color: spotifyGreen,
               );
               onTap = () async => await offlineManager.deleteSong(song.id);
             } else if (status == DownloadStatus.downloading) {
@@ -840,7 +845,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   padding: const EdgeInsets.all(6.0),
                   child: CircularProgressIndicator(
                     value: progress / 100,
-                    color: Colors.greenAccent,
+                    color: spotifyGreen,
                     strokeWidth: 2.2,
                     backgroundColor: Colors.grey.shade800,
                   ),
@@ -1061,6 +1066,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                 vertical: 15,
                               ),
                               child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Expanded(
@@ -1095,21 +1101,24 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                     ),
                                   ),
                                   Padding(
-                                    padding: const EdgeInsets.only(left: 8.0),
-                                    child: IconButton(
-                                      icon: Icon(
-                                        isLiked
-                                            ? Icons.favorite
-                                            : Icons.favorite_border,
-                                      ),
-                                      color:
-                                          isLiked ? Colors.red : Colors.white,
-                                      tooltip: "Add to liked songs",
-                                      onPressed: () {
+                                    padding: const EdgeInsets.only(right: 10),
+                                    child: GestureDetector(
+                                      onTap: () {
                                         ref
                                             .read(likedSongsProvider.notifier)
                                             .toggle(song.id);
                                       },
+                                      child: Image.asset(
+                                        isLiked
+                                            ? 'assets/icons/tick.png'
+                                            : 'assets/icons/add.png',
+                                        width: 36,
+                                        height: 36,
+                                        color:
+                                            isLiked
+                                                ? spotifyGreen
+                                                : Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1296,7 +1305,7 @@ class _ControlButton extends StatelessWidget {
                   width: 4,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.greenAccent,
+                    color: spotifyGreen,
                     shape: BoxShape.circle,
                   ),
                 ),
