@@ -44,6 +44,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   bool _shuffle = false;
   RepeatMode _repeat = RepeatMode.none;
   List<int>? _shuffleOrder;
+  Duration _lastPosition = Duration.zero;
 
   MyAudioHandler(this.ref) {
     // keep system playbackState in sync
@@ -74,6 +75,18 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       final current = mediaItem.value;
       if (current != null && dur != null && current.duration != dur) {
         mediaItem.add(current.copyWith(duration: dur));
+      }
+    });
+
+    // duration watch
+    _player.positionStream.listen((pos) async {
+      final current = currentSong;
+      if (current != null) {
+        final delta = pos - _lastPosition;
+        if (delta.inSeconds > 1) {
+          await AppDatabase.addPlayedDuration(current.id, delta);
+          _lastPosition = pos;
+        }
       }
     });
 

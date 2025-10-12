@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator_master/palette_generator_master.dart';
@@ -76,47 +78,139 @@ class ThemeController {
   }
 }
 
+// colour defins
+
 Future<Color> getDominantColorFromImage(String imageUrl) async {
   try {
     final imageProvider = CachedNetworkImageProvider(imageUrl);
 
     final palette = await PaletteGeneratorMaster.fromImageProvider(
       imageProvider,
-      maximumColorCount: 16,
+      maximumColorCount: 24,
       colorSpace: ColorSpace.lab,
       generateHarmony: false,
     );
 
-    // Filter for colors that are dark but not black
-    final darkColors =
-        palette.paletteColors.map((e) => e.color).where((c) {
-          final hsl = HSLColor.fromColor(c);
-          return hsl.lightness < 0.35; // dark
-        }).toList();
-
-    if (darkColors.isNotEmpty) {
-      // Pick the one with lowest lightness (darkest)
-      darkColors.sort(
-        (a, b) => HSLColor.fromColor(
-          a,
-        ).lightness.compareTo(HSLColor.fromColor(b).lightness),
-      );
-      return darkColors.first;
+    int pop0(dynamic p) {
+      try {
+        return (p.population ?? p.count ?? p.pixelCount ?? 0) as int;
+      } catch (_) {
+        return 0;
+      }
     }
 
-    // fallback
-    return Colors.grey.shade900;
-  } catch (e) {
-    debugPrint('Error generating dark color: $e');
-    return Colors.grey.shade900;
+    final entries = <Map<String, dynamic>>[];
+    int maxPop = 0;
+    for (final e in palette.paletteColors) {
+      final Color c = (e as dynamic).color as Color;
+      final int population = pop0(e);
+      maxPop = max(maxPop, population);
+      entries.add({'color': c, 'pop': population});
+    }
+
+    const double satWeight = 0.45;
+    const double lightWeight = 0.35;
+    const double popWeight = 0.20;
+    const double targetLightness = 0.38;
+
+    double bestScore = -9999;
+    Color? bestColor;
+
+    for (final e in entries) {
+      final Color col = e['color'] as Color;
+      final int pop = e['pop'] as int;
+      if (col.a < 230) continue;
+
+      final hsl = HSLColor.fromColor(col);
+      final l = hsl.lightness;
+      final s = hsl.saturation;
+      final h = hsl.hue;
+
+      // reject unusable colors
+      if (l >= 0.9 || l <= 0.08) continue;
+      if (s < 0.1) continue;
+      if ((h >= 45 && h <= 65) && l > 0.6) continue;
+      if ((h >= 170 && h <= 210) && l > 0.35) continue; // cyan / sky blue
+      if ((h >= 210 && h <= 250) && s > 0.55 && l > 0.4) continue;
+      if (h >= 180 && h <= 210 && l > 0.5) continue;
+
+      final lightScore =
+          1.0 - ((targetLightness - l).abs() / 0.5).clamp(0.0, 1.0);
+      final popNorm = maxPop > 0 ? (pop / maxPop) : 0.0;
+
+      final score =
+          s * satWeight + lightScore * lightWeight + popNorm * popWeight;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestColor = col;
+      }
+    }
+
+    bestColor ??=
+        palette.vibrantColor?.color ??
+        palette.dominantColor?.color ??
+        Colors.indigo.shade800;
+
+    HSLColor hsl = HSLColor.fromColor(bestColor);
+
+    // --- 🔥 Post-fix: correct unwanted blue/cyan tones ---
+    double h = hsl.hue;
+    double s = hsl.saturation;
+    double l = hsl.lightness;
+
+    if (h >= 170 && h <= 210) {
+      // Sky blue → warm amber-brown
+      h = 30;
+      s = (s * 0.7).clamp(0.0, 1.0);
+      l = (l * 0.55).clamp(0.0, 0.6);
+    } else if (h >= 210 && h <= 250) {
+      // Pure blue → indigo-violet
+      h = 265;
+      s = (s * 0.6).clamp(0.0, 1.0);
+      l = (l * 0.5).clamp(0.0, 0.55);
+    } else if ((h >= 40 && h <= 65 && l > 0.45) ||
+        (h >= 70 && h <= 150 && l > 0.55)) {
+      // Bright yellow or light green → brownish tone
+      h = 30;
+      s = (s * 0.7).clamp(0.0, 1.0);
+      l = (l * 0.55).clamp(0.0, 0.6);
+    }
+
+    // --- Saturation & lightness tweaks for readability ---
+    if (s < 0.25) s = (s + 0.25).clamp(0.0, 1.0);
+    l = l.clamp(0.18, 0.65);
+
+    hsl = HSLColor.fromAHSL(hsl.alpha, h, s, l);
+
+    final result = hsl.toColor();
+    debugPrint('--> corrected dominant colour: $result');
+
+    return result;
+  } catch (e, st) {
+    debugPrint('Error generating dominant color: $e\n$st');
+    return Colors.indigo.shade800;
   }
 }
 
-// lighter version
-Color getDominantLighter(Color? color, {double lightenFactor = 0.3}) {
-  final baseColor = color ?? Colors.grey.shade800;
+// lighter but safe
+Color getDominantLighter(Color? color, {double lightenFactor = 0.22}) {
+  final baseColor = color ?? Colors.indigo.shade800;
   final hsl = HSLColor.fromColor(baseColor);
-  return hsl
-      .withLightness((hsl.lightness + lightenFactor).clamp(0.0, 1.0))
-      .toColor();
+
+  final newLight = (hsl.lightness + lightenFactor).clamp(0.0, 0.75);
+  final newSat = max(hsl.saturation, 0.25);
+
+  return hsl.withLightness(newLight).withSaturation(newSat).toColor();
+}
+
+// darker but not dead black
+Color getDominantDarker(Color? color, {double darkenFactor = 0.18}) {
+  final baseColor = color ?? Colors.indigo.shade800;
+  final hsl = HSLColor.fromColor(baseColor);
+
+  final newLight = (hsl.lightness - darkenFactor).clamp(0.12, 1.0);
+  final newSat = (hsl.saturation + 0.1).clamp(0.0, 1.0);
+
+  return hsl.withLightness(newLight).withSaturation(newSat).toColor();
 }

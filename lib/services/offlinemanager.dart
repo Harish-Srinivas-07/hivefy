@@ -417,4 +417,29 @@ class OfflineStorageManager {
     }
     return _albumStatusNotifiers[albumId]!;
   }
+
+  /// Returns total storage used by offline songs in bytes
+  Future<double> getOfflineStorageUsed() async {
+    double totalBytes = 0;
+    for (final path in _offlineSongs.values) {
+      final file = File(path);
+      if (file.existsSync()) {
+        totalBytes += file.lengthSync();
+      }
+    }
+    return totalBytes;
+  }
+
+  /// Optional helper: return in human-readable format
+  Future<String> getOfflineStorageUsedFormatted() async {
+    final bytes = await getOfflineStorageUsed();
+    const kb = 1024;
+    const mb = 1024 * kb;
+    const gb = 1024 * mb;
+
+    if (bytes >= gb) return "${(bytes / gb).toStringAsFixed(2)} GB";
+    if (bytes >= mb) return "${(bytes / mb).toStringAsFixed(2)} MB";
+    if (bytes >= kb) return "${(bytes / kb).toStringAsFixed(2)} KB";
+    return "$bytes B";
+  }
 }

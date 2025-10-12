@@ -12,6 +12,8 @@ import '../shared/constants.dart';
 import '../shared/player.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
+import 'features/language.dart';
+import 'features/profile.dart';
 import 'views/albumviewer.dart';
 import 'views/artistviewer.dart';
 import 'views/playlistviewer.dart';
@@ -176,7 +178,10 @@ class SearchState extends ConsumerState<Search> {
       _clearResults();
     });
 
-    final results = await saavn.globalSearch(suggestion);
+    String langSpecificSearch =
+        '$suggestion ${ref.read(languageNotifierProvider).value}';
+
+    final results = await saavn.globalSearch(langSpecificSearch);
 
     if (!mounted || results == null) return;
 
@@ -195,7 +200,10 @@ class SearchState extends ConsumerState<Search> {
     if (mounted) setState(() {});
 
     // Fetch extras
-    final extraSongs = await saavn.searchSongs(query: suggestion, limit: 10);
+    final extraSongs = await saavn.searchSongs(
+      query: langSpecificSearch,
+      limit: 10,
+    );
     if (extraSongs.isNotEmpty) {
       final existingIds = songs.map((s) => s.id).toSet();
       songs.addAll(extraSongs.where((s) => !existingIds.contains(s.id)));
@@ -203,7 +211,7 @@ class SearchState extends ConsumerState<Search> {
     }
 
     final extraArtistsResponse = await saavn.searchArtists(
-      query: suggestion,
+      query: langSpecificSearch,
       limit: 10,
     );
     if (extraArtistsResponse != null &&
@@ -216,7 +224,7 @@ class SearchState extends ConsumerState<Search> {
     }
 
     final extraPlaylistsResponse = await saavn.searchPlaylists(
-      query: suggestion,
+      query: langSpecificSearch,
       limit: 10,
     );
 
@@ -509,6 +517,12 @@ class SearchState extends ConsumerState<Search> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch language listener
+    final languageNotifier = ref.watch(languageNotifierProvider);
+    languageNotifier.addListener(() {
+      _init();
+    });
+
     return Scaffold(
       backgroundColor: spotifyBgColor,
       body: SafeArea(child: _buildSearchContent()),
@@ -516,27 +530,40 @@ class SearchState extends ConsumerState<Search> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        GestureDetector(
-          onTap: () => Scaffold.of(context).openDrawer(),
-          behavior: HitTestBehavior.opaque,
-          child: CircleAvatar(
-            radius: 18,
-            backgroundImage: AssetImage('assets/icons/logo.png'),
-          ),
-        ),
-        Text(
-          'Search',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        Icon(Icons.camera_alt_outlined, size: 28, color: Colors.white),
-      ],
+    return FutureBuilder(
+      future: loadProfiles(),
+      builder: (context, snapshot) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            GestureDetector(
+              onTap: () => scaffoldKey.currentState?.openDrawer(),
+              behavior: HitTestBehavior.opaque,
+              child: CircleAvatar(
+                radius: 18,
+                backgroundImage:
+                    (profileFile != null && profileFile!.existsSync())
+                        ? FileImage(profileFile!)
+                        : const AssetImage('assets/icons/logo.png')
+                            as ImageProvider,
+              ),
+            ),
+            const Text(
+              'Search',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const Icon(
+              Icons.camera_alt_outlined,
+              size: 28,
+              color: Colors.white,
+            ),
+          ],
+        );
+      },
     );
   }
 

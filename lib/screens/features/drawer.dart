@@ -1,59 +1,88 @@
+// lib/screens/features/drawer.dart
+
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/constants.dart';
+import '../../utils/theme.dart';
+import 'about.dart';
+import 'language.dart';
+import 'profile.dart';
+import 'settings.dart';
+import 'soundcapsule.dart';
 
-class SideDrawer extends ConsumerWidget {
-  const SideDrawer({super.key});
+typedef DrawerNavigateCallback = void Function(Widget page);
+
+class SideDrawer extends StatelessWidget {
+  final DrawerNavigateCallback? onNavigate;
+
+  const SideDrawer({super.key, this.onNavigate});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
-      child: Drawer(
-        backgroundColor: const Color(0xFF121212),
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: spotifyBgColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 10),
-
-            // --- Header ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundImage: AssetImage('assets/icons/logo.png'),
-                  ),
-                  SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: FutureBuilder(
+                future: loadProfiles(),
+                builder: (context, snapshot) {
+                  return Row(
                     children: [
-                      Text(
-                        'The Oreo',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundImage:
+                            (profileFile != null && profileFile!.existsSync())
+                                ? FileImage(profileFile!)
+                                : const AssetImage('assets/icons/logo.png')
+                                    as ImageProvider,
                       ),
-                      const SizedBox(height: 2),
-                      GestureDetector(
-                        onTap: () {
-                          // handle view profile logic
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Text(
-                          'View Profile',
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            username.isNotEmpty ? username : "Oreo",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          GestureDetector(
+                            onTap: () {
+                              if (onNavigate != null) {
+                                onNavigate!(ProfilePage());
+                              } else {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfilePage(),
+                                  ),
+                                );
+                              }
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            child: const Text(
+                              'View Profile',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
+                  );
+                },
               ),
             ),
 
@@ -64,16 +93,58 @@ class SideDrawer extends ConsumerWidget {
 
             // --- Drawer Items ---
             _DrawerItem(
-              icon: Icons.settings_outlined,
-              title: "Settings",
-              onTap: () {},
+              icon: Icons.bubble_chart_outlined,
+              title: "Sound Capsule",
+              onTap: () {
+                if (onNavigate != null) {
+                  onNavigate!(SoundCapsule());
+                } else {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => SoundCapsule()));
+                }
+              },
             ),
             _DrawerItem(
-              icon: Icons.bubble_chart_outlined,
-              title: "Mini Capsule",
+              icon: Icons.settings_outlined,
+              title: "Settings & Storage",
+              onTap: () {
+                if (onNavigate != null) {
+                  onNavigate!(SettingsPage());
+                } else {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => SettingsPage()));
+                }
+              },
             ),
-            _DrawerItem(icon: Icons.language, title: "Language"),
-            _DrawerItem(icon: Icons.info_outline, title: "About"),
+            _DrawerItem(
+              icon: Icons.language,
+              title: "Language",
+              onTap: () {
+                debugPrint('--> here the press of lang ');
+                if (onNavigate != null) {
+                  onNavigate!(LanguageSetPage());
+                } else {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => LanguageSetPage()));
+                }
+              },
+            ),
+            _DrawerItem(
+              icon: Icons.info_outline,
+              title: "About",
+              onTap: () {
+                if (onNavigate != null) {
+                  onNavigate!(AboutPage());
+                } else {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => AboutPage()));
+                }
+              },
+            ),
 
             const Spacer(),
 
@@ -122,28 +193,23 @@ class _DrawerItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap:
-          onTap ??
-          () {
-            // to do
-          },
-      borderRadius: BorderRadius.circular(6),
+      onTap: onTap ?? () {},
       splashColor: Colors.white10,
       highlightColor: Colors.white10,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 16),
-              child: Icon(icon, color: Colors.white70, size: 22),
+              child: Icon(icon, color: Colors.white70, size: 26),
             ),
             const SizedBox(width: 14),
             Text(
               title,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
             ),

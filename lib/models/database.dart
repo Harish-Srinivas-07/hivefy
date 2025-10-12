@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/jiosaavn.dart';
 import 'datamodel.dart';
+
+final searchPlaylistcache = SearchPlaylistsCache();
 
 class AppDatabase {
   static const _songKey = 'songsDb';
@@ -139,6 +142,49 @@ class AppDatabase {
   static Stream<void> get changes => _changes.stream;
 
   static void notifyChanges() => _changes.add(null);
+
+  // played Duration
+  static Future<void> addPlayedDuration(String songId, Duration played) async {
+    await _init();
+
+    final Map<String, dynamic> songData =
+        _cache[songId] != null ? Map<String, dynamic>.from(_cache[songId]) : {};
+
+    final int oldMs = (songData['playedMs'] as int?) ?? 0;
+    final int newMs = oldMs + played.inMilliseconds;
+
+    songData['playedMs'] = newMs;
+
+    // store last played timestamp
+    songData['lastPlayed'] = DateTime.now().toIso8601String();
+
+    _cache[songId] = songData;
+    await _prefs.setString(_songKey, jsonEncode(_cache));
+    notifyChanges();
+  }
+
+  // ----------------- DURATION PLAYED --------------------------
+  static Future<double> getMonthlyListeningHours({DateTime? month}) async {
+    await _init();
+    final now = month ?? DateTime.now();
+    final y = now.year;
+    final m = now.month;
+
+    int totalMs = 0;
+    for (final entry in _cache.values) {
+      final lastPlayedStr = entry['lastPlayed'] as String?;
+      if (lastPlayedStr != null) {
+        final lastPlayed = DateTime.tryParse(lastPlayedStr);
+        if (lastPlayed != null &&
+            lastPlayed.year == y &&
+            lastPlayed.month == m) {
+          totalMs += (entry['playedMs'] as int?) ?? 0;
+        }
+      }
+    }
+
+    return totalMs / 1000 / 60; // hours
+  }
 }
 
 // Artists
@@ -254,6 +300,25 @@ class ArtistCache {
     _initialized = true;
   }
 
+  /// ✅ Get usage count for a specific artist
+  int getUsageCount(String artistId) {
+    return _usageCount[artistId] ?? 0;
+  }
+
+  /// ✅ Return all artists with their usage counts together
+  Future<List<MapEntry<ArtistDetails, int>>> getAllWithUsage() async {
+    await _init();
+    final list = _cache.values.toList();
+    list.sort((a, b) {
+      final usageA = _usageCount[a.id] ?? 0;
+      final usageB = _usageCount[b.id] ?? 0;
+      return usageB.compareTo(usageA);
+    });
+    return list
+        .map((artist) => MapEntry(artist, _usageCount[artist.id] ?? 0))
+        .toList();
+  }
+
   Future<ArtistDetails?> get(String artistId) async {
     await _init();
     _incrementUsage(artistId);
@@ -350,6 +415,25 @@ class AlbumCache {
     _initialized = true;
   }
 
+  /// ✅ Get usage count for a specific album
+  int getUsageCount(String albumId) {
+    return _usageCount[albumId] ?? 0;
+  }
+
+  /// ✅ Return all albums with their usage counts together
+  Future<List<MapEntry<Album, int>>> getAllWithUsage() async {
+    await _init();
+    final list = _cache.values.toList();
+    list.sort((a, b) {
+      final usageA = _usageCount[a.id] ?? 0;
+      final usageB = _usageCount[b.id] ?? 0;
+      return usageB.compareTo(usageA);
+    });
+    return list
+        .map((album) => MapEntry(album, _usageCount[album.id] ?? 0))
+        .toList();
+  }
+
   Future<Album?> get(String albumId) async {
     await _init();
     _incrementUsage(albumId);
@@ -370,7 +454,7 @@ class AlbumCache {
       list.sort((a, b) {
         final usageA = _usageCount[a.id] ?? 0;
         final usageB = _usageCount[b.id] ?? 0;
-        return usageB.compareTo(usageA); // most used first
+        return usageB.compareTo(usageA);
       });
     }
     return list;
@@ -517,6 +601,137 @@ class PlaylistCache {
   static void notifyPlaylistChanges() => _playlistChanges.add(null);
 }
 
+// Cache for search results of playlists
+class SearchPlaylistsCache {
+  static const _prefsKey = 'search_playlist_cached';
+  static final SearchPlaylistsCache _instance =
+      SearchPlaylistsCache._internal();
+  factory SearchPlaylistsCache() => _instance;
+
+  SearchPlaylistsCache._internal();
+
+  final Map<String, SearchPlaylistsResponse> _cache = {};
+  bool _initialized = false;
+  final SaavnAPI saavn = SaavnAPI();
+
+  /// -----------------------------
+  /// Public init function
+  /// Call this once at app startup
+  /// -----------------------------
+  Future<void> init() async {
+    if (_initialized) return;
+
+    await _loadFromPrefs();
+    _initialized = true;
+  }
+
+  /// Get cached search results if available
+  SearchPlaylistsResponse? getCached(String query) {
+    final result = _cache[query.toLowerCase()];
+    return result;
+  }
+
+  /// Save search response to cache and persist
+  Future<void> setCache(String query, SearchPlaylistsResponse response) async {
+    // Convert full response to JSON map
+    final map = {
+      'total': response.total,
+      'start': response.start,
+      'results':
+          response.results.map((p) => Playlist.playlistToJson(p)).toList(),
+    };
+    _cache[query.toLowerCase()] = response;
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_prefsKey);
+    Map<String, dynamic> all = stored != null ? jsonDecode(stored) : {};
+    all[query.toLowerCase()] = map;
+    await prefs.setString(_prefsKey, jsonEncode(all));
+  }
+
+  /// Search playlists with API, use cache first, then fetch full playlists
+  Future<List<Playlist>> searchPlaylistCache({
+    required String query,
+    int page = 0,
+    int limit = 10,
+    ArtistSongsSortBy sortBy = ArtistSongsSortBy.popularity,
+    SortOrder sortOrder = SortOrder.desc,
+  }) async {
+    if (query.isEmpty) return [];
+    final lowerQuery = query.toLowerCase();
+
+    if (!_initialized) await init(); // make sure cache is loaded
+
+    // Try cached search results first
+    SearchPlaylistsResponse? searchResponse = getCached(lowerQuery);
+    if (searchResponse == null) {
+      searchResponse = await saavn.searchPlaylists(
+        query: lowerQuery,
+        page: page,
+        limit: limit,
+      );
+      if (searchResponse != null) {
+        await setCache(lowerQuery, searchResponse);
+      }
+    }
+    if (searchResponse == null || searchResponse.results.isEmpty) {
+      return [];
+    }
+
+    final List<Playlist> fullPlaylists = [];
+
+    // Fetch full playlist details in parallel
+    final futures =
+        searchResponse.results.map((partial) async {
+          final full = await saavn.fetchPlaylistById(
+            playlistId: partial.id,
+            page: page,
+            limit: limit,
+            sortBy: sortBy,
+            sortOrder: sortOrder,
+          );
+          if (full != null) {
+            fullPlaylists.add(full);
+            await PlaylistCache().set(
+              full.id,
+              full,
+            ); // also cache full playlist
+          }
+        }).toList();
+
+    await Future.wait(futures);
+
+    return fullPlaylists;
+  }
+
+  /// Load cache from SharedPreferences
+  Future<void> _loadFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_prefsKey);
+    if (stored != null) {
+      try {
+        final Map<String, dynamic> decoded = jsonDecode(stored);
+        decoded.forEach((key, value) {
+          final Map<String, dynamic> map = Map<String, dynamic>.from(value);
+          final results =
+              (map['results'] as List<dynamic>? ?? [])
+                  .map((e) => Playlist.fromJson(Map<String, dynamic>.from(e)))
+                  .toList();
+          final resp = SearchPlaylistsResponse(
+            total: map['total'] ?? results.length,
+            start: map['start'] ?? 0,
+            results: results,
+          );
+          _cache[key] = resp;
+        });
+      } catch (e) {
+        debugPrint(
+          '---> error at fet fetch loadpref of searchplaylist cache $e',
+        );
+      }
+    }
+  }
+}
+
 // ---------------- SEARCH HISTORY ----------------
 List<String> searchHistory = [];
 
@@ -636,15 +851,26 @@ class AllSongsNotifier extends StateNotifier<List<SongDetail>> {
 }
 
 // ---------------- ARTIST CACHE PROVIDER ------------------
-final allArtistsProvider =
-    StateNotifierProvider<ArtistsNotifier, List<ArtistDetails>>((ref) {
-      final notifier = ArtistsNotifier();
-      final sub = ArtistCache.artistChanges.listen((_) {
-        notifier.refresh();
-      });
-      ref.onDispose(sub.cancel);
-      return notifier;
-    });
+final artistsWithUsageNotifier = StateNotifierProvider<
+  ArtistsWithUsageNotifier,
+  List<MapEntry<ArtistDetails, int>>
+>((ref) {
+  final notifier = ArtistsWithUsageNotifier();
+  final sub = ArtistCache.artistChanges.listen((_) => notifier.refresh());
+  ref.onDispose(sub.cancel);
+  return notifier;
+});
+
+class ArtistsWithUsageNotifier
+    extends StateNotifier<List<MapEntry<ArtistDetails, int>>> {
+  ArtistsWithUsageNotifier() : super([]) {
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    state = await ArtistCache().getAllWithUsage();
+  }
+}
 
 class ArtistsNotifier extends StateNotifier<List<ArtistDetails>> {
   ArtistsNotifier() : super([]) {

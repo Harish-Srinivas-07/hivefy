@@ -1,11 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:hivefy/components/snackbar.dart';
-import 'package:hivefy/shared/constants.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../components/shimmers.dart';
 import '../services/defaultfetcher.dart';
@@ -15,7 +14,10 @@ import '../services/offlinemanager.dart';
 import '../services/latestsaavnfetcher.dart';
 
 import '../services/localnotification.dart';
+import '../shared/constants.dart';
 import '../utils/theme.dart';
+import 'features/language.dart';
+import 'features/profile.dart';
 import 'views/albumviewer.dart';
 import 'views/artistviewer.dart';
 import 'views/playlistviewer.dart';
@@ -32,8 +34,6 @@ class _DashboardState extends ConsumerState<Dashboard> {
   bool loading = true;
   List<Playlist> playlists = [];
   List<Playlist> freqplaylists = [];
-  List<Playlist> latestTamilPlayList = [];
-  List<Album> latestTamilAlbums = [];
   List<ArtistDetails> artists = [];
   List<Album> albums = [];
   List<Playlist> freqRecentPlaylists = [];
@@ -47,7 +47,16 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Future<void> _init() async {
     loading = true;
     if (mounted) setState(() {});
+
     _initInternetChecker();
+    if (!mounted) return;
+    initLanguage(ref);
+
+    // Get selected language from provider or SharedPreferences
+    if (!mounted) return;
+    String lang = ref.read(languageNotifierProvider).value;
+    final prefs = await SharedPreferences.getInstance();
+    lang = prefs.getString('app_language') ?? lang;
 
     await Future.delayed(const Duration(seconds: 2));
 
@@ -65,9 +74,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
     freqplaylists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
     albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
 
-    // Latest Tamil content
-    latestTamilPlayList = await LatestSaavnFetcher.getLatestPlaylists('tamil');
-    latestTamilAlbums = await LatestSaavnFetcher.getLatestAlbums('tamil');
+    // // Latest language-specific content
+    latestTamilPlayList = await LatestSaavnFetcher.getLatestPlaylists(lang);
+    latestTamilAlbums = await LatestSaavnFetcher.getLatestAlbums(lang);
 
     debugPrint(
       '--> play ${playlists.length}, artist ${artists.length}, freq ${freqplaylists.length}, albums ${albums.length}, latest play ${latestTamilPlayList.length}, latest album ${latestTamilAlbums.length}',
@@ -76,16 +85,13 @@ class _DashboardState extends ConsumerState<Dashboard> {
     // Build freqRecentPlaylists with exactly 7 items
     freqRecentPlaylists = [];
 
-    // Add up to 3 frequent playlists first
     freqRecentPlaylists.addAll(freqplaylists.take(3));
 
-    // Fill next with latest Tamil playlists (shuffle first)
     final shuffledLatest = List.of(latestTamilPlayList)..shuffle(Random());
     freqRecentPlaylists.addAll(
       shuffledLatest.take(7 - freqRecentPlaylists.length),
     );
 
-    // Fill remaining from all playlists (shuffle first)
     if (freqRecentPlaylists.length < 7) {
       final shuffledAll = List.of(playlists)..shuffle(Random());
       freqRecentPlaylists.addAll(
@@ -93,14 +99,30 @@ class _DashboardState extends ConsumerState<Dashboard> {
       );
     }
 
-    // Ensure exactly 7 items
     if (freqRecentPlaylists.length > 7) {
       freqRecentPlaylists = freqRecentPlaylists.take(7).toList();
     }
 
     loading = false;
     if (mounted) setState(() {});
-    await Future.delayed(const Duration(seconds: 30));
+
+    final minutes = await AppDatabase.getMonthlyListeningHours();
+    debugPrint("You've listened $minutes minutes this month");
+
+    lovePlaylists = await searchPlaylistcache.searchPlaylistCache(
+      query: 'love $lang',
+    );
+    partyPlaylists = await searchPlaylistcache.searchPlaylistCache(
+      query: 'party $lang',
+    );
+
+    debugPrint(
+      '--> SearchPlaylistsCache items: ${lovePlaylists.length} & ${partyPlaylists.length}',
+    );
+
+    if (mounted) setState(() {});
+
+    await Future.delayed(const Duration(seconds: 3));
     await requestNotificationPermission();
   }
 
@@ -108,10 +130,6 @@ class _DashboardState extends ConsumerState<Dashboard> {
     InternetConnection().onStatusChange.listen((status) {
       if (status == InternetStatus.disconnected) {
         hasInternet.value = false;
-        info(
-          'Network is unstable.\nKindly switch to a better network.',
-          Severity.error,
-        );
       } else {
         hasInternet.value = true;
       }
@@ -129,6 +147,12 @@ class _DashboardState extends ConsumerState<Dashboard> {
     final amid = (latestTamilAlbums.length / 2).ceil();
     final topLatestAlbum = latestTamilAlbums.sublist(0, amid);
     final freshAlbum = latestTamilAlbums.sublist(amid);
+
+    // Watch language listener
+    final languageNotifier = ref.watch(languageNotifierProvider);
+    languageNotifier.addListener(() {
+      _init();
+    });
 
     return Scaffold(
       backgroundColor: spotifyBgColor,
@@ -158,7 +182,6 @@ class _DashboardState extends ConsumerState<Dashboard> {
                     _sectionGrid(freqRecentPlaylists),
                     _sectionList(
                       "Top Latest",
-
                       List.of(topLatest)..shuffle(Random()),
                     ),
                     _sectionAlbumList(
@@ -166,11 +189,19 @@ class _DashboardState extends ConsumerState<Dashboard> {
                       List.of(topLatestAlbum)..shuffle(Random()),
                     ),
                     _sectionList("Fresh", List.of(fresh)..shuffle(Random())),
+                    _sectionList(
+                      "Party Mode",
+                      List.of(partyPlaylists)..shuffle(Random()),
+                    ),
                     _sectionArtistList("Fav Artists", artists),
                     _sectionAlbumList("Recent Albums", albums),
                     _sectionAlbumList(
                       "Recommeneded for today",
                       List.of(freshAlbum)..shuffle(Random()),
+                    ),
+                    _sectionList(
+                      "Always Love",
+                      List.of(lovePlaylists)..shuffle(Random()),
                     ),
                     _sectionList(
                       "Century Playlist",
@@ -241,26 +272,35 @@ class _DashboardState extends ConsumerState<Dashboard> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () => Scaffold.of(context).openDrawer(),
-          behavior: HitTestBehavior.opaque,
-          child: const CircleAvatar(
-            radius: 18,
-            backgroundImage: AssetImage('assets/icons/logo.png'),
-          ),
-        ),
-        const SizedBox(width: 15),
-        Text(
-          'Hivefy',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-      ],
+    return FutureBuilder(
+      future: loadProfiles(),
+      builder: (context, snapshot) {
+        return Row(
+          children: [
+            GestureDetector(
+              onTap: () => scaffoldKey.currentState?.openDrawer(),
+              behavior: HitTestBehavior.opaque,
+              child: CircleAvatar(
+                radius: 18,
+                backgroundImage:
+                    (profileFile != null && profileFile!.existsSync())
+                        ? FileImage(profileFile!)
+                        : const AssetImage('assets/icons/logo.png')
+                            as ImageProvider,
+              ),
+            ),
+            const SizedBox(width: 15),
+            const Text(
+              'Hivefy',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

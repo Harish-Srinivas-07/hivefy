@@ -9,6 +9,8 @@ import '../services/offlinemanager.dart';
 import '../shared/constants.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
+import 'features/language.dart';
+import 'features/profile.dart';
 import 'views/albumviewer.dart';
 import 'views/artistviewer.dart';
 import 'views/playlistviewer.dart';
@@ -155,6 +157,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             ? (ref.watch(frequentPlaylistsProvider)).take(5).toList()
             : ref.watch(frequentPlaylistsProvider);
 
+    // Watch language listener
+    final languageNotifier = ref.watch(languageNotifierProvider);
+    languageNotifier.addListener(() {
+      _init();
+    });
+
     items = [
       LibraryCardData(
         id: 'h_liked',
@@ -216,26 +224,35 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return Scaffold(
       backgroundColor: spotifyBgColor,
       appBar: AppBar(
-        title: Row(
-          children: [
-            GestureDetector(
-              onTap: () => Scaffold.of(context).openDrawer(),
-              behavior: HitTestBehavior.opaque,
-              child: const CircleAvatar(
-                radius: 18,
-                backgroundImage: AssetImage('assets/icons/logo.png'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Your Library',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ],
+        title: FutureBuilder(
+          future: loadProfiles(),
+          builder: (context, snapshot) {
+            return Row(
+              children: [
+                GestureDetector(
+                  onTap: () => scaffoldKey.currentState?.openDrawer(),
+                  behavior: HitTestBehavior.opaque,
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundImage:
+                        (profileFile != null && profileFile!.existsSync())
+                            ? FileImage(profileFile!)
+                            : const AssetImage('assets/icons/logo.png')
+                                as ImageProvider,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Your Library',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -254,7 +271,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
                       itemCount: _filteredItems().length,
-
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final item = _filteredItems()[index];

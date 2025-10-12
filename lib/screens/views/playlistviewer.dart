@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:page_transition/page_transition.dart';
 import 'package:readmore/readmore.dart';
 
 import '../../components/snackbar.dart';
@@ -9,6 +10,7 @@ import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
+import '../../services/latestsaavnfetcher.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
@@ -31,6 +33,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
   List<SongDetail> _playlistSongDetails = [];
   int _totalPlaylistDuration = 0;
   Color playlistCoverColor = Colors.indigo;
+  List<Playlist> similarPlaylist = [];
 
   @override
   void initState() {
@@ -65,7 +68,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
 
     if (!mounted) return;
 
-    playlistCoverColor = getDominantLighter(dominant);
+    playlistCoverColor = getDominantDarker(dominant);
 
     if (mounted) setState(() {});
   }
@@ -107,6 +110,9 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
       debugPrint("Error fetching playlist: $e\n$st");
     } finally {
       if (mounted) setState(() => _loading = false);
+      similarPlaylist = (await LatestSaavnFetcher.getLatestPlaylists('tamil'))
+        ..shuffle();
+      similarPlaylist = similarPlaylist.take(5).toList();
     }
   }
 
@@ -291,6 +297,126 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     );
   }
 
+  Widget _sectionList(String title, List<Playlist> list) {
+    if (list.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 220,
+            child: PageView.builder(
+              controller: PageController(viewportFraction: 0.45),
+              padEnds: false,
+              physics: const BouncingScrollPhysics(),
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final playlist = list[index];
+                return Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: _playlistCard(playlist),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _playlistCard(Playlist playlist) {
+    final imageUrl =
+        playlist.images.isNotEmpty ? playlist.images.first.url : '';
+    final subtitle =
+        playlist.artists.isNotEmpty
+            ? playlist.artists.first.title
+            : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
+    final description = playlist.description;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(context).push(
+          PageTransition(
+            type: PageTransitionType.rightToLeft,
+            duration: const Duration(milliseconds: 300),
+            child: PlaylistViewer(playlistId: playlist.id),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child:
+                  imageUrl.isNotEmpty
+                      ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
+                      : Container(
+                        color: Colors.grey.shade800,
+                        child: const Icon(
+                          Icons.album,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Text(
+              playlist.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          if (subtitle.isNotEmpty)
+            Flexible(
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          if (description.isNotEmpty)
+            Flexible(
+              child: Text(
+                description,
+                style: TextStyle(color: Colors.white38, fontSize: 10),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -404,9 +530,11 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                     ],
                                   ),
                                 ),
-
-                                _buildShufflePlayButtons(),
                               ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [_buildShufflePlayButtons()],
                             ),
                           ],
                         ),
@@ -419,10 +547,20 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                         children: [
                           const SizedBox(height: 10),
                           _buildSongList(),
-                          const SizedBox(height: 100),
                         ],
                       ),
                     ),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 35)),
+
+                    SliverToBoxAdapter(
+                      child: _sectionList(
+                        'You might also like',
+                        similarPlaylist,
+                      ),
+                    ),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
                   ],
                 ),
       ),
@@ -494,7 +632,12 @@ class SongRow extends ConsumerWidget {
           await audioHandler.play();
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          padding: const EdgeInsets.only(
+            top: 8,
+            left: 16,
+            right: 6,
+            bottom: 10,
+          ),
           child: Row(
             children: [
               CacheNetWorkImg(
@@ -548,12 +691,13 @@ class SongRow extends ConsumerWidget {
               ),
               if (isLiked)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  padding: const EdgeInsets.only(right: 6, left: 6),
                   child: Image.asset(
                     'assets/icons/tick.png',
-                    width: 20,
-                    height: 20,
+                    width: 26,
+                    height: 26,
                     fit: BoxFit.contain,
+                    color: spotifyGreen,
                   ),
                 ),
 

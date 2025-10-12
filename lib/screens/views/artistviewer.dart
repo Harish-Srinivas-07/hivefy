@@ -56,7 +56,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
     if (imageUrl.isEmpty) return;
 
     final dominant = await getDominantColorFromImage(imageUrl);
-    artistCoverColour = getDominantLighter(dominant);
+    artistCoverColour = getDominantDarker(dominant);
     if (mounted) setState(() {});
   }
 
@@ -561,9 +561,10 @@ class ArtistSongRow extends ConsumerWidget {
                     padding: const EdgeInsets.only(left: 10),
                     child: Image.asset(
                       'assets/icons/tick.png',
-                      width: 20,
-                      height: 20,
+                      width: 26,
+                      height: 26,
                       fit: BoxFit.contain,
+                      color: spotifyGreen,
                     ),
                   ),
             ],

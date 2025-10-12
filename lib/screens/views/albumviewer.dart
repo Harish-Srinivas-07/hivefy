@@ -151,7 +151,6 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
         SwipeAction(
           color: spotifyGreen,
           icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
-
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
@@ -234,7 +233,12 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
           }
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16),
+          padding: const EdgeInsets.only(
+            top: 8,
+            left: 16,
+            right: 6,
+            bottom: 10,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -275,9 +279,11 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                             ],
                           ),
                           Text(
-                            song.primaryArtists.isNotEmpty
-                                ? song.primaryArtists
-                                : _album!.artist,
+                            song.contributors.all
+                                .map((a) => a.title)
+                                .toList()
+                                .toSet()
+                                .join(', '),
                             style: TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
@@ -295,9 +301,10 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Image.asset(
                           'assets/icons/tick.png',
-                          width: 20,
-                          height: 20,
+                          width: 26,
+                          height: 26,
                           fit: BoxFit.contain,
+                          color: spotifyGreen,
                         ),
                       ),
 
@@ -540,8 +547,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                   slivers: [
                     SliverAppBar(
                       pinned: true,
-                      backgroundColor: albumCoverColour,
-                      expandedHeight: 350,
+                      backgroundColor: getDominantDarker(albumCoverColour),
+                      expandedHeight: 300,
                       elevation: 0,
                       leading: const BackButton(color: Colors.white),
                       flexibleSpace: FlexibleSpaceBar(
@@ -570,7 +577,10 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              colors: [albumCoverColour, spotifyBgColor],
+                              colors: [
+                                getDominantDarker(albumCoverColour),
+                                spotifyBgColor,
+                              ],
                             ),
                           ),
                           child: Padding(
@@ -581,8 +591,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                     _album!.images.isNotEmpty
                                         ? _album!.images.last.url
                                         : "",
-                                width: 300,
-                                height: 300,
+                                width: 280,
+                                height: 280,
                                 fit: BoxFit.cover,
                                 borderRadius: BorderRadius.circular(16),
                               ),

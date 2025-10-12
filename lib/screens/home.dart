@@ -1,8 +1,9 @@
+// lib/screens/home.dart
 import 'package:flutter/material.dart';
-
-import 'package:iconly/iconly.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flashy_tab_bar2/flashy_tab_bar2.dart';
+import 'package:iconly/iconly.dart';
+import 'package:page_transition/page_transition.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shared/constants.dart';
@@ -10,6 +11,7 @@ import '../shared/player.dart';
 import '../utils/theme.dart';
 import 'features/drawer.dart';
 import 'dashboard.dart';
+import 'features/profile.dart';
 import 'library.dart';
 import 'search.dart';
 
@@ -25,6 +27,7 @@ class _HomeState extends ConsumerState<Home>
   @override
   bool get wantKeepAlive => true;
 
+  // per-tab navigators
   final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
@@ -42,6 +45,7 @@ class _HomeState extends ConsumerState<Home>
       _buildNavigator(const Search(), _navigatorKeys[1]),
       _buildNavigator(const LibraryPage(), _navigatorKeys[2]),
     ];
+    loadProfiles();
   }
 
   Widget _buildNavigator(Widget page, GlobalKey<NavigatorState> key) {
@@ -51,33 +55,88 @@ class _HomeState extends ConsumerState<Home>
     );
   }
 
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  // Helper to push into the currently active tab navigator
+  Future<void> _pushToActiveTab(Widget page) async {
+    final tabIndex = ref.read(tabIndexProvider);
+    final currentKey = _navigatorKeys[tabIndex];
+    final state = currentKey.currentState;
+
+    if (state != null) {
+      state.push(
+        PageTransition(
+          type: PageTransitionType.leftToRight,
+          duration: const Duration(milliseconds: 300),
+          reverseDuration: const Duration(milliseconds: 300),
+          child: page,
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        PageTransition(
+          type: PageTransitionType.rightToLeft,
+          duration: const Duration(milliseconds: 300),
+          reverseDuration: const Duration(milliseconds: 300),
+          child: page,
+        ),
+      );
+    }
+  }
+
+  Future<bool> onWillPop() async {
+    final tabIndex = ref.read(tabIndexProvider);
+    final currentKey = _navigatorKeys[tabIndex];
+    final currentState = currentKey.currentState;
+    if (currentState != null && currentState.canPop()) {
+      currentState.pop();
+      return false;
+    }
+    if (tabIndex != 0) {
+      ref.read(tabIndexProvider.notifier).state = 0;
+      return false;
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
     final tabIndex = ref.watch(tabIndexProvider);
+    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
-        final currentNavigatorKey = _navigatorKeys[tabIndex];
-        if (currentNavigatorKey.currentState?.canPop() ?? false) {
-          currentNavigatorKey.currentState!.pop();
-        } else {
-          Navigator.of(context).maybePop();
+        final currentKey = _navigatorKeys[tabIndex];
+        final currentState = currentKey.currentState;
+        if (currentState != null && currentState.canPop()) {
+          currentState.pop();
+          return;
+        }
+        if (tabIndex != 0) {
+          ref.read(tabIndexProvider.notifier).state = 0;
+          return;
         }
       },
       child: Scaffold(
-        key: _scaffoldKey,
-        drawer: SideDrawer(),
+        key: scaffoldKey,
+        drawer: SideDrawer(
+          onNavigate: (page) async {
+            Navigator.of(context).pop();
+            await Future.delayed(const Duration(microseconds: 300));
+            await _pushToActiveTab(page);
+          },
+        ),
         body: Stack(
           children: [
             IndexedStack(index: tabIndex, children: _navigators),
-            const Align(alignment: Alignment.bottomCenter, child: MiniPlayer()),
+            if (!isKeyboardVisible)
+              const Align(
+                alignment: Alignment.bottomCenter,
+                child: MiniPlayer(),
+              ),
           ],
         ),
         bottomNavigationBar: _buildBottomNavBar(tabIndex),
@@ -98,19 +157,19 @@ class _HomeState extends ConsumerState<Home>
       items: [
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.home, size: 30),
-          title: Text('Home', style: TextStyle(fontSize: 16)),
+          title: const Text('Home', style: TextStyle(fontSize: 16)),
           activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyLight.search, size: 30),
-          title: Text('Search', style: TextStyle(fontSize: 16)),
+          title: const Text('Search', style: TextStyle(fontSize: 16)),
           activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),
         FlashyTabBarItem(
           icon: const Icon(IconlyBroken.chart, size: 30),
-          title: Text('Library', style: TextStyle(fontSize: 16)),
+          title: const Text('Library', style: TextStyle(fontSize: 16)),
           activeColor: spotifyGreen,
           inactiveColor: Colors.grey,
         ),

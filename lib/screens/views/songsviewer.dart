@@ -167,21 +167,19 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () async {
-              if (!isEnabled) return; // when no internet
+              if (!isEnabled) return; // No internet
+
               try {
                 final audioHandler = await ref.read(
                   audioHandlerProvider.future,
                 );
                 final currentQueue = audioHandler.queueSongs;
                 final sourceId = audioHandler.queueSourceId;
-                final idx = _songs.indexWhere((s) => s.id == song.id);
-                if (idx == -1) return;
 
-                final isSameLikedQueue =
-                    sourceId == "liked_songs" && currentQueue.isNotEmpty;
+                final isPlaying = ref.read(currentSongProvider)?.id == song.id;
 
                 if (isPlaying) {
-                  // 🎧 Toggle pause/play
+                  // Toggle pause/play
                   final playing =
                       (await audioHandler.playerStateStream.first).playing;
                   if (playing) {
@@ -192,15 +190,34 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                   return;
                 }
 
+                final isSameLikedQueue =
+                    sourceId == "liked_songs" && currentQueue.isNotEmpty;
+
                 if (isSameLikedQueue) {
-                  // 🎯 Already playing liked songs → skip to this song
-                  await audioHandler.skipToQueueItem(idx);
+                  // Skip to the correct song in **current queue**
+                  final queueIndex = currentQueue.indexWhere(
+                    (s) => s.id == song.id,
+                  );
+                  if (queueIndex != -1) {
+                    await audioHandler.skipToQueueItem(queueIndex);
+                  } else {
+                    // If somehow song not in queue, reload queue
+                    await audioHandler.loadQueue(
+                      _songs,
+                      startIndex: _songs.indexWhere((s) => s.id == song.id),
+                      sourceId: "liked_songs",
+                      sourceName: "Liked Songs",
+                    );
+                  }
                 } else {
-                  // 🚀 New queue → load liked songs fresh
+                  // Load fresh queue
+                  final startIndex = _songs.indexWhere((s) => s.id == song.id);
+                  if (startIndex == -1) return;
+
                   await audioHandler.loadQueue(
                     _songs,
-                    startIndex: idx,
-                    sourceId: "7777777",
+                    startIndex: startIndex,
+                    sourceId: "liked_songs",
                     sourceName: "Liked Songs",
                   );
                 }
@@ -210,6 +227,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                 debugPrint("Error playing liked song: $e\n$st");
               }
             },
+
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Row(
@@ -269,9 +287,10 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Image.asset(
                         'assets/icons/tick.png',
-                        width: 20,
-                        height: 20,
+                        width: 26,
+                        height: 26,
                         fit: BoxFit.contain,
+                        color: spotifyGreen,
                       ),
                     ),
 
@@ -492,7 +511,10 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Colors.pink, Colors.black],
+                                colors: [
+                                  getDominantDarker(Colors.pink),
+                                  Colors.black,
+                                ],
                               ),
                             ),
                           ),

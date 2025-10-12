@@ -21,8 +21,7 @@ class SaavnAPI {
 
   Future<SearchPlaylistsResponse?> searchPlaylists({
     required String query,
-    int page =
-        0, // Saavn search commonly supports 0-based; keep consistent with songs
+    int page = 0,
     int limit = 10,
   }) async {
     if (query.isEmpty) return null;
@@ -165,7 +164,6 @@ class SaavnAPI {
       final response = await get(uri, headers: headers);
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        debugPrint('--> JSON fetched from API: $jsonData');
 
         if (jsonData['success'] == true && jsonData['data'] != null) {
           final List<dynamic> data = jsonData['data'];

@@ -46,8 +46,10 @@ Future<void> showDownloadNotification(String title, double progress) async {
     onlyAlertOnce: true,
     showProgress: true,
     maxProgress: 100,
+    playSound: false,
+    enableVibration: false,
     progress: progress.toInt(),
-    subText: '${progress.toStringAsFixed(1)}% completed',
+    subText: '${progress.toInt()}% completed',
   );
 
   final details = NotificationDetails(android: androidDetails);

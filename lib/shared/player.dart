@@ -34,10 +34,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     // Initial update
     _updatePlayerCardColour();
     // Schedule a delayed update after 5 seconds
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        _updatePlayerCardColour();
-      }
+    Future.delayed(const Duration(seconds: 3), () {
+      _updatePlayerCardColour();
+      if (mounted) {}
     });
     // Also handle current song when widget initializes
     final song = ref.read(currentSongProvider);
@@ -54,7 +53,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     if (!mounted) return;
 
-    ref.read(playerColourProvider.notifier).state = dominant;
+    ref.read(playerColourProvider.notifier).state = getDominantDarker(dominant);
   }
 
   @override
@@ -66,6 +65,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     if (song == null) return const SizedBox.shrink();
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+    double addIconSize = isLiked ? 28 : 33;
 
     // Listen for changes in currentSongProvider to update color
     ref.listen<SongDetail?>(currentSongProvider, (previous, next) {
@@ -158,7 +158,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _marqueeText(
-                                song.title,
+                                trimAfterParamText(song.title),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -179,21 +179,24 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                                 .read(likedSongsProvider.notifier)
                                 .toggle(song.id);
                           },
-                          child: Image.asset(
-                            isLiked
-                                ? 'assets/icons/tick.png'
-                                : 'assets/icons/add.png',
-                            width: 32,
-                            height: 32,
-                            color: isLiked ? spotifyGreen : Colors.white,
+                          child: Padding(
+                            padding: EdgeInsets.only(right: isLiked ? 8 : 5),
+                            child: Image.asset(
+                              isLiked
+                                  ? 'assets/icons/tick.png'
+                                  : 'assets/icons/add.png',
+                              width: addIconSize,
+                              height: addIconSize,
+                              color: isLiked ? spotifyGreen : Colors.white,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 3),
 
                         // Play / Pause / Loading button
                         SizedBox(
-                          width: 36,
-                          height: 36,
+                          width: 32,
+                          height: 32,
                           child: Center(
                             child: StreamBuilder<PlayerState>(
                               stream: audioHandler.playerStateStream,
@@ -206,8 +209,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                                     state?.processingState ==
                                         ProcessingState.buffering) {
                                   return const SizedBox(
-                                    width: 24,
-                                    height: 24,
+                                    width: 20,
+                                    height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       color: spotifyGreen,
@@ -311,9 +314,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     if (song?.images.isEmpty ?? true) return;
 
     final dominant = await getDominantColorFromImage(song!.images.last.url);
-    ref.read(playerColourProvider.notifier).state = getDominantLighter(
-      dominant,
-    );
+    ref.read(playerColourProvider.notifier).state = getDominantDarker(dominant);
 
     if (mounted) setState(() {});
   }
@@ -455,6 +456,35 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     );
   }
 
+  Widget _buildStatItem(String label, String value) {
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          fontFamily: 'SpotifyMix',
+          fontSize: 13,
+          color: Colors.white70,
+          height: 1.3,
+        ),
+        children: [
+          TextSpan(
+            text: "${capitalize(label)}:  ",
+            style: const TextStyle(
+              color: Colors.white54,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          TextSpan(
+            text: capitalize(value),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _artistInfoWidget() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -563,24 +593,29 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                 ),
 
               const SizedBox(height: 12),
-
-              // Stats
+              // --- Stats Section ---
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 6,
                 ),
-                child: Text(
-                  [
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
                     if (_artistDetails!.followerCount != null)
-                      "Followers: ${_artistDetails!.followerCount}",
+                      _buildStatItem(
+                        "followers",
+                        followersFormatter(_artistDetails!.followerCount ?? 0),
+                      ),
                     if (_artistDetails!.dominantLanguage.isNotEmpty)
-                      "Language: ${_artistDetails!.dominantLanguage}",
-                  ].join(" • "),
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                      _buildStatItem(
+                        "language",
+                        _artistDetails!.dominantLanguage,
+                      ),
+                  ],
                 ),
               ),
-
               const SizedBox(height: 12),
 
               if (_artistDetails!.bio.isNotEmpty)
@@ -759,7 +794,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     : 0.0;
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 5),
               child: Column(
                 children: [
                   // Slider
@@ -908,6 +943,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
       return const SizedBox.shrink();
     }
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+    double addIconSize = isLiked ? 30 : 35;
 
     final secondaryParts = <String>[];
     if ((song.albumName ?? song.album).isNotEmpty) {
@@ -944,7 +980,11 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [ref.watch(playerColourProvider), Colors.black],
+                  colors: [
+                    ref.watch(playerColourProvider),
+                    Colors.black,
+                    Colors.black,
+                  ],
                 ),
               ),
               child: SafeArea(
@@ -1022,214 +1062,258 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         controller: widget.scrollController,
                         child: Column(
                           children: [
-                            const SizedBox(height: 45),
-                            SizedBox(
-                              height: 320,
-                              child: PageView.builder(
-                                controller: _pageController,
-                                itemCount: handler.queueLength,
-                                onPageChanged: (index) async {
-                                  final handler = await ref.read(
-                                    audioHandlerProvider.future,
-                                  );
-                                  if (handler.currentIndex != index) {
-                                    await handler.skipToQueueItem(index);
-                                  }
-                                },
-
-                                itemBuilder: (context, index) {
-                                  final song = handler.queueSongs[index];
-                                  return Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      CacheNetWorkImg(
-                                        url:
-                                            song.images.isNotEmpty
-                                                ? song.images.last.url
-                                                : '',
-                                        width: 300,
-                                        height: 300,
-                                        fit: BoxFit.contain,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ],
-                                  );
-                                },
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.transparent, Colors.black],
+                                ),
                               ),
-                            ),
-
-                            const SizedBox(height: 35),
-
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 15,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
+                              child: Column(
                                 children: [
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _marqueeText(
-                                            trimAfterParamText(song.title),
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                          if (secondaryParts.isNotEmpty)
-                                            ConstrainedBox(
-                                              constraints: const BoxConstraints(
-                                                maxHeight: 30,
-                                              ),
-                                              child: _marqueeText(
-                                                secondaryParts.join(" • "),
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w300,
-                                                color: Colors.white70,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 10),
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        ref
-                                            .read(likedSongsProvider.notifier)
-                                            .toggle(song.id);
+                                  const SizedBox(height: 45),
+                                  SizedBox(
+                                    height: 320,
+                                    child: PageView.builder(
+                                      controller: _pageController,
+                                      itemCount: handler.queueLength,
+                                      onPageChanged: (index) async {
+                                        final handler = await ref.read(
+                                          audioHandlerProvider.future,
+                                        );
+                                        if (handler.currentIndex != index) {
+                                          await handler.skipToQueueItem(index);
+                                        }
                                       },
-                                      child: Image.asset(
-                                        isLiked
-                                            ? 'assets/icons/tick.png'
-                                            : 'assets/icons/add.png',
-                                        width: 36,
-                                        height: 36,
-                                        color:
-                                            isLiked
-                                                ? spotifyGreen
-                                                : Colors.white,
-                                      ),
+
+                                      itemBuilder: (context, index) {
+                                        final song = handler.queueSongs[index];
+                                        return Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            CacheNetWorkImg(
+                                              url:
+                                                  song.images.isNotEmpty
+                                                      ? song.images.last.url
+                                                      : '',
+                                              width: 300,
+                                              height: 300,
+                                              fit: BoxFit.contain,
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                          ],
+                                        );
+                                      },
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
 
-                            _streamProgressBar(),
-                            _playBackControl(),
-                            const SizedBox(height: 12),
+                                  const SizedBox(height: 35),
 
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  // Download Button + Status Indicator
-                                  _downloadSong(song),
-
-                                  const Spacer(),
-                                  // queue & share
-                                  IconButton(
-                                    icon: Image.asset(
-                                      'assets/icons/share.png',
-                                      height: 22,
-                                      width: 22,
-                                      color: Colors.white70,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 15,
                                     ),
-                                    tooltip: "Share",
-                                    onPressed: () async {
-                                      debugPrint('--> Share pressed');
-
-                                      final box =
-                                          context.findRenderObject()
-                                              as RenderBox?;
-
-                                      final details = StringBuffer();
-                                      details.writeln(
-                                        "Sharing from Hivefy 🎵\n",
-                                      );
-                                      details.writeln("Song: ${song.title}");
-                                      if (song.primaryArtists.isNotEmpty) {
-                                        details.writeln(
-                                          "Artist(s): ${song.primaryArtists}",
-                                        );
-                                      }
-                                      if ((song.albumName ?? song.album)
-                                          .isNotEmpty) {
-                                        details.writeln(
-                                          "Album: ${song.albumName ?? song.album}",
-                                        );
-                                      }
-                                      if (song.duration != null) {
-                                        details.writeln(
-                                          "Duration: ${song.getHumanReadableDuration()}",
-                                        );
-                                      }
-                                      if (song.year != null) {
-                                        details.writeln("Year: ${song.year}");
-                                      }
-                                      if (song.url.isNotEmpty) {
-                                        details.writeln("URL: ${song.url}");
-                                      }
-
-                                      await SharePlus.instance.share(
-                                        ShareParams(
-                                          text: details.toString(),
-                                          files:
-                                              song.images.isNotEmpty
-                                                  ? [
-                                                    XFile.fromData(
-                                                      (await NetworkAssetBundle(
-                                                        Uri.parse(
-                                                          song.images.last.url,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _marqueeText(
+                                                  trimAfterParamText(
+                                                    song.title,
+                                                  ),
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                if (secondaryParts.isNotEmpty)
+                                                  ConstrainedBox(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          maxHeight: 30,
                                                         ),
-                                                      ).load(
-                                                        song.images.last.url,
-                                                      )).buffer.asUint8List(),
-                                                      mimeType: 'image/jpeg',
-                                                      name:
-                                                          '${song.title}_hivefy.jpg',
+                                                    child: _marqueeText(
+                                                      secondaryParts.join(
+                                                        " • ",
+                                                      ),
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w300,
+                                                      color: Colors.white70,
                                                     ),
-                                                  ]
-                                                  : [],
-                                          title: "Sharing from Hivefy 🎵",
-                                          sharePositionOrigin:
-                                              box!.localToGlobal(Offset.zero) &
-                                              box.size,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: Image.asset(
-                                      'assets/icons/queue.png',
-                                      height: 18,
-                                      width: 18,
-                                      color: Colors.white70,
+                                        Padding(
+                                          padding: EdgeInsets.only(
+                                            right: isLiked ? 13 : 10,
+                                          ),
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              ref
+                                                  .read(
+                                                    likedSongsProvider.notifier,
+                                                  )
+                                                  .toggle(song.id);
+                                            },
+                                            child: Image.asset(
+                                              isLiked
+                                                  ? 'assets/icons/tick.png'
+                                                  : 'assets/icons/add.png',
+                                              width: addIconSize,
+                                              height: addIconSize,
+                                              color:
+                                                  isLiked
+                                                      ? spotifyGreen
+                                                      : Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    tooltip: "Queue",
-                                    onPressed: () {
-                                      openQueueBottomSheet();
-                                    },
                                   ),
+
+                                  _streamProgressBar(),
+                                  _playBackControl(),
+                                  const SizedBox(height: 12),
+
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 10,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        // Download Button + Status Indicator
+                                        _downloadSong(song),
+
+                                        const Spacer(),
+                                        // queue & share
+                                        IconButton(
+                                          icon: Image.asset(
+                                            'assets/icons/share.png',
+                                            height: 22,
+                                            width: 22,
+                                            color: Colors.white70,
+                                          ),
+                                          tooltip: "Share",
+                                          onPressed: () async {
+                                            debugPrint('--> Share pressed');
+
+                                            final box =
+                                                context.findRenderObject()
+                                                    as RenderBox?;
+
+                                            final details = StringBuffer();
+                                            details.writeln(
+                                              "Sharing from Hivefy 🎵\n",
+                                            );
+                                            details.writeln(
+                                              "Song: ${song.title}",
+                                            );
+                                            if (song
+                                                .primaryArtists
+                                                .isNotEmpty) {
+                                              details.writeln(
+                                                "Artist(s): ${song.primaryArtists}",
+                                              );
+                                            }
+                                            if ((song.albumName ?? song.album)
+                                                .isNotEmpty) {
+                                              details.writeln(
+                                                "Album: ${song.albumName ?? song.album}",
+                                              );
+                                            }
+                                            if (song.duration != null) {
+                                              details.writeln(
+                                                "Duration: ${song.getHumanReadableDuration()}",
+                                              );
+                                            }
+                                            if (song.year != null) {
+                                              details.writeln(
+                                                "Year: ${song.year}",
+                                              );
+                                            }
+                                            if (song.url.isNotEmpty) {
+                                              details.writeln(
+                                                "URL: ${song.url}",
+                                              );
+                                            }
+
+                                            await SharePlus.instance.share(
+                                              ShareParams(
+                                                text: details.toString(),
+                                                files:
+                                                    song.images.isNotEmpty
+                                                        ? [
+                                                          XFile.fromData(
+                                                            (await NetworkAssetBundle(
+                                                                  Uri.parse(
+                                                                    song
+                                                                        .images
+                                                                        .last
+                                                                        .url,
+                                                                  ),
+                                                                ).load(
+                                                                  song
+                                                                      .images
+                                                                      .last
+                                                                      .url,
+                                                                )).buffer
+                                                                .asUint8List(),
+                                                            mimeType:
+                                                                'image/jpeg',
+                                                            name:
+                                                                '${song.title}_hivefy.jpg',
+                                                          ),
+                                                        ]
+                                                        : [],
+                                                title: "Sharing from Hivefy 🎵",
+                                                sharePositionOrigin:
+                                                    box!.localToGlobal(
+                                                      Offset.zero,
+                                                    ) &
+                                                    box.size,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: Image.asset(
+                                            'assets/icons/queue.png',
+                                            height: 18,
+                                            width: 18,
+                                            color: Colors.white70,
+                                          ),
+                                          tooltip: "Queue",
+                                          onPressed: () {
+                                            openQueueBottomSheet();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 45),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 45),
-
                             if (_artistDetails != null) ...[
                               _artistInfoWidget(),
                               const SizedBox(height: 24),
