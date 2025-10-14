@@ -1,6 +1,7 @@
 import 'package:disk_space_plus/disk_space_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +22,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isTitleCollapsed = false;
   late ScrollController _scrollController;
   final DiskSpacePlus diskSpacePlus = DiskSpacePlus();
+  late Future<List<dynamic>> _storageFuture;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           }
         });
     _checkNotificationStatus();
+    _refreshStorageFuture();
   }
 
   Future<void> _checkNotificationStatus() async {
@@ -50,12 +53,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<double> getDeviceStorageInBytes() async {
-    final totalGB = await diskSpacePlus.getTotalDiskSpace ?? 0;
+    try {
+      // Total disk space in MB
+      final totalMB = await diskSpacePlus.getTotalDiskSpace ?? 0;
 
-    // Sanity check: if totalGB is unrealistic, fallback to 32 GB
-    final safeGB = (totalGB > 0 && totalGB < 1024) ? totalGB : 32.0;
+      // Optional: free space in app directory
+      final dir = await getApplicationDocumentsDirectory();
+      final freeMB = await diskSpacePlus.getFreeDiskSpaceForPath(dir.path) ?? 0;
 
-    return safeGB * 1024 * 1024 * 1024;
+      debugPrint('--> free space $freeMB MB, total $totalMB MB');
+
+      // Use totalMB if valid, otherwise fallback to 32 GB (converted to MB)
+      final safeMB =
+          (totalMB > 0 && totalMB < 1024 * 1024) ? totalMB : 32 * 1024;
+
+      return safeMB * 1024 * 1024; // convert MB → bytes
+    } catch (_) {
+      return 32 * 1024 * 1024 * 1024; // fallback 32 GB in bytes
+    }
+  }
+
+  // Refresh the storage future whenever needed
+  void _refreshStorageFuture() {
+    _storageFuture = Future.wait([
+      offlineManager.getOfflineStorageUsed(),
+      offlineManager.getOfflineStorageUsedFormatted(),
+      getDeviceStorageInBytes(), // returns totalBytes in bytes
+    ]);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -256,6 +281,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onDelete: () async {
                   await offlineManager.deleteAllSongs();
                   info('All offline songs deleted', Severity.success);
+                  _refreshStorageFuture(); // refresh storage info after deletion
                 },
               ),
             ]),
@@ -265,11 +291,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: FutureBuilder<List<dynamic>>(
-                future: Future.wait([
-                  offlineManager.getOfflineStorageUsed(),
-                  offlineManager.getOfflineStorageUsedFormatted(),
-                  getDeviceStorageInBytes(),
-                ]),
+                future: _storageFuture,
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(
@@ -281,13 +303,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     );
                   }
 
-                  final offlineBytes = snapshot.data![0] as double;
+                  final offlineBytes = snapshot.data![0] as double; // our app
                   final usedFormatted = snapshot.data![1] as String;
-                  final totalBytes = snapshot.data![2] as double;
-                  final fraction =
-                      totalBytes > 0
-                          ? (offlineBytes / totalBytes).clamp(0.0, 1.0) + .01
-                          : 0.0;
+                  final totalBytes = snapshot.data![2] as double; // total
+                  final freeBytes = totalBytes - offlineBytes; // rough free
+
+                  // fractions for bar
+                  final appFraction =
+                      (offlineBytes / totalBytes).clamp(0.0, 1.0) + 0.01;
+                  final otherFraction =
+                      ((freeBytes - (totalBytes - freeBytes)) / totalBytes)
+                          .clamp(0.0, 1.0);
+                  final freeFraction = (freeBytes / totalBytes).clamp(0.0, 1.0);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,23 +328,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Stack(
+                      Row(
                         children: [
-                          Container(
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: Colors.white12,
-                              borderRadius: BorderRadius.circular(5),
+                          Expanded(
+                            flex: (appFraction * 1000).toInt(),
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(5),
+                                bottomLeft: Radius.circular(5),
+                              ),
+                              child: Container(height: 6, color: spotifyGreen),
                             ),
                           ),
-                          FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: fraction,
+                          Expanded(
+                            flex: (otherFraction * 1000).toInt(),
                             child: Container(
                               height: 6,
                               decoration: BoxDecoration(
-                                color: spotifyGreen,
-                                borderRadius: BorderRadius.circular(5),
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: (freeFraction * 1000).toInt(),
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(5),
+                                bottomRight: Radius.circular(5),
+                              ),
+                              child: Container(
+                                height: 6,
+                                color: Colors.white12,
                               ),
                             ),
                           ),
@@ -349,7 +390,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
           ),
-
           _buildDivider(),
 
           // --- Main Database Caches ---

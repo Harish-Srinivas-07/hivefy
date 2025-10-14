@@ -62,6 +62,10 @@ class SearchState extends ConsumerState<Search> {
   void initState() {
     super.initState();
     _init();
+    ref.read(languageNotifierProvider).addListener(() {
+      if (!mounted) return;
+      _init();
+    });
   }
 
   @override
@@ -155,18 +159,16 @@ class SearchState extends ConsumerState<Search> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _showSuggestions = true;
-    });
+    _isLoading = true;
+    _showSuggestions = true;
+    if (mounted) setState(() {});
 
     final results = await saavn.getSearchBoxSuggestions(query: value);
 
     if (!mounted) return;
-    setState(() {
-      _suggestions = results;
-      _isLoading = false;
-    });
+    _suggestions = results;
+    _isLoading = false;
+    if (mounted) setState(() {});
   }
 
   void _onSuggestionTap(String suggestion, {bool onChange = false}) async {
@@ -261,15 +263,14 @@ class SearchState extends ConsumerState<Search> {
   }
 
   void _resetSearch() {
-    setState(() {
-      _suggestions = [];
-      _songs = [];
-      _albums = [];
-      _artists = [];
-      _playlists = [];
-      _showSuggestions = true;
-      _isLoading = false;
-    });
+    _suggestions = [];
+    _songs = [];
+    _albums = [];
+    _artists = [];
+    _playlists = [];
+    _showSuggestions = true;
+    _isLoading = false;
+    setState(() {});
   }
 
   void _clearResults() {
@@ -518,10 +519,7 @@ class SearchState extends ConsumerState<Search> {
   @override
   Widget build(BuildContext context) {
     // Watch language listener
-    final languageNotifier = ref.watch(languageNotifierProvider);
-    languageNotifier.addListener(() {
-      _init();
-    });
+    ref.watch(languageNotifierProvider);
 
     return Scaffold(
       backgroundColor: spotifyBgColor,
@@ -841,7 +839,9 @@ class SearchState extends ConsumerState<Search> {
 
       if (!mounted) return;
 
-      ref.read(playerColourProvider.notifier).state = dominant;
+      ref.read(playerColourProvider.notifier).state = getDominantDarker(
+        dominant,
+      );
 
       // Save in background
       Future(() async {

@@ -122,7 +122,6 @@ class SideDrawer extends StatelessWidget {
               icon: Icons.language,
               title: "Language",
               onTap: () {
-                debugPrint('--> here the press of lang ');
                 if (onNavigate != null) {
                   onNavigate!(LanguageSetPage());
                 } else {

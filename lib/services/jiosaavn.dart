@@ -168,7 +168,7 @@ class SaavnAPI {
         if (jsonData['success'] == true && jsonData['data'] != null) {
           final List<dynamic> data = jsonData['data'];
           final fetched = data.map((e) => SongDetail.fromJson(e)).toList();
-          debugPrint('--> Fetched ${fetched.length} songs from API: $fetched');
+          debugPrint('--> Fetched ${fetched.length} songs from API');
 
           // Cache locally
           for (final song in fetched) {

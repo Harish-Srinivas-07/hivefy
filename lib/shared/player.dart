@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../components/shimmers.dart';
+import '../components/showmenu.dart';
 import '../models/datamodel.dart';
 import '../services/offlinemanager.dart';
 import '../screens/features/queuesheet.dart';
@@ -60,8 +61,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
   Widget build(BuildContext context) {
     final audioHandlerAsync = ref.watch(audioHandlerProvider);
     final song = ref.watch(currentSongProvider);
-    bool isUserDragging = false;
-    final controller = DraggableScrollableController();
 
     if (song == null) return const SizedBox.shrink();
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
@@ -77,44 +76,104 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     return audioHandlerAsync.when(
       data:
           (audioHandler) => GestureDetector(
-            onTap: () {
-              showModalBottomSheet(
+            onHorizontalDragEnd: (details) async {
+              final velocity = details.primaryVelocity ?? 0;
+              if (velocity > 300) {
+                // Swipe Right → Previous
+                await audioHandler.skipToPrevious();
+              } else if (velocity < -300) {
+                // Swipe Left → Next
+                await audioHandler.skipToNext();
+              }
+            },
+            onTap: () async {
+              await showModalBottomSheet(
                 context: context,
+                useRootNavigator: true,
                 isScrollControlled: true,
+                isDismissible: true,
+                enableDrag: true,
                 backgroundColor: Colors.transparent,
-                builder: (_) {
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
-                    child: GestureDetector(
-                      onVerticalDragStart:
-                          (_) => setState(() => isUserDragging = true),
-                      onVerticalDragEnd: (_) {
-                        setState(() => isUserDragging = false);
-                        if (!isUserDragging && controller.size < 0.95) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      child: DraggableScrollableSheet(
-                        controller: controller,
-                        expand: false,
-                        initialChildSize: 1.0,
-                        minChildSize: .95,
-                        maxChildSize: 1.0,
-                        builder: (context, scrollController) {
-                          return FullPlayerScreen(
-                            scrollController: scrollController,
-                          );
-                        },
-                      ),
-                    ),
+                barrierColor: Colors.black12,
+                builder: (ctx) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Container(
+                        width: constraints.maxWidth,
+                        height: MediaQuery.of(context).size.height,
+                        color: Colors.transparent,
+                        child: Stack(
+                          children: [
+                            // --- Background Overlay ---
+                            Container(color: Colors.black87),
+
+                            // --- Rounded Player Sheet ---
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(24),
+                                ),
+                                child: DraggableScrollableSheet(
+                                  expand: true,
+                                  initialChildSize: 1.0,
+                                  minChildSize: 0.95,
+                                  maxChildSize: 1.0,
+
+                                  builder: (_, scrollController) {
+                                    return Container(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black,
+                                        borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(24),
+                                        ),
+                                      ),
+                                      clipBehavior: Clip.hardEdge,
+                                      child: FullPlayerScreen(
+                                        scrollController: scrollController,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: IgnorePointer(
+                                child: Container(
+                                  height: 40,
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.black54,
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   );
                 },
-              ).then((_) {
-                if (!context.mounted) return;
-                FocusScope.of(context).unfocus();
-              });
+              );
+
+              if (!context.mounted) return;
+              FocusScope.of(context).unfocus();
+              Navigator.of(
+                context,
+                rootNavigator: true,
+              ).popUntil((r) => r.isFirst);
             },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -336,7 +395,6 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
       _artistDetails = details;
       _isBioExpanded.value = false;
       if (mounted) setState(() {});
-      debugPrint('--> loaded artist details: $_artistDetails');
     }
   }
 
@@ -1050,7 +1108,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                               size: 24,
                             ),
                             onPressed: () {
-                              // TODO: Show song menu
+                              debugPrint('---> here the menu pressed');
+                              showMediaItemMenu(context, song);
                             },
                           ),
                         ],

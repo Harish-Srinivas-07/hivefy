@@ -300,9 +300,18 @@ class ArtistCache {
     _initialized = true;
   }
 
-  /// ✅ Get usage count for a specific artist
+  /// Get usage count for a specific artist
   int getUsageCount(String artistId) {
     return _usageCount[artistId] ?? 0;
+  }
+
+  Future<int> getTotalVisits() async {
+    await _init();
+    int total = 0;
+    for (final count in _usageCount.values) {
+      total += count;
+    }
+    return total == 0 ? 100 : total;
   }
 
   /// ✅ Return all artists with their usage counts together
@@ -691,10 +700,7 @@ class SearchPlaylistsCache {
           );
           if (full != null) {
             fullPlaylists.add(full);
-            await PlaylistCache().set(
-              full.id,
-              full,
-            ); // also cache full playlist
+            await PlaylistCache().set(full.id, full);
           }
         }).toList();
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -139,6 +140,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 children: [
                   // --- Avatar with edit overlay ---
                   Stack(
+                    clipBehavior: Clip.none,
                     alignment: Alignment.bottomRight,
                     children: [
                       CircleAvatar(
@@ -150,14 +152,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                                     as ImageProvider,
                       ),
                       Positioned(
-                        bottom: 0,
-                        right: 0,
+                        bottom: -3,
+                        right: -3,
                         child: GestureDetector(
                           onTap: _pickAndStoreImage,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
+                              color: Colors.black54,
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white54,
+                                width: .5,
+                              ),
                             ),
                             padding: const EdgeInsets.all(6),
                             child: const Icon(
@@ -189,27 +195,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         _isEditingName
                             ? Padding(
                               padding: const EdgeInsets.only(right: 6),
-                              child: TextField(
-                                onTapOutside:
-                                    (_) => FocusScope.of(context).unfocus(),
-                                controller: _nameController,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 6,
+                              child: SizedBox(
+                                height: 20,
+                                child: TextField(
+                                  autofocus: true,
+                                  onTapOutside:
+                                      (_) => FocusScope.of(context).unfocus(),
+                                  controller: _nameController,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1,
                                   ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.white24,
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 6,
                                     ),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(color: spotifyGreen),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: Colors.white24,
+                                      ),
+                                    ),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: spotifyGreen,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -220,6 +233,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
+                                height: 1,
                               ),
                             ),
                       ],
@@ -231,11 +245,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     onPressed: () async {
                       if (_isEditingName) {
                         final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString(
-                          'username',
-                          _nameController.text.trim(),
+                        final trimmed = _nameController.text.trim();
+                        final limited = trimmed.substring(
+                          0,
+                          min(20, trimmed.length),
                         );
-                        username = _nameController.text.trim();
+                        await prefs.setString('username', limited);
+                        username = limited;
                         _isEditingName = false;
                         setState(() {});
                       } else {
@@ -351,10 +367,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         _buildBenefitItem("Download to listen offline"),
                         _buildBenefitItem("High audio quality"),
                         _buildBenefitItem("Organise listening queue"),
+                        _buildBenefitItem("Unlimited swipes and playbacks."),
                       ],
                     ),
                   ),
-                  // const SizedBox(height: 12),
+                  const SizedBox(height: 100),
                   // OutlinedButton(
                   //   onPressed: () {},
                   //   style: OutlinedButton.styleFrom(

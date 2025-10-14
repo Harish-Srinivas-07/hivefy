@@ -69,7 +69,11 @@ class QueueList extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              song.contributors.all.first.title,
+                              song.contributors.all
+                                  .map((a) => a.title)
+                                  .toList()
+                                  .toSet()
+                                  .join(', '),
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.white70,

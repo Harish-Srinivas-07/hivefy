@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hivefy/components/snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/database.dart';
+import '../../models/datamodel.dart';
 import '../../services/latestsaavnfetcher.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
@@ -59,6 +60,8 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
   }
 
   Future<void> _applyLanguage(String lang) async {
+    if (!mounted) return;
+
     _loading = true;
     _loadingMessage = "Clearing existing data...";
     if (mounted) setState(() {});
@@ -73,34 +76,34 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
     lovePlaylists.clear();
     partyPlaylists.clear();
 
-    if (mounted) setState(() => _loadingMessage = "Fetching playlists...");
-    latestTamilPlayList = await LatestSaavnFetcher.getLatestPlaylists(lang);
+    setState(() => _loadingMessage = "Fetching latest playlist & albums...");
 
-    if (mounted) setState(() => _loadingMessage = "Fetching albums...");
-    latestTamilAlbums = await LatestSaavnFetcher.getLatestAlbums(lang);
+    // Fetch all language-specific data in parallel
+    final primary = await Future.wait([
+      LatestSaavnFetcher.getLatestPlaylists(lang),
+      LatestSaavnFetcher.getLatestAlbums(lang),
+    ]);
 
-    if (mounted) {
-      setState(() => _loadingMessage = "Fetching famous playlists...");
-    }
-    lovePlaylists = await searchPlaylistcache.searchPlaylistCache(
-      query: 'love $lang',
-    );
+    latestTamilPlayList = primary[0] as List<Playlist>;
+    latestTamilAlbums = primary[1] as List<Album>;
 
-    if (mounted) {
-      setState(() => _loadingMessage = "Fetching famous playlists...");
-    }
-    partyPlaylists = await searchPlaylistcache.searchPlaylistCache(
-      query: 'party $lang',
-    );
+    setState(() => _loadingMessage = "Fetching your preferences...");
 
-    // Update provider
-    ref.read(languageNotifierProvider).value = lang;
+    final secondary = await Future.wait([
+      searchPlaylistcache.searchPlaylistCache(query: 'love $lang'),
+      searchPlaylistcache.searchPlaylistCache(query: 'party $lang'),
+    ]);
+
+    lovePlaylists = secondary[0];
+    partyPlaylists = secondary[1];
 
     _loading = false;
     _loadingMessage = '';
     if (mounted) setState(() {});
-
     info("Language set to ${capitalize(lang)}", Severity.success);
+
+    // Update provider
+    ref.read(languageNotifierProvider).value = lang;
   }
 
   @override
@@ -315,7 +318,7 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      "Please wait...",
+                      "Hang tight!, please keep the app open.",
                       style: TextStyle(
                         color: Colors.white38,
                         fontSize: 12,

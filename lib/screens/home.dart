@@ -64,9 +64,9 @@ class _HomeState extends ConsumerState<Home>
     if (state != null) {
       state.push(
         PageTransition(
-          type: PageTransitionType.leftToRight,
-          duration: const Duration(milliseconds: 300),
-          reverseDuration: const Duration(milliseconds: 300),
+          type: PageTransitionType.rightToLeft,
+          duration: const Duration(milliseconds: 100),
+          reverseDuration: const Duration(milliseconds: 100),
           child: page,
         ),
       );
@@ -74,8 +74,8 @@ class _HomeState extends ConsumerState<Home>
       Navigator.of(context).push(
         PageTransition(
           type: PageTransitionType.rightToLeft,
-          duration: const Duration(milliseconds: 300),
-          reverseDuration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 100),
+          reverseDuration: const Duration(milliseconds: 100),
           child: page,
         ),
       );

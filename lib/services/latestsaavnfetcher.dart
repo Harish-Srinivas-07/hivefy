@@ -13,7 +13,7 @@ class LatestSaavnFetcher {
   /// ---------------- PLAYLIST FETCHER ----------------
   static Future<List<Playlist>> getLatestPlaylists(
     String lang, {
-    int playlistLimit = 50, // number of playlists to fetch
+    int playlistLimit = 30, // number of playlists to fetch
     int perPlaylistSongCount = 50, // number of songs per playlist
   }) async {
     final prefs = await SharedPreferences.getInstance();

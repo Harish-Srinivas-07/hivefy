@@ -209,7 +209,7 @@ Widget heroGridShimmer() {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: 10,
+        itemCount: 8,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 8,

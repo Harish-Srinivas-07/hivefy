@@ -28,6 +28,7 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
   int visitAlbumCount = 0;
   List<ArtistDetails> topArtists = [];
   List<Album> topalbums = [];
+  int totalVisits = 0;
 
   @override
   void initState() {
@@ -61,15 +62,17 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
     if (topalbums.isNotEmpty) {
       visitAlbumCount = AlbumCache().getUsageCount(topalbums[0].id);
     }
+    totalVisits = await ArtistCache().getTotalVisits();
 
     await _loadCapsule();
   }
 
-  Future<void> _loadCapsule() async {
+  Future<void> _loadCapsule({bool force = false}) async {
+    if (!force && monthlyMinutes > 0) return;
     final minutes = await AppDatabase.getMonthlyListeningHours();
     monthlyMinutes = minutes.toInt();
     _loading = false;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -238,6 +241,7 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
                         ),
                       ),
                     ),
+
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -254,7 +258,14 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
                                         : '';
                                 final visitCount = ArtistCache().getUsageCount(
                                   artist.id,
-                                ); // get visit count
+                                );
+
+                                // calculate percentage relative to total
+                                final percentage =
+                                    totalVisits > 0
+                                        ? (visitCount / totalVisits * 100)
+                                            .toStringAsFixed(0)
+                                        : '0';
 
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 12),
@@ -309,25 +320,53 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
                                                 artist.title,
                                                 style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 13,
+                                                  fontSize: 13.5,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
                                                 maxLines: 1,
                                                 textAlign: TextAlign.center,
                                               ),
+
                                               const SizedBox(height: 2),
-                                              Text(
-                                                'Visited $visitCount ${visitCount == 1 ? "time" : "times"}',
-                                                style: const TextStyle(
-                                                  color: Colors.white54,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w400,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                                maxLines: 1,
-                                                textAlign: TextAlign.center,
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    "$percentage%",
+                                                    style: TextStyle(
+                                                      color: spotifyGreen,
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      height: 1.2,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 1,
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                  // const SizedBox(width: 8),
+                                                  const Text(
+                                                    " higher",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      height: 1.2,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 1,
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ],
                                               ),
+
                                               const SizedBox(height: 2),
                                               Text(
                                                 capitalize(
@@ -501,7 +540,8 @@ class _SoundCapsuleState extends ConsumerState<SoundCapsule> {
                                 Expanded(
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       Text(
                                         "$visitAlbumCount ",

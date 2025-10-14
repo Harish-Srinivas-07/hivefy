@@ -73,6 +73,136 @@ class _AboutPageState extends ConsumerState<AboutPage> {
     );
   }
 
+  SliverToBoxAdapter _buildCreditsSection() {
+    final credits = [
+      {
+        'icon': 'assets/icons/github.png',
+        'title': 'GitHub',
+        'username': 'Harish-Srinivas-07',
+        'url': 'https://github.com/Harish-Srinivas-07',
+      },
+      {
+        'icon': 'assets/icons/linkedin.png',
+        'title': 'LinkedIn',
+        'username': 'harishsrinivas-sr',
+        'url': 'https://www.linkedin.com/in/harishsrinivas-sr/',
+      },
+      {
+        'icon': 'assets/icons/case.png',
+        'title': 'Portfolio',
+        'username': 'harishsrinivas.netlify.app',
+        'url': 'https://harishsrinivas.netlify.app',
+      },
+      {
+        'icon': 'assets/icons/atsign.png',
+        'title': 'Instagram',
+        'username': '@being_exception',
+        'url': 'https://www.instagram.com/being_exception',
+      },
+      {
+        'icon': 'assets/icons/medium.png',
+        'title': 'Medium',
+        'username': '@sr.harishsrinivas',
+        'url': 'https://medium.com/@sr.harishsrinivas',
+      },
+    ];
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Credits",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Connect with me',
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...credits.map(
+              (c) => GestureDetector(
+                onTap: () async {
+                  final uri = Uri.parse(c['url']!);
+                  try {
+                    // Use launchUrl with universal links fallback
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } catch (e) {
+                    // Fallback: open in webview if external fails
+                    debugPrint('--> URL launch failed: $e');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.inAppWebView);
+                    } else {
+                      info('Cannot open link: ${c['url']}', Severity.error);
+                    }
+                  }
+                },
+
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Image.asset(
+                        c['icon']!,
+                        height: 28,
+                        width: 28,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c['title']!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              c['username']!,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.open_in_new,
+                        color: Colors.white38,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 100),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,7 +300,7 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                 const SizedBox(height: 20),
                 _infoRow(
                   'VERSION',
-                  '${packageInfo.version} (${packageInfo.buildNumber})',
+                  '${packageInfo.version} ::${packageInfo.buildNumber}',
                 ),
                 _infoRow('PACKAGE', packageInfo.packageName),
                 _infoRow(
@@ -184,56 +314,102 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 16,
+                    vertical: 12,
                   ),
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.star,
-                      color: Colors.orange,
-                      size: 16,
-                    ),
-                    title: Text.rich(
-                      TextSpan(
-                        text: 'Like this project, star it on ',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'SpotifyMix',
-                        ),
+                  child: GestureDetector(
+                    onTap: () async {
+                      final uri = Uri.parse(
+                        'https://github.com/Harish-Srinivas-07/hivefy',
+                      );
+                      try {
+                        // Try external application first
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      } catch (e) {
+                        debugPrint('--> URL launch failed: $e');
+                        // Fallback to in-app browser if external fails
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.inAppWebView);
+                        } else {
+                          info(
+                            'Cannot open link: https://github.com/Harish-Srinivas-07/hivefy',
+                            Severity.error,
+                          );
+                        }
+                      }
+                    },
+
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      child: Row(
                         children: [
-                          TextSpan(
-                            text: 'GitHub!',
-                            style: const TextStyle(
-                              color: spotifyGreen,
-                              decoration: TextDecoration.underline,
-                              fontFamily: 'SpotifyMix',
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withAlpha(51),
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: const Icon(
+                              Icons.star,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: RichText(
+                              text: TextSpan(
+                                text: 'Like this project ?\nStar it on ',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'SpotifyMix',
+                                  fontSize: 14,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'GitHub!',
+                                    style: TextStyle(
+                                      color: spotifyGreen,
+                                      // decoration: TextDecoration.underline,
+                                      fontFamily: 'SpotifyMix',
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: const Icon(
+                              Icons.open_in_new,
+                              color: Colors.white38,
+                              size: 18,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    onTap: () async {
-                      final url = Uri.parse(
-                        'https://github.com/Harish-Srinivas-07/hivefy',
-                      );
-
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(url);
-                      } else {
-                        info(
-                          'Cant open link, visit github.com/Harish-Srinivas-07',
-                          Severity.error,
-                        );
-                      }
-                    },
                   ),
                 ),
 
                 Divider(color: Colors.grey.shade800),
-                const SizedBox(height: 100),
+
+                const SizedBox(height: 20),
               ],
             ),
           ),
+          _buildCreditsSection(),
         ],
       ),
     );

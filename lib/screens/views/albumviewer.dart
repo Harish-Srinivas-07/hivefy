@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
 import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
@@ -13,6 +14,7 @@ import '../../services/jiosaavn.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
+import '../features/language.dart';
 import 'artistviewer.dart';
 
 class AlbumViewer extends ConsumerStatefulWidget {
@@ -79,8 +81,12 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     if (mounted) setState(() {});
 
     if (!mounted) return;
-    _similarAlbum = (await LatestSaavnFetcher.getLatestAlbums('tamil'))
-      ..shuffle();
+    final lang = ref.read(languageNotifierProvider).value;
+    _similarAlbum =
+        (await LatestSaavnFetcher.getLatestAlbums(
+            lang,
+          )).where((a) => a.id != widget.albumId).toList()
+          ..shuffle();
     _similarAlbum = _similarAlbum.take(5).toList();
   }
 
@@ -205,10 +211,15 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             }
 
             if (isSameAlbumQueue) {
-              // 🎯 Same album → jump to tapped song
-              await audioHandler.skipToQueueItem(tappedIndex);
+              final isShuffle = audioHandler.isShuffle;
+              final queue = audioHandler.queueSongs;
+              final shuffleIndex =
+                  isShuffle
+                      ? queue.indexWhere((s) => s.id == song.id)
+                      : tappedIndex;
+              if (shuffleIndex == -1) return;
+              await audioHandler.skipToQueueItem(shuffleIndex);
             } else {
-              // 🚀 New album → replace queue with new album songs
               await audioHandler.loadQueue(
                 _albumSongDetails,
                 startIndex: tappedIndex,
@@ -220,11 +231,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             // 🔁 Handle shuffle toggle
             final isShuffle = ref.read(shuffleProvider);
             if (isShuffle) {
-              if (!audioHandler.isShuffle) {
-                audioHandler.toggleShuffle();
-              } else {
-                audioHandler.regenerateShuffle();
-              }
+              audioHandler.toggleShuffle();
             }
 
             await audioHandler.play();
@@ -316,7 +323,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                         size: 20,
                       ),
                       onPressed: () {
-                        // TODO: Show song menu
+                        showMediaItemMenu(context, song);
                       },
                     ),
                   ],
@@ -409,11 +416,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
                       // If shuffle is enabled, apply it after loading
                       if (isShuffle) {
-                        if (!audioHandler.isShuffle) {
-                          audioHandler.toggleShuffle();
-                        } else {
-                          audioHandler.regenerateShuffle();
-                        }
+                        audioHandler.toggleShuffle();
                       }
 
                       await audioHandler.play();

@@ -48,6 +48,8 @@ Future<void> showDownloadNotification(String title, double progress) async {
     maxProgress: 100,
     playSound: false,
     enableVibration: false,
+    silent: true,
+    colorized: true,
     progress: progress.toInt(),
     subText: '${progress.toInt()}% completed',
   );

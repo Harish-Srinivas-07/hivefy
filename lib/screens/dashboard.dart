@@ -1,11 +1,10 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../components/generalcards.dart';
 import '../components/shimmers.dart';
 import '../services/defaultfetcher.dart';
 import '../models/database.dart';
@@ -38,92 +37,95 @@ class _DashboardState extends ConsumerState<Dashboard> {
   List<Album> albums = [];
   List<Playlist> freqRecentPlaylists = [];
 
+  // cached shuffled lists
+  List<Playlist> topLatest = [];
+  List<Album> topLatestAlbum = [];
+  List<Playlist> fresh = [];
+  List<Album> freshAlbum = [];
+  List<Playlist> partyShuffled = [];
+  List<Playlist> loveShuffled = [];
+  bool _showWaitingCard = true;
+
   @override
   void initState() {
     super.initState();
     _init();
+    ref.read(languageNotifierProvider).addListener(() {
+      if (!mounted) return;
+      _init();
+    });
   }
 
   Future<void> _init() async {
-    loading = true;
-    if (mounted) setState(() {});
-
-    _initInternetChecker();
     if (!mounted) return;
-    initLanguage(ref);
+    setState(() => loading = true);
 
-    // Get selected language from provider or SharedPreferences
-    if (!mounted) return;
-    String lang = ref.read(languageNotifierProvider).value;
+    await _initInternetChecker();
+    await initLanguage(ref);
+
     final prefs = await SharedPreferences.getInstance();
-    lang = prefs.getString('app_language') ?? lang;
+    final lang =
+        prefs.getString('app_language') ??
+        ref.read(languageNotifierProvider).value;
 
-    await Future.delayed(const Duration(seconds: 2));
+    // primary parallel loads
+    final results = await Future.wait([
+      DailyFetches.refreshAllDaily(),
+      DailyFetches.getPlaylistsFromCache(),
+      DailyFetches.getArtistsAsListFromCache(),
+      offlineManager.init(),
+      LatestSaavnFetcher.getLatestPlaylists(lang),
+      LatestSaavnFetcher.getLatestAlbums(lang),
+      AppDatabase.getMonthlyListeningHours(),
+    ]);
 
-    // Refresh daily caches
-    await DailyFetches.refreshAllDaily();
+    playlists = results[1] as List<Playlist>;
+    artists = results[2] as List<ArtistDetails>;
+    latestTamilPlayList = results[4] as List<Playlist>;
+    latestTamilAlbums = results[5] as List<Album>;
 
-    // Load cached data
-    playlists = await DailyFetches.getPlaylistsFromCache();
-    artists = await DailyFetches.getArtistsAsListFromCache();
-
-    // offline manager init
-    await offlineManager.init();
-
-    // Frequent items
     freqplaylists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
     albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
 
-    // // Latest language-specific content
-    latestTamilPlayList = await LatestSaavnFetcher.getLatestPlaylists(lang);
-    latestTamilAlbums = await LatestSaavnFetcher.getLatestAlbums(lang);
+    _buildFreqRecent();
 
-    debugPrint(
-      '--> play ${playlists.length}, artist ${artists.length}, freq ${freqplaylists.length}, albums ${albums.length}, latest play ${latestTamilPlayList.length}, latest album ${latestTamilAlbums.length}',
-    );
+    // secondary cached queries
+    final secondary = await Future.wait([
+      searchPlaylistcache.searchPlaylistCache(query: 'love $lang'),
+      searchPlaylistcache.searchPlaylistCache(query: 'party $lang'),
+    ]);
 
-    // Build freqRecentPlaylists with exactly 7 items
-    freqRecentPlaylists = [];
+    lovePlaylists = secondary[0];
+    partyPlaylists = secondary[1];
 
-    freqRecentPlaylists.addAll(freqplaylists.take(3));
+    // pre-shuffle once
+    final mid = (latestTamilPlayList.length / 2).ceil();
+    topLatest = List.of(latestTamilPlayList.sublist(0, mid))..shuffle();
+    fresh = List.of(latestTamilPlayList.sublist(mid))..shuffle();
 
-    final shuffledLatest = List.of(latestTamilPlayList)..shuffle(Random());
-    freqRecentPlaylists.addAll(
-      shuffledLatest.take(7 - freqRecentPlaylists.length),
-    );
+    final amid = (latestTamilAlbums.length / 2).ceil();
+    topLatestAlbum = List.of(latestTamilAlbums.sublist(0, amid))..shuffle();
+    freshAlbum = List.of(latestTamilAlbums.sublist(amid))..shuffle();
 
-    if (freqRecentPlaylists.length < 7) {
-      final shuffledAll = List.of(playlists)..shuffle(Random());
-      freqRecentPlaylists.addAll(
-        shuffledAll.take(7 - freqRecentPlaylists.length),
-      );
-    }
-
-    if (freqRecentPlaylists.length > 7) {
-      freqRecentPlaylists = freqRecentPlaylists.take(7).toList();
-    }
+    partyShuffled = List.of(partyPlaylists)..shuffle();
+    loveShuffled = List.of(lovePlaylists)..shuffle();
 
     loading = false;
     if (mounted) setState(() {});
-
-    final minutes = await AppDatabase.getMonthlyListeningHours();
-    debugPrint("You've listened $minutes minutes this month");
-
-    lovePlaylists = await searchPlaylistcache.searchPlaylistCache(
-      query: 'love $lang',
-    );
-    partyPlaylists = await searchPlaylistcache.searchPlaylistCache(
-      query: 'party $lang',
-    );
-
-    debugPrint(
-      '--> SearchPlaylistsCache items: ${lovePlaylists.length} & ${partyPlaylists.length}',
-    );
-
-    if (mounted) setState(() {});
-
     await Future.delayed(const Duration(seconds: 3));
     await requestNotificationPermission();
+  }
+
+  void _buildFreqRecent() {
+    freqRecentPlaylists = [...freqplaylists.take(3)];
+    final shuffled = List.of(latestTamilPlayList)..shuffle();
+    freqRecentPlaylists.addAll(shuffled.take(7 - freqRecentPlaylists.length));
+
+    if (freqRecentPlaylists.length < 7) {
+      final all = List.of(playlists)..shuffle();
+      freqRecentPlaylists.addAll(all.take(7 - freqRecentPlaylists.length));
+    }
+    freqRecentPlaylists = freqRecentPlaylists.take(7).toList();
   }
 
   Future<void> _initInternetChecker() async {
@@ -139,20 +141,8 @@ class _DashboardState extends ConsumerState<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // Latest fetches
-    final mid = (latestTamilPlayList.length / 2).ceil();
-    final topLatest = latestTamilPlayList.sublist(0, mid);
-    final fresh = latestTamilPlayList.sublist(mid);
-    // latest album
-    final amid = (latestTamilAlbums.length / 2).ceil();
-    final topLatestAlbum = latestTamilAlbums.sublist(0, amid);
-    final freshAlbum = latestTamilAlbums.sublist(amid);
-
     // Watch language listener
-    final languageNotifier = ref.watch(languageNotifierProvider);
-    languageNotifier.addListener(() {
-      _init();
-    });
+    ref.watch(languageNotifierProvider);
 
     return Scaffold(
       backgroundColor: spotifyBgColor,
@@ -166,6 +156,13 @@ class _DashboardState extends ConsumerState<Dashboard> {
               ? ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
                 children: [
+                  if (_showWaitingCard)
+                    GeneralCards(
+                      onClose: () {
+                        _showWaitingCard = false;
+                        setState(() {});
+                      },
+                    ),
                   heroGridShimmer(),
                   const SizedBox(height: 16),
                   buildPlaylistSectionShimmer(),
@@ -180,90 +177,17 @@ class _DashboardState extends ConsumerState<Dashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _sectionGrid(freqRecentPlaylists),
-                    _sectionList(
-                      "Top Latest",
-                      List.of(topLatest)..shuffle(Random()),
-                    ),
-                    _sectionAlbumList(
-                      "Today's biggest hits",
-                      List.of(topLatestAlbum)..shuffle(Random()),
-                    ),
-                    _sectionList("Fresh", List.of(fresh)..shuffle(Random())),
-                    _sectionList(
-                      "Party Mode",
-                      List.of(partyPlaylists)..shuffle(Random()),
-                    ),
+                    _sectionList("Top Latest", topLatest),
+                    _sectionAlbumList("Today's biggest hits", topLatestAlbum),
+                    _sectionList("Fresh", fresh),
+                    _sectionList("Party Mode", partyShuffled),
                     _sectionArtistList("Fav Artists", artists),
                     _sectionAlbumList("Recent Albums", albums),
-                    _sectionAlbumList(
-                      "Recommeneded for today",
-                      List.of(freshAlbum)..shuffle(Random()),
-                    ),
-                    _sectionList(
-                      "Always Love",
-                      List.of(lovePlaylists)..shuffle(Random()),
-                    ),
-                    _sectionList(
-                      "Century Playlist",
-                      List.of(playlists)..shuffle(Random()),
-                    ),
+                    _sectionAlbumList("Recommended for today", freshAlbum),
+                    _sectionList("Always Love", loveShuffled),
+                    _sectionList("Century Playlist", playlists),
                     const SizedBox(height: 60),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Make',
-                                style: TextStyle(
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white54,
-                                  height: .6,
-                                ),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'it Happen ',
-                                    style: TextStyle(
-                                      fontSize: 40,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white54,
-                                      height: 1.1,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Image.asset(
-                                    'assets/icons/heart.png',
-                                    height: 40,
-                                    alignment: Alignment.center,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                'CRAFTED WITH CARE',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color.fromARGB(255, 47, 47, 47),
-                                  height: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                    makeItHappenCard(),
                     const SizedBox(height: 100),
                   ],
                 ),

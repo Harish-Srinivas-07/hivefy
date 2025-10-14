@@ -3,6 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 
+import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
 import '../../models/database.dart';
 import '../../models/datamodel.dart';
@@ -37,9 +38,8 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
     _fetchSongs();
     _scrollController = ScrollController();
     _scrollController.addListener(() {
-      setState(() {
-        _isTitleCollapsed = _scrollController.offset > 200;
-      });
+      _isTitleCollapsed = _scrollController.offset > 200;
+      if (mounted) setState(() {});
     });
   }
 
@@ -50,7 +50,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
   }
 
   Future<void> _fetchSongs() async {
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);
 
     try {
       if (widget.showLikedSongs) {
@@ -58,7 +58,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
         if (ids.isEmpty) {
           _songs = [];
           _totalDuration = 0;
-          setState(() => _loading = false);
+          if (mounted) setState(() => _loading = false);
           return;
         }
 
@@ -194,14 +194,16 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                     sourceId == "liked_songs" && currentQueue.isNotEmpty;
 
                 if (isSameLikedQueue) {
-                  // Skip to the correct song in **current queue**
-                  final queueIndex = currentQueue.indexWhere(
-                    (s) => s.id == song.id,
-                  );
-                  if (queueIndex != -1) {
-                    await audioHandler.skipToQueueItem(queueIndex);
+                  final isShuffle = audioHandler.isShuffle;
+                  final queue = audioHandler.queueSongs;
+                  final targetIndex =
+                      isShuffle
+                          ? queue.indexWhere((s) => s.id == song.id)
+                          : currentQueue.indexWhere((s) => s.id == song.id);
+
+                  if (targetIndex != -1) {
+                    await audioHandler.skipToQueueItem(targetIndex);
                   } else {
-                    // If somehow song not in queue, reload queue
                     await audioHandler.loadQueue(
                       _songs,
                       startIndex: _songs.indexWhere((s) => s.id == song.id),
@@ -210,10 +212,8 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                     );
                   }
                 } else {
-                  // Load fresh queue
                   final startIndex = _songs.indexWhere((s) => s.id == song.id);
                   if (startIndex == -1) return;
-
                   await audioHandler.loadQueue(
                     _songs,
                     startIndex: startIndex,
@@ -302,7 +302,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       size: 20,
                     ),
                     onPressed: () {
-                      // TODO: Show song menu
+                      showMediaItemMenu(context, song);
                     },
                   ),
                 ],

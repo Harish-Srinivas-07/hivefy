@@ -11,6 +11,7 @@ import 'package:toastification/toastification.dart';
 import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/search.dart';
+import 'services/systemconfig.dart';
 import 'services/audiohandler.dart';
 import 'services/localnotification.dart';
 import 'shared/constants.dart';
@@ -22,6 +23,7 @@ void main() async {
   packageInfo = await PackageInfo.fromPlatform();
 
   await initNotifications();
+  await SystemUiConfigurator.configure();
 
   runApp(ToastificationWrapper(child: ProviderScope(child: const MyApp())));
 }
@@ -53,20 +55,8 @@ class _MyAppState extends ConsumerState<MyApp> {
     _linkSubscription = AppLinks().uriLinkStream.listen((uri) {
       debugPrint('onAppLink: $uri');
     });
-
     // Await the audioHandler FutureProvider
-    final audioHandler = await ref.read(audioHandlerProvider.future);
-
-    debugPrint('--> AudioHandler initialized: $audioHandler');
-    // // Listen to current media item
-    // audioHandler.mediaItem.listen((mediaItem) {
-    //   debugPrint('Current MediaItem: $mediaItem');
-    // });
-
-    // // Optionally, listen to the queue
-    // audioHandler.queue.listen((queue) {
-    //   debugPrint('Queue: $queue');
-    // });
+    await ref.read(audioHandlerProvider.future);
   }
 
   @override

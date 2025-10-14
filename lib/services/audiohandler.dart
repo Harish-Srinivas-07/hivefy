@@ -43,8 +43,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   bool _shuffle = false;
   RepeatMode _repeat = RepeatMode.none;
-  List<int>? _shuffleOrder;
-  Duration _lastPosition = Duration.zero;
 
   MyAudioHandler(this.ref) {
     // keep system playbackState in sync
@@ -79,14 +77,22 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
 
     // duration watch
+    Duration lastPosition = Duration.zero;
+    Timer? playbackTimer;
+
     _player.positionStream.listen((pos) async {
       final current = currentSong;
-      if (current != null) {
-        final delta = pos - _lastPosition;
-        if (delta.inSeconds > 1) {
+      if (current == null) return;
+
+      final delta = pos - lastPosition;
+      if (delta.inSeconds >= 5) {
+        // only update every 5 seconds
+        lastPosition = pos;
+
+        playbackTimer?.cancel();
+        playbackTimer = Timer(const Duration(seconds: 1), () async {
           await AppDatabase.addPlayedDuration(current.id, delta);
-          _lastPosition = pos;
-        }
+        });
       }
     });
 
@@ -143,14 +149,56 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int get currentIndex => _currentIndex;
 
   // --- Shuffle & repeat
+  List<SongDetail>? _originalQueue;
+
   void toggleShuffle() {
     _shuffle = !_shuffle;
-    if (_shuffle) _generateShuffleOrder();
-    ref.read(shuffleProvider.notifier).state = _shuffle;
-  }
 
-  void regenerateShuffle() {
-    if (_shuffle) _generateShuffleOrder();
+    final current = currentSong;
+
+    if (_shuffle) {
+      // backup original order
+      _originalQueue = List.from(_queue);
+
+      // shuffle new order
+      _queue.shuffle();
+
+      // put current song back in right position
+      if (current != null) {
+        final idx = _queue.indexWhere((s) => s.id == current.id);
+        if (idx != -1) {
+          _queue.removeAt(idx);
+        }
+        _queue.insert(0, current);
+        _currentIndex = 0;
+      }
+
+      debugPrint('--> Queue shuffled (${_queue.length} songs)');
+    } else {
+      if (_originalQueue != null) {
+        _queue = List.from(_originalQueue!);
+        _originalQueue = null;
+
+        if (current != null) {
+          _currentIndex = _queue.indexWhere((s) => s.id == current.id);
+        }
+      }
+
+      debugPrint('--> Shuffle disabled, restored original queue');
+    }
+
+    // refresh queue broadcast
+    queue.add(_queue.map(songToMediaItem).toList());
+    ref.read(shuffleProvider.notifier).state = _shuffle;
+
+    //  only update once
+    if (current != null && mediaItem.value?.id != current.id) {
+      mediaItem.add(songToMediaItem(current));
+    }
+
+    // update provider quietly (no extra media event)
+    final notifier = ref.read(currentSongProvider.notifier);
+    if (notifier.state?.id != current?.id) notifier.state = current;
   }
 
   Future<void> reorderQueue(int oldIndex, int newIndex) async {
@@ -227,9 +275,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
     _queue.insert(insertIndex, song);
 
-    if (_shuffle) _generateShuffleOrder();
-
-    // 🔥 Incremental update
     final updated = List<MediaItem>.from(queue.value);
     updated.insert(insertIndex, songToMediaItem(song));
     queue.add(updated);
@@ -241,12 +286,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _queue.add(song);
     _enforceQueueLimit();
 
-    if (_shuffle) {
-      _shuffleOrder ??= List.generate(_queue.length - 1, (i) => i);
-      _shuffleOrder!.add(_queue.length - 1);
-    }
-
-    // 🔥 Incremental update
     final updated = List<MediaItem>.from(queue.value)
       ..add(songToMediaItem(song));
     queue.add(updated);
@@ -286,17 +325,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    if (_shuffle && _shuffleOrder != null && _shuffleOrder!.isNotEmpty) {
-      final idx = _shuffleOrder!.indexOf(_currentIndex);
-      if (idx + 1 < _shuffleOrder!.length) {
-        _currentIndex = _shuffleOrder![idx + 1];
-      } else if (_repeat == RepeatMode.all) {
-        _currentIndex = _shuffleOrder!.first;
-      } else {
-        await stop();
-        return;
-      }
-    } else if (hasNext) {
+    if (_queue.isEmpty) return;
+
+    if (hasNext) {
       _currentIndex++;
     } else if (_repeat == RepeatMode.all) {
       _currentIndex = 0;
@@ -310,16 +341,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> skipToPrevious() async {
-    if (_shuffle && _shuffleOrder != null) {
-      final idx = _shuffleOrder!.indexOf(_currentIndex);
-      if (idx > 0) {
-        _currentIndex = _shuffleOrder![idx - 1];
-      } else if (_repeat == RepeatMode.all) {
-        _currentIndex = _shuffleOrder!.last;
-      } else {
-        return;
-      }
-    } else if (hasPrevious) {
+    if (_queue.isEmpty) return;
+
+    if (hasPrevious) {
       _currentIndex--;
     } else if (_repeat == RepeatMode.all) {
       _currentIndex = _queue.length - 1;
@@ -346,13 +370,18 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final song = await AppDatabase.getSong(mediaItem.id);
     if (song == null) return;
 
+    // avoid duplicates, then add at end
     _queue.removeWhere((s) => s.id == song.id);
     _queue.add(song);
     _enforceQueueLimit();
 
-    if (_shuffle) {
-      _shuffleOrder ??= List.generate(_queue.length - 1, (i) => i);
-      _shuffleOrder!.add(_queue.length - 1);
+    // if shuffle on, re-shuffle but keep current song first
+    if (_shuffle && _queue.length > 1) {
+      final current = _queue[_currentIndex];
+      _queue.remove(current);
+      _queue.shuffle();
+      _queue.insert(0, current);
+      _currentIndex = 0;
     }
 
     queue.add(_queue.map(songToMediaItem).toList());
@@ -363,7 +392,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   String? get queueSourceId => _queueSourceId;
   String? get queueSourceName => _queueSourceName;
-
   Future<void> loadQueue(
     List<SongDetail> songs, {
     int startIndex = 0,
@@ -380,9 +408,12 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _currentIndex = startIndex.clamp(0, _queue.length - 1);
 
     if (_shuffle) {
-      _generateShuffleOrder(startAtCurrent: true);
-      // Start playback from the first in shuffle order
-      _currentIndex = _shuffleOrder!.first;
+      // physically shuffle but keep current song first
+      final current = _queue[_currentIndex];
+      _queue.remove(current);
+      _queue.shuffle();
+      _queue.insert(0, current);
+      _currentIndex = 0;
     }
 
     queue.add(_queue.map(songToMediaItem).toList());
@@ -393,28 +424,20 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final existingIndex = _queue.indexWhere((s) => s.id == song.id);
 
     if (existingIndex >= 0) {
-      // Song already in queue — just jump to it
       _currentIndex = existingIndex;
     } else {
-      if (insertNext) {
-        final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
-        _queue.insert(insertIndex, song);
-        _currentIndex = insertIndex;
-      } else {
-        // Default: play immediately by inserting right after current
-        _queue.insert(_currentIndex + 1, song);
-        _currentIndex = _currentIndex + 1;
-      }
+      final insertIndex =
+          insertNext
+              ? (_currentIndex + 1).clamp(0, _queue.length)
+              : _currentIndex + 1;
 
-      // Update the queue
+      _queue.insert(insertIndex, song);
+      _currentIndex = insertIndex;
+
       queue.add(_queue.map(songToMediaItem).toList());
       _queueSourceName = song.albumName;
-
-      // Regenerate shuffle order if shuffle is on
-      if (_shuffle) _generateShuffleOrder();
     }
 
-    // Play without replacing the whole queue
     await _playCurrent();
   }
 
@@ -506,17 +529,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     );
   }
 
-  void _generateShuffleOrder({bool startAtCurrent = true}) {
-    _shuffleOrder = List.generate(_queue.length, (i) => i)..shuffle();
-
-    // Ensure current song stays consistent in shuffle context
-    if (startAtCurrent && _currentIndex >= 0 && _currentIndex < _queue.length) {
-      final current = _currentIndex;
-      _shuffleOrder!.remove(current);
-      _shuffleOrder!.insert(0, current);
-    }
-  }
-
   Future<void> _initLastPlayed() async {
     final last = await LastPlayedSongStorage.load();
     if (last != null) {
@@ -549,7 +561,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         mediaItem.add(songToMediaItem(last));
 
         final dominant = await getDominantColorFromImage(last.images.last.url);
-        ref.read(playerColourProvider.notifier).state = dominant;
+        ref.read(playerColourProvider.notifier).state = getDominantDarker(
+          dominant,
+        );
       } catch (e) {
         debugPrint('--> initLastPlayed catch: $e');
       }

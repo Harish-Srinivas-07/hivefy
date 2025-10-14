@@ -39,6 +39,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   void initState() {
     super.initState();
     _init();
+    ref.read(languageNotifierProvider).addListener(() {
+      if (!mounted) return;
+      _init();
+    });
   }
 
   @override
@@ -158,10 +162,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             : ref.watch(frequentPlaylistsProvider);
 
     // Watch language listener
-    final languageNotifier = ref.watch(languageNotifierProvider);
-    languageNotifier.addListener(() {
-      _init();
-    });
+    ref.watch(languageNotifierProvider);
 
     items = [
       LibraryCardData(

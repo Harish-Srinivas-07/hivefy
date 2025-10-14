@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:readmore/readmore.dart';
 
+import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
 import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
@@ -14,6 +15,7 @@ import '../../services/latestsaavnfetcher.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
+import '../features/language.dart';
 
 class PlaylistViewer extends ConsumerStatefulWidget {
   final String playlistId;
@@ -46,9 +48,8 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           _scrollController.offset > (400 - kToolbarHeight - 20);
 
       if (isCollapsed != _isTitleCollapsed) {
-        setState(() {
-          _isTitleCollapsed = isCollapsed;
-        });
+        _isTitleCollapsed = isCollapsed;
+        if (mounted) setState(() {});
       }
     });
   }
@@ -74,7 +75,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
   }
 
   Future<void> _fetchPlaylist() async {
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);
 
     try {
       final playlist = await SaavnAPI().fetchPlaylistById(
@@ -82,12 +83,16 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
         limit: 50,
       );
 
-      if (playlist == null || playlist.songs.isEmpty) {
-        setState(() => _loading = false);
+      if (playlist == null) {
+        debugPrint('No playlist or songs available for ${widget.playlistId}');
+        if (mounted) setState(() => _loading = false);
         return;
       }
 
       _playlist = playlist;
+      debugPrint(
+        '--> ${widget.playlistId} Playlist has ${_playlist?.songs.length} songs',
+      );
       await _updateBgColor();
       _playlistSongDetails = [];
       _totalPlaylistDuration = 0;
@@ -110,8 +115,14 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
       debugPrint("Error fetching playlist: $e\n$st");
     } finally {
       if (mounted) setState(() => _loading = false);
-      similarPlaylist = (await LatestSaavnFetcher.getLatestPlaylists('tamil'))
-        ..shuffle();
+
+      final lang = ref.read(languageNotifierProvider).value;
+      similarPlaylist =
+          (await LatestSaavnFetcher.getLatestPlaylists(
+              lang,
+            )).where((p) => p.id != widget.playlistId).toList()
+            ..shuffle();
+
       similarPlaylist = similarPlaylist.take(5).toList();
     }
   }
@@ -617,10 +628,13 @@ class SongRow extends ConsumerWidget {
           if (tappedIndex == -1) return;
 
           if (isSamePlaylist && currentQueue.isNotEmpty) {
-            // 🎯 Already playing this playlist → jump to that song
-            await audioHandler.skipToQueueItem(tappedIndex);
+            final shuffleIndex =
+                audioHandler.isShuffle
+                    ? currentQueue.indexWhere((s) => s.id == song.id)
+                    : tappedIndex;
+            if (shuffleIndex == -1) return;
+            await audioHandler.skipToQueueItem(shuffleIndex);
           } else {
-            // 🚀 Load new queue for this playlist
             await audioHandler.loadQueue(
               allSongs,
               startIndex: tappedIndex,
@@ -709,7 +723,7 @@ class SongRow extends ConsumerWidget {
                   size: 20,
                 ),
                 onPressed: () {
-                  // TODO: Show song menu
+                  showMediaItemMenu(context, song);
                 },
               ),
             ],

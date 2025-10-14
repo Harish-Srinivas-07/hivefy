@@ -485,8 +485,14 @@ class ArtistSongRow extends ConsumerWidget {
             }
 
             // 2️⃣ Same queue → just skip
+            // 2️⃣ Same queue → just skip
             if (isSameQueue) {
-              await audioHandler.skipToQueueItem(tappedIndex);
+              final shuffleIndex =
+                  audioHandler.isShuffle
+                      ? queue.indexWhere((m) => m.id == song.id)
+                      : tappedIndex;
+              if (shuffleIndex == -1) return;
+              await audioHandler.skipToQueueItem(shuffleIndex);
               await audioHandler.play();
               return;
             }
