@@ -9,11 +9,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../components/shimmers.dart';
 import '../components/showmenu.dart';
+import '../components/timersheet.dart';
 import '../models/datamodel.dart';
 import '../services/offlinemanager.dart';
 import '../screens/features/queuesheet.dart';
 import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
+import '../services/sleeptimer.dart';
 import '../utils/format.dart';
 import '../utils/theme.dart';
 import 'constants.dart';
@@ -1057,10 +1059,11 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           IconButton(
-                            icon: const Icon(
-                              Icons.keyboard_arrow_down,
+                            icon: Image.asset(
+                              'assets/icons/down_arrow.png',
+                              width: 20,
+                              height: 20,
                               color: Colors.white,
-                              size: 24,
                             ),
                             onPressed: () => Navigator.of(context).pop(),
                           ),
@@ -1073,7 +1076,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                   "Now Playing".toUpperCase(),
                                   style: TextStyle(
                                     color: Colors.white70,
-                                    fontSize: 13,
+                                    fontSize: 12.5,
                                     fontWeight: FontWeight.w400,
                                   ),
                                 ),
@@ -1102,13 +1105,13 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(
-                              Icons.more_vert,
-                              color: Colors.white70,
-                              size: 24,
+                            icon: Image.asset(
+                              'assets/icons/menu.png',
+                              width: 20,
+                              height: 20,
+                              color: Colors.white,
                             ),
                             onPressed: () {
-                              debugPrint('---> here the menu pressed');
                               showMediaItemMenu(context, song);
                             },
                           ),
@@ -1264,6 +1267,31 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                         _downloadSong(song),
 
                                         const Spacer(),
+                                        Consumer(
+                                          builder: (context, ref, _) {
+                                            final sleepState = ref.watch(
+                                              sleepTimerProvider,
+                                            );
+                                            final hasTimer =
+                                                sleepState.option !=
+                                                SleepTimerOption.off;
+
+                                            return IconButton(
+                                              icon: Image.asset(
+                                                'assets/icons/timer.png',
+                                                width: 20,
+                                                height: 20,
+                                                color:
+                                                    hasTimer
+                                                        ? spotifyGreen
+                                                        : Colors.white70,
+                                              ),
+                                              onPressed: () {
+                                                showSleepTimerSheet(context);
+                                              },
+                                            );
+                                          },
+                                        ),
                                         // queue & share
                                         IconButton(
                                           icon: Image.asset(

@@ -990,6 +990,33 @@ class FrequentAlbumsNotifier extends StateNotifier<List<Album>> {
   Future<void> refresh() async {
     await _loadFrequentAlbums();
   }
+
+  Future<void> promoteAlbum(String albumId) async {
+    final album = await AlbumCache().get(albumId);
+    if (album == null) return;
+
+    // force increment usage
+    await AlbumCache().set(albumId, album);
+    await _loadFrequentAlbums();
+  }
+
+  Future<void> removeAlbum(String albumId) async {
+    // remove from cache
+    final album = await AlbumCache().get(albumId);
+    if (album != null) {
+      // Remove manually from cache
+      final allAlbums = await AlbumCache().getAll();
+      allAlbums.removeWhere((a) => a.id == albumId);
+
+      // Clear and re-set remaining albums
+      await AlbumCache().clear();
+      for (var a in allAlbums) {
+        await AlbumCache().set(a.id, a);
+      }
+
+      await _loadFrequentAlbums();
+    }
+  }
 }
 
 // ---------------- FREQUENT PLAYLISTS PROVIDER ------------------
@@ -1022,5 +1049,32 @@ class FrequentPlaylistsNotifier extends StateNotifier<List<Playlist>> {
 
   Future<void> refresh() async {
     await _loadFrequentPlaylists();
+  }
+
+  /// Promote a playlist (increase usage)
+  Future<void> promotePlaylist(String playlistId) async {
+    final playlist = await PlaylistCache().get(playlistId);
+    if (playlist == null) return;
+
+    // force increment usage by re-setting
+    await PlaylistCache().set(playlistId, playlist);
+    await _loadFrequentPlaylists();
+  }
+
+  /// Remove a playlist completely
+  Future<void> removePlaylist(String playlistId) async {
+    final playlist = await PlaylistCache().get(playlistId);
+    if (playlist != null) {
+      final allPlaylists = await PlaylistCache().getAll();
+      allPlaylists.removeWhere((p) => p.id == playlistId);
+
+      // Clear cache and re-set remaining playlists
+      await PlaylistCache().clear();
+      for (var p in allPlaylists) {
+        await PlaylistCache().set(p.id, p);
+      }
+
+      await _loadFrequentPlaylists();
+    }
   }
 }

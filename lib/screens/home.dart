@@ -19,11 +19,10 @@ class Home extends ConsumerStatefulWidget {
   const Home({super.key});
 
   @override
-  ConsumerState<Home> createState() => _HomeState();
+  ConsumerState<Home> createState() => HomeState();
 }
 
-class _HomeState extends ConsumerState<Home>
-    with AutomaticKeepAliveClientMixin {
+class HomeState extends ConsumerState<Home> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -56,7 +55,7 @@ class _HomeState extends ConsumerState<Home>
   }
 
   // Helper to push into the currently active tab navigator
-  Future<void> _pushToActiveTab(Widget page) async {
+  Future<void> pushToActiveTab(Widget page) async {
     final tabIndex = ref.read(tabIndexProvider);
     final currentKey = _navigatorKeys[tabIndex];
     final state = currentKey.currentState;
@@ -126,7 +125,7 @@ class _HomeState extends ConsumerState<Home>
           onNavigate: (page) async {
             Navigator.of(context).pop();
             await Future.delayed(const Duration(microseconds: 300));
-            await _pushToActiveTab(page);
+            await pushToActiveTab(page);
           },
         ),
         body: Stack(

@@ -32,6 +32,19 @@ Future<void> initNotifications() async {
       >()
       ?.createNotificationChannel(androidChannel);
 
+  const generalChannel = AndroidNotificationChannel(
+    'general_channel',
+    'General Notifications',
+    description: 'General app notifications to make engage users',
+    importance: Importance.high,
+  );
+
+  await notifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(generalChannel);
+
   debugPrint("✅ Notifications initialized with channel 'downloads_channel'");
 }
 
@@ -58,7 +71,7 @@ Future<void> showDownloadNotification(String title, double progress) async {
 
   await notifications.show(
     0,
-    '$title Downloading',
+    title,
     'Downloading...',
     details,
     payload: 'download_progress',
@@ -67,4 +80,26 @@ Future<void> showDownloadNotification(String title, double progress) async {
 
 Future<void> cancelDownloadNotification() async {
   await notifications.cancel(0);
+}
+
+Future<void> showSimpleNotification(String title, String body) async {
+  const androidDetails = AndroidNotificationDetails(
+    'general_channel',
+    'General Notifications',
+    channelDescription: 'General app notifications to make engage users',
+    importance: Importance.high,
+    priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+    icon: '@drawable/ic_launcher_foreground',
+  );
+
+  const details = NotificationDetails(android: androidDetails);
+
+  await notifications.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    title,
+    body,
+    details,
+  );
 }

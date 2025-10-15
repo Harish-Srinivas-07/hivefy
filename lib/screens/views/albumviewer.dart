@@ -317,10 +317,11 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
                     // Menu icon
                     IconButton(
-                      icon: const Icon(
-                        Icons.more_vert,
+                      icon: Image.asset(
+                        'assets/icons/menu.png',
+                        width: 20,
+                        height: 20,
                         color: Colors.white70,
-                        size: 20,
                       ),
                       onPressed: () {
                         showMediaItemMenu(context, song);
@@ -343,6 +344,18 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          IconButton(
+            icon: Image.asset(
+              'assets/icons/menu.png',
+              width: 20,
+              height: 20,
+              color: Colors.grey[600],
+            ),
+            onPressed: () {
+              if (_album != null) showMediaItemMenu(context, _album!);
+            },
+          ),
+
           // Shuffle button
           GestureDetector(
             onTap: () async {
@@ -461,11 +474,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                 color: spotifyGreen,
               );
               onTap = () async {
-                for (final song in album.songs) {
-                  await offlineManager.deleteSong(song.id);
-                }
-                // Also unmark album as downloaded
-                offlineManager.unmarkAlbum(album.id);
+                offlineManager.deleteAlbumById(album.id);
               };
             } else if (status == DownloadStatus.downloading) {
               // ✅ Use same size + padding

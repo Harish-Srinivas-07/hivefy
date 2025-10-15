@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:hivefy/components/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/datamodel.dart';
 import '../models/database.dart';
+import 'jiosaavn.dart';
 import 'localnotification.dart';
 
 // instance
@@ -31,6 +33,25 @@ class OfflineStorageManager {
   Map<String, double> downloadProgress = {};
   final Map<String, ValueNotifier<double>> _progressNotifiers = {};
   final Map<String, ValueNotifier<DownloadStatus>> _statusNotifiers = {};
+
+  // Below your album-related maps
+  final Map<String, ValueNotifier<int>> _setDownloadedCounts = {};
+  final Map<String, ValueNotifier<DownloadStatus>> _setStatusNotifiers = {};
+  ValueNotifier<int> songsSetDownloadedCountNotifier(String setId) {
+    if (!_setDownloadedCounts.containsKey(setId)) {
+      _setDownloadedCounts[setId] = ValueNotifier<int>(0);
+    }
+    return _setDownloadedCounts[setId]!;
+  }
+
+  ValueNotifier<DownloadStatus> songsSetStatusNotifier(String setId) {
+    if (!_setStatusNotifiers.containsKey(setId)) {
+      _setStatusNotifiers[setId] = ValueNotifier<DownloadStatus>(
+        DownloadStatus.idle,
+      );
+    }
+    return _setStatusNotifiers[setId]!;
+  }
 
   ValueNotifier<double> progressNotifier(String songId) {
     if (!_progressNotifiers.containsKey(songId)) {
@@ -220,6 +241,18 @@ class OfflineStorageManager {
     updateStatus(songId, DownloadStatus.idle);
     updateProgress(songId, 0.0);
 
+    // ✅ Update all sets containing this song
+    _setDownloadedCounts.forEach((setId, countNotifier) {
+      final count = countNotifier.value;
+      if (count > 0) {
+        countNotifier.value = (count - 1).clamp(0, count);
+      }
+    });
+
+    _setStatusNotifiers.forEach((setId, statusNotifier) {
+      statusNotifier.value = DownloadStatus.idle;
+    });
+
     await _save();
   }
 
@@ -259,6 +292,54 @@ class OfflineStorageManager {
         },
       );
     }
+  }
+
+  Future<void> downloadSongsSetWithStatus(
+    String setId,
+    Set<String> songIds, {
+    Function(String songId, double progress)? onProgress,
+  }) async {
+    final statusNotifier = songsSetStatusNotifier(setId);
+    final countNotifier = songsSetDownloadedCountNotifier(setId);
+
+    statusNotifier.value = DownloadStatus.downloading;
+    countNotifier.value = 0;
+
+    int completedCount = 0;
+
+    for (final songId in songIds) {
+      await downloadSong(
+        songId,
+        onProgress: (progress) {
+          if (onProgress != null) onProgress(songId, progress);
+        },
+      );
+      completedCount++;
+      countNotifier.value = completedCount;
+    }
+
+    final allDownloaded = songIds.every(
+      (id) => getDownloadStatus(id) == DownloadStatus.completed,
+    );
+
+    statusNotifier.value =
+        allDownloaded ? DownloadStatus.completed : DownloadStatus.idle;
+
+    if (allDownloaded) {
+      await showSimpleNotification(
+        "Playlist Downloaded",
+        "All ${songIds.length} songs are available offline 🎶",
+      );
+    }
+  }
+
+  Future<void> deleteSongsSet(String setId, Set<String> songIds) async {
+    info('Clearing Offline sings caches under progress', Severity.success);
+    for (final songId in songIds) {
+      await deleteSong(songId);
+    }
+    songsSetStatusNotifier(setId).value = DownloadStatus.idle;
+    songsSetDownloadedCountNotifier(setId).value = 0;
   }
 
   Future<void> deleteAllSongs() async {
@@ -351,6 +432,10 @@ class OfflineStorageManager {
 
   List<String> getAllDownloadedAlbums() => _downloadedAlbums.toList();
 
+  bool isSongDownloaded(String songId) {
+    return _offlineSongs.containsKey(songId);
+  }
+
   Future<void> downloadAlbumSongs(
     Album album, {
     Function(String songId, double progress)? onProgress,
@@ -384,6 +469,10 @@ class OfflineStorageManager {
 
     if (allDownloaded) {
       markAlbumAsDownloaded(album.id);
+      await showSimpleNotification(
+        "Album Downloaded",
+        "\"${album.title}\" is now available offline 🎶",
+      );
     } else {
       unmarkAlbum(album.id);
     }
@@ -416,6 +505,28 @@ class OfflineStorageManager {
       );
     }
     return _albumStatusNotifiers[albumId]!;
+  }
+
+  Future<void> deleteAlbumById(String albumId) async {
+    info('Album songs cache clearing under progress...', Severity.success);
+    final album = await saavn.fetchAlbumById(albumId: albumId);
+    if (album != null && album.songs.isNotEmpty) {
+      // Fetch full song details if needed
+      final albumSongs = await saavn.getSongDetails(
+        ids: album.songs.map((s) => s.id).toList(),
+      );
+
+      // Delete all songs in the album
+      for (final song in albumSongs) {
+        await deleteSong(song.id);
+      }
+    }
+
+    // Unmark the album in memory and UI
+    unmarkAlbum(albumId);
+
+    // Persist changes
+    await _save();
   }
 
   /// Returns total storage used by offline songs in bytes

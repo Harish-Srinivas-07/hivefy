@@ -5,12 +5,14 @@ import 'package:flutter_swipe_action_cell/core/cell.dart';
 
 import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
+import '../../components/timersheet.dart';
 import '../../models/database.dart';
 import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
 import '../../services/offlinemanager.dart';
+import '../../services/sleeptimer.dart';
 import '../../shared/constants.dart';
 import '../../shared/player.dart';
 import '../../utils/format.dart';
@@ -137,12 +139,13 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
 
     return ValueListenableBuilder(
       valueListenable: hasInternet,
-      builder: (context, value, child) {
-        bool isEnabled = true;
+      builder: (context, hasNet, child) {
+        final isOfflineAvailable = offlineManager.isAvailableOffline(
+          songId: song.id,
+        );
 
-        if (!value) {
-          isEnabled = offlineManager.isAvailableOffline(songId: song.id);
-        }
+        // ✅ Enable only if online OR offline copy exists
+        final isEnabled = hasNet || isOfflineAvailable;
 
         return SwipeActionCell(
           backgroundColor: Colors.transparent,
@@ -167,7 +170,14 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () async {
-              if (!isEnabled) return; // No internet
+              // Disable tap if no internet AND not offline
+              if (!isEnabled) {
+                info(
+                  "No internet and song not available offline",
+                  Severity.warning,
+                );
+                return;
+              }
 
               try {
                 final audioHandler = await ref.read(
@@ -275,14 +285,34 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           song.primaryArtists.isNotEmpty
                               ? song.primaryArtists
                               : song.album,
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
                       ],
                     ),
                   ),
-                  if (isLiked)
+
+                  // ✅ Icon Logic
+                  if (widget.showLikedSongs)
+                    // show tick only if song is available offline
+                    if (offlineManager.isAvailableOffline(songId: song.id))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Image.asset(
+                          'assets/icons/tick.png',
+                          width: 26,
+                          height: 26,
+                          fit: BoxFit.contain,
+                          color: spotifyGreen,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 26, height: 26),
+                  if (!widget.showLikedSongs && isLiked)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Image.asset(
@@ -294,12 +324,12 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       ),
                     ),
 
-                  // Menu icon
                   IconButton(
-                    icon: const Icon(
-                      Icons.more_vert,
+                    icon: Image.asset(
+                      'assets/icons/menu.png',
+                      width: 20,
+                      height: 20,
                       color: Colors.white70,
-                      size: 20,
                     ),
                     onPressed: () {
                       showMediaItemMenu(context, song);
@@ -344,6 +374,80 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
     );
   }
 
+  Widget _downloadSongSet(String setId, Set<String> songIds) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.songsSetStatusNotifier(setId),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: offlineManager.songsSetDownloadedCountNotifier(
+            setId,
+          ),
+          builder: (context, downloadedCount, _) {
+            final total = songIds.length;
+            Widget icon;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              icon = Image.asset(
+                'assets/icons/complete_download.png',
+                width: 32,
+                height: 32,
+                color: spotifyGreen,
+              );
+              onTap = () => offlineManager.deleteSongsSet(setId, songIds);
+            } else if (status == DownloadStatus.downloading) {
+              icon = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: downloadedCount / total,
+                    color: spotifyGreen,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              icon = Image.asset(
+                'assets/icons/download.png',
+                width: 32,
+                height: 32,
+                color: Colors.white70,
+              );
+              onTap =
+                  () =>
+                      offlineManager.downloadSongsSetWithStatus(setId, songIds);
+            }
+
+            return GestureDetector(
+              onTap: onTap,
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "$downloadedCount of $total downloaded"
+                        : status == DownloadStatus.completed
+                        ? "Offline Available"
+                        : "Download All",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildHeaderInfo() {
     final isShuffle = ref.watch(shuffleProvider);
 
@@ -371,99 +475,127 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Shuffle Button
-              GestureDetector(
-                onTap: () async {
-                  final audioHandler = await ref.read(
-                    audioHandlerProvider.future,
-                  );
-                  audioHandler.toggleShuffle();
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: const BoxDecoration(shape: BoxShape.circle),
-                  child: Image.asset(
-                    'assets/icons/shuffle.png',
-                    width: 24,
-                    height: 24,
-                    color: isShuffle ? spotifyGreen : Colors.grey[600],
+              _downloadSongSet('likedSongs', _songs.map((a) => a.id).toSet()),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final sleepState = ref.watch(sleepTimerProvider);
+                      final hasTimer =
+                          sleepState.option != SleepTimerOption.off;
+
+                      return IconButton(
+                        icon: Image.asset(
+                          'assets/icons/timer.png',
+                          width: 26,
+                          height: 26,
+                          color: hasTimer ? spotifyGreen : Colors.white70,
+                        ),
+                        onPressed: () {
+                          showSleepTimerSheet(context);
+                        },
+                      );
+                    },
                   ),
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // Play/Pause Button
-              StreamBuilder<PlayerState>(
-                stream: ref
-                    .read(audioHandlerProvider.future)
-                    .asStream()
-                    .asyncExpand((h) => h.playerStateStream),
-                builder: (context, snapshot) {
-                  final isPlaying = snapshot.data?.playing ?? false;
-                  final currentSong = ref.watch(currentSongProvider);
-
-                  final bool isCurrentLikedSong =
-                      currentSong != null &&
-                      _songs.any((s) => s.id == currentSong.id);
-
-                  final icon =
-                      isCurrentLikedSong
-                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                          : Icons.play_arrow;
-
-                  return GestureDetector(
+                  // Shuffle Button
+                  GestureDetector(
                     onTap: () async {
-                      try {
-                        final audioHandler = await ref.read(
-                          audioHandlerProvider.future,
-                        );
-
-                        if (isCurrentLikedSong) {
-                          // 🔁 Toggle play/pause
-                          if (isPlaying) {
-                            await audioHandler.pause();
-                          } else {
-                            await audioHandler.play();
-                          }
-                        } else {
-                          // 🚀 Load liked songs queue
-                          int startIndex = 0;
-                          if (isShuffle) {
-                            startIndex =
-                                DateTime.now().millisecondsSinceEpoch %
-                                _songs.length;
-                          }
-
-                          await audioHandler.loadQueue(
-                            _songs,
-                            startIndex: startIndex,
-                            sourceId: "liked_songs",
-                            sourceName: "Liked Songs",
-                          );
-
-                          if (isShuffle && !audioHandler.isShuffle) {
-                            audioHandler.toggleShuffle();
-                          }
-
-                          await audioHandler.play();
-                        }
-                      } catch (e, st) {
-                        debugPrint("Error handling liked play button: $e\n$st");
-                      }
+                      final audioHandler = await ref.read(
+                        audioHandlerProvider.future,
+                      );
+                      audioHandler.toggleShuffle();
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.green,
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(shape: BoxShape.circle),
+                      child: Image.asset(
+                        'assets/icons/shuffle.png',
+                        width: 24,
+                        height: 24,
+                        color: isShuffle ? spotifyGreen : Colors.grey[600],
                       ),
-                      child: Icon(icon, color: Colors.black, size: 30),
                     ),
-                  );
-                },
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Play/Pause Button
+                  StreamBuilder<PlayerState>(
+                    stream: ref
+                        .read(audioHandlerProvider.future)
+                        .asStream()
+                        .asyncExpand((h) => h.playerStateStream),
+                    builder: (context, snapshot) {
+                      final isPlaying = snapshot.data?.playing ?? false;
+                      final currentSong = ref.watch(currentSongProvider);
+
+                      final bool isCurrentLikedSong =
+                          currentSong != null &&
+                          _songs.any((s) => s.id == currentSong.id);
+
+                      final icon =
+                          isCurrentLikedSong
+                              ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                              : Icons.play_arrow;
+
+                      return GestureDetector(
+                        onTap: () async {
+                          try {
+                            final audioHandler = await ref.read(
+                              audioHandlerProvider.future,
+                            );
+
+                            if (isCurrentLikedSong) {
+                              // 🔁 Toggle play/pause
+                              if (isPlaying) {
+                                await audioHandler.pause();
+                              } else {
+                                await audioHandler.play();
+                              }
+                            } else {
+                              // 🚀 Load liked songs queue
+                              int startIndex = 0;
+                              if (isShuffle) {
+                                startIndex =
+                                    DateTime.now().millisecondsSinceEpoch %
+                                    _songs.length;
+                              }
+
+                              await audioHandler.loadQueue(
+                                _songs,
+                                startIndex: startIndex,
+                                sourceId: "liked_songs",
+                                sourceName: "Liked Songs",
+                              );
+
+                              if (isShuffle && !audioHandler.isShuffle) {
+                                audioHandler.toggleShuffle();
+                              }
+
+                              await audioHandler.play();
+                            }
+                          } catch (e, st) {
+                            debugPrint(
+                              "Error handling liked play button: $e\n$st",
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.green,
+                          ),
+                          child: Icon(icon, color: Colors.black, size: 30),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),

@@ -7,11 +7,13 @@ import 'package:readmore/readmore.dart';
 
 import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
+import '../../components/timersheet.dart';
 import '../../models/datamodel.dart';
 import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
 import '../../services/latestsaavnfetcher.dart';
+import '../../services/sleeptimer.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
@@ -218,6 +220,36 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final sleepState = ref.watch(sleepTimerProvider);
+              final hasTimer = sleepState.option != SleepTimerOption.off;
+
+              return IconButton(
+                icon: Image.asset(
+                  'assets/icons/timer.png',
+                  width: 26,
+                  height: 26,
+                  color: hasTimer ? spotifyGreen : Colors.white70,
+                ),
+                onPressed: () {
+                  showSleepTimerSheet(context);
+                },
+              );
+            },
+          ),
+          IconButton(
+            icon: Image.asset(
+              'assets/icons/menu.png',
+              width: 26,
+              height: 26,
+              color: Colors.grey[600],
+            ),
+            onPressed: () {
+              if (_playlist != null) showMediaItemMenu(context, _playlist!);
+            },
+          ),
+
           // Shuffle button
           GestureDetector(
             onTap: () async {
@@ -717,10 +749,11 @@ class SongRow extends ConsumerWidget {
 
               // Menu icon
               IconButton(
-                icon: const Icon(
-                  Icons.more_vert,
+                icon: Image.asset(
+                  'assets/icons/menu.png',
+                  width: 20,
+                  height: 20,
                   color: Colors.white70,
-                  size: 20,
                 ),
                 onPressed: () {
                   showMediaItemMenu(context, song);
