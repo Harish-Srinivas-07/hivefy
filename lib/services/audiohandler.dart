@@ -97,34 +97,8 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
 
     // resume last played song if exists
+    disableShuffle(); // turn shuffle off
     _initLastPlayed();
-  }
-
-  Future<void> _onSongEnded() async {
-    if (_repeat == RepeatMode.one) {
-      await _playCurrent();
-      return;
-    }
-
-    if (hasNext) {
-      await skipToNext();
-    } else if (_repeat == RepeatMode.all) {
-      _currentIndex = 0;
-      await _playCurrent();
-    } else {
-      await stop();
-      _currentIndex = -1;
-      mediaItem.add(null);
-      playbackState.add(
-        playbackState.value.copyWith(
-          playing: false,
-          processingState: AudioProcessingState.idle,
-          updatePosition: Duration.zero,
-          bufferedPosition: Duration.zero,
-          queueIndex: -1,
-        ),
-      );
-    }
   }
 
   // --- Public getters
@@ -151,54 +125,41 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   // --- Shuffle & repeat
   List<SongDetail>? _originalQueue;
 
-  void toggleShuffle() {
+  void toggleShuffle() async {
     _shuffle = !_shuffle;
-
     final current = currentSong;
 
     if (_shuffle) {
-      // backup original order
-      _originalQueue = List.from(_queue);
-
-      // shuffle new order
-      _queue.shuffle();
-
-      // put current song back in right position
+      _originalQueue ??= List.from(_queue); // backup only if not already
       if (current != null) {
-        final idx = _queue.indexWhere((s) => s.id == current.id);
-        if (idx != -1) {
-          _queue.removeAt(idx);
-        }
-        _queue.insert(0, current);
+        final remaining =
+            _queue.where((s) => s.id != current.id).toList()..shuffle();
+        _queue = [current, ...remaining];
+        _currentIndex = 0;
+      } else {
+        _queue.shuffle();
         _currentIndex = 0;
       }
-
-      debugPrint('--> Queue shuffled (${_queue.length} songs)');
     } else {
       if (_originalQueue != null) {
+        final currentId = current?.id;
         _queue = List.from(_originalQueue!);
         _originalQueue = null;
-
-        if (current != null) {
-          _currentIndex = _queue.indexWhere((s) => s.id == current.id);
+        if (currentId != null) {
+          _currentIndex = _queue.indexWhere((s) => s.id == currentId);
         }
       }
-
-      debugPrint('--> Shuffle disabled, restored original queue');
     }
 
-    // refresh queue broadcast
     queue.add(_queue.map(songToMediaItem).toList());
     ref.read(shuffleProvider.notifier).state = _shuffle;
+  }
 
-    //  only update once
-    if (current != null && mediaItem.value?.id != current.id) {
-      mediaItem.add(songToMediaItem(current));
+  /// Turn shuffle OFF if currently enabled
+  Future<void> disableShuffle() async {
+    if (_shuffle) {
+      toggleShuffle(); // toggleShuffle will restore original queue
     }
-
-    // update provider quietly (no extra media event)
-    final notifier = ref.read(currentSongProvider.notifier);
-    if (notifier.state?.id != current?.id) notifier.state = current;
   }
 
   Future<void> reorderQueue(int oldIndex, int newIndex) async {
@@ -222,12 +183,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     queue.add(_queue.map(songToMediaItem).toList());
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
   }
 
-  void _enforceQueueLimit() {
+  void _enforceQueueLimit() async {
     if (_queue.length > 50) {
       _queue = _queue.sublist(_queue.length - 50);
       _currentIndex = _queue.length - 1;
+      await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
     }
   }
 
@@ -247,26 +210,119 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   // --- AudioHandler API
-  @override
-  Future<void> play() async {
-    try {
-      if (_currentIndex < 0 && _queue.isNotEmpty) {
-        _currentIndex = 0;
-        await _playCurrent();
-      } else {
-        await _player.play();
-      }
-    } catch (e, st) {
-      debugPrint('Play failed: $e\n$st');
-    }
-  }
+  bool _isPausedManually = false;
 
   @override
   Future<void> pause() async {
-    // update UI immediately
+    _isPausedManually = true;
     playbackState.add(playbackState.value.copyWith(playing: false));
     await _player.pause();
     await _player.pause();
+  }
+
+  @override
+  Future<void> play() async {
+    _isPausedManually = false;
+    if (_currentIndex < 0 && _queue.isNotEmpty) {
+      _currentIndex = 0;
+      await _playCurrent();
+    } else {
+      await _player.play();
+    }
+  }
+
+  Future<void> _onSongEnded() async {
+    if (_isPausedManually) {
+      debugPrint('--> Song ended, paused manually, not skipping.');
+      return;
+    }
+
+    // Repeat one: just restart current song
+    if (_repeat == RepeatMode.one) {
+      await _player.seek(Duration.zero);
+      await _player.play();
+      return;
+    }
+
+    // Get next playable index considering offline availability
+    int? nextIndex = await _getNextPlayableIndex();
+
+    if (nextIndex != null) {
+      _currentIndex = nextIndex;
+      await _playCurrent(skipCompletedCheck: true);
+      return;
+    }
+
+    // No next index found
+    if (_repeat == RepeatMode.all && _queue.isNotEmpty) {
+      _currentIndex = 0;
+      await _playCurrent(skipCompletedCheck: true);
+      return;
+    }
+
+    // Nothing to play, stop playback
+    await stop();
+    _currentIndex = -1;
+    mediaItem.add(null);
+    playbackState.add(
+      playbackState.value.copyWith(
+        playing: false,
+        processingState: AudioProcessingState.idle,
+        updatePosition: Duration.zero,
+        bufferedPosition: Duration.zero,
+        queueIndex: -1,
+      ),
+    );
+  }
+
+  Future<int?> _getNextPlayableIndex({
+    int start = -1,
+    bool backward = false,
+  }) async {
+    if (_queue.isEmpty) return null;
+
+    int idx = start < 0 ? _currentIndex : start;
+    int attempts = 0;
+
+    while (attempts < _queue.length) {
+      idx =
+          backward
+              ? (idx - 1 + _queue.length) % _queue.length
+              : (idx + 1) % _queue.length;
+
+      final song = _queue[idx];
+
+      if (offlineManager.isAvailableOffline(songId: song.id) ||
+          hasInternet.value) {
+        return idx;
+      }
+
+      attempts++;
+    }
+
+    return null;
+  }
+
+  @override
+  Future<void> skipToNext() async {
+    if (_queue.isEmpty) return;
+
+    if (_repeat == RepeatMode.one) {
+      await _player.seek(Duration.zero);
+      await _player.play();
+      return;
+    }
+
+    final nextIndex = await _getNextPlayableIndex();
+    if (nextIndex != null) {
+      _currentIndex = nextIndex;
+      await _playCurrent();
+    } else if (_repeat == RepeatMode.all && _queue.isNotEmpty) {
+      _currentIndex = 0;
+      await _playCurrent();
+    } else {
+      await stop();
+    }
   }
 
   Future<void> addSongNext(SongDetail song) async {
@@ -278,6 +334,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final updated = List<MediaItem>.from(queue.value);
     updated.insert(insertIndex, songToMediaItem(song));
     queue.add(updated);
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
   }
 
   Future<void> addSongToQueue(SongDetail song) async {
@@ -289,6 +346,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final updated = List<MediaItem>.from(queue.value)
       ..add(songToMediaItem(song));
     queue.add(updated);
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
   }
 
   @override
@@ -324,34 +382,22 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   @override
-  Future<void> skipToNext() async {
-    if (_queue.isEmpty) return;
-
-    if (hasNext) {
-      _currentIndex++;
-    } else if (_repeat == RepeatMode.all) {
-      _currentIndex = 0;
-    } else {
-      await stop();
-      return;
-    }
-
-    await _playCurrent();
-  }
-
-  @override
   Future<void> skipToPrevious() async {
     if (_queue.isEmpty) return;
 
-    if (hasPrevious) {
-      _currentIndex--;
-    } else if (_repeat == RepeatMode.all) {
-      _currentIndex = _queue.length - 1;
-    } else {
+    if (_repeat == RepeatMode.one) {
+      await _player.seek(Duration.zero);
+      await _player.play();
       return;
     }
 
-    await _playCurrent();
+    if (hasPrevious) {
+      _currentIndex--;
+      await _playCurrent();
+    } else if (_repeat == RepeatMode.all) {
+      _currentIndex = _queue.length - 1;
+      await _playCurrent();
+    }
   }
 
   @override
@@ -392,32 +438,53 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   String? get queueSourceId => _queueSourceId;
   String? get queueSourceName => _queueSourceName;
+
   Future<void> loadQueue(
     List<SongDetail> songs, {
     int startIndex = 0,
     String? sourceId,
     String? sourceName,
+    bool autoPlay = true,
   }) async {
+    // 🔹 Clear existing queue first
+    _queue.clear();
+    _currentIndex = -1;
     _queueSourceId = sourceId;
     _queueSourceName = sourceName;
+
+    // Broadcast empty queue to listeners
+    queue.add([]);
+
+    // Load new queue
     _queue = List.from(songs);
     _enforceQueueLimit();
 
     if (_queue.isEmpty) return;
 
-    _currentIndex = startIndex.clamp(0, _queue.length - 1);
+    // Ensure incoming startIndex is in-range relative to original songs list
+    final safeStartIndex = startIndex.clamp(0, songs.length - 1);
 
     if (_shuffle) {
-      // physically shuffle but keep current song first
-      final current = _queue[_currentIndex];
-      _queue.remove(current);
+      // Shuffle the whole queue but start with the requested song
+      final startSongId = songs[safeStartIndex].id;
       _queue.shuffle();
-      _queue.insert(0, current);
-      _currentIndex = 0;
+
+      // Find the position of the requested start song in shuffled queue
+      _currentIndex = _queue.indexWhere((s) => s.id == startSongId);
+      if (_currentIndex < 0) _currentIndex = 0;
+    } else {
+      _currentIndex = safeStartIndex.clamp(0, _queue.length - 1);
     }
 
+    // Broadcast new queue
     queue.add(_queue.map(songToMediaItem).toList());
-    await _playCurrent();
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
+
+    // Start playing
+    // Only play if autoPlay is true
+    if (autoPlay) {
+      await _playCurrent();
+    }
   }
 
   Future<void> playSongNow(SongDetail song, {bool insertNext = false}) async {
@@ -435,15 +502,21 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _currentIndex = insertIndex;
 
       queue.add(_queue.map(songToMediaItem).toList());
-      _queueSourceName = song.albumName;
+      _queueSourceName = song.album;
+      _queueSourceId = 'Search';
     }
 
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
     await _playCurrent();
   }
 
   // --- Helpers
-  Future<void> _playCurrent() async {
-    if (_currentIndex < 0 || _currentIndex >= _queue.length) return;
+  Future<void> _playCurrent({bool skipCompletedCheck = false}) async {
+    if (_currentIndex < 0 || _currentIndex >= _queue.length) {
+      await stop();
+      return;
+    }
+
     var song = _queue[_currentIndex];
 
     // fetch details if missing
@@ -457,8 +530,8 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     if (song.downloadUrls.isEmpty) {
-      info('Oops! Playback error skip to next song', Severity.warning);
-      await skipToNext();
+      info('Playback error, skipping to next song', Severity.warning);
+      if (!skipCompletedCheck) await skipToNext();
       return;
     }
 
@@ -487,7 +560,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       await _player.play();
     } catch (e, st) {
       debugPrint("Error loading song: $e\n$st");
-      await skipToNext();
+      if (!skipCompletedCheck) await skipToNext();
     }
   }
 
@@ -530,43 +603,38 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   Future<void> _initLastPlayed() async {
+    final lastQueueData = await LastQueueStorage.load();
+    _shuffle = false;
+
+    if (lastQueueData != null) {
+      final songs = lastQueueData['queue'] as List<SongDetail>;
+      final startIndex = lastQueueData['index'] as int;
+      _queueSourceId = 'Last played';
+
+      if (songs.isNotEmpty) {
+        await loadQueue(
+          songs,
+          startIndex: startIndex,
+          sourceName: 'Last Played',
+          autoPlay: false,
+        );
+        return;
+      }
+    }
+
+    // fallback: single last played song
     final last = await LastPlayedSongStorage.load();
     if (last != null) {
       _queue = [last];
       _currentIndex = 0;
       queue.add([songToMediaItem(last)]);
       _queueSourceName = 'Last Played';
+      _queueSourceId = last.id;
       ref.read(currentSongProvider.notifier).state = last;
-
-      try {
-        final localPath = offlineManager.getLocalPath(last.id);
-
-        if (localPath != null && File(localPath).existsSync()) {
-          debugPrint("▶ Playing offline (last played): $localPath");
-          await _player.setAudioSource(
-            AudioSource.uri(Uri.file(localPath), tag: songToMediaItem(last)),
-          );
-        } else {
-          debugPrint(
-            "▶ Playing online (last played): ${last.downloadUrls.last.url}",
-          );
-          await _player.setAudioSource(
-            AudioSource.uri(
-              Uri.parse(last.downloadUrls.last.url),
-              tag: songToMediaItem(last),
-            ),
-          );
-        }
-
-        mediaItem.add(songToMediaItem(last));
-
-        final dominant = await getDominantColorFromImage(last.images.last.url);
-        ref.read(playerColourProvider.notifier).state = getDominantDarker(
-          dominant,
-        );
-      } catch (e) {
-        debugPrint('--> initLastPlayed catch: $e');
-      }
+      final dominant = await getDominantColorFromImage(last.images.last.url);
+      ref.read(playerColourProvider.notifier).state = getDominantDarker(
+        dominant,
+      );
     }
   }
 }

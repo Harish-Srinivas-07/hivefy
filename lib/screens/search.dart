@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:iconly/iconly.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:page_transition/page_transition.dart';
 
+import '../components/snackbar.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
 import '../components/shimmers.dart';
@@ -317,7 +319,10 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildPlaylistRow(Playlist p, {VoidCallback? onRemove}) {
     final imageUrl = p.images.isNotEmpty ? p.images.last.url : '';
-    return Container(
+
+    debugPrint('--> here the type ${p.type}');
+
+    final content = Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -346,7 +351,7 @@ class SearchState extends ConsumerState<Search> {
               ],
             ),
           ),
-          if (onRemove != null) // show only in recent list
+          if (onRemove != null)
             IconButton(
               icon: const Icon(Icons.close, color: Colors.grey, size: 18),
               onPressed: onRemove,
@@ -354,6 +359,34 @@ class SearchState extends ConsumerState<Search> {
         ],
       ),
     );
+
+    // Only wrap with SwipeActionCell if type is "Song"
+    if (p.type == "song") {
+      return SwipeActionCell(
+        backgroundColor: Colors.transparent,
+        key: ValueKey(p.id),
+        fullSwipeFactor: 0.01,
+        editModeOffset: 2,
+        leadingActions: [
+          SwipeAction(
+            color: spotifyGreen,
+            icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+            performsFirstActionWithFullSwipe: true,
+            onTap: (handler) async {
+              final audioHandler = await ref.read(audioHandlerProvider.future);
+              final details = await saavn.getSongDetails(ids: [p.id]);
+              if (details.isEmpty) return;
+              await audioHandler.addSongNext(details.first);
+              info('${details.first.title} will play next', Severity.success);
+              await handler(false);
+            },
+          ),
+        ],
+        child: content,
+      );
+    } else {
+      return content;
+    }
   }
 
   Widget _buildSubtitleRow(Playlist p) {
@@ -528,9 +561,9 @@ class SearchState extends ConsumerState<Search> {
   }
 
   Widget _buildHeader() {
-    return FutureBuilder(
-      future: loadProfiles(),
-      builder: (context, snapshot) {
+    return ValueListenableBuilder(
+      valueListenable: profileRefreshNotifier,
+      builder: (context, value, child) {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

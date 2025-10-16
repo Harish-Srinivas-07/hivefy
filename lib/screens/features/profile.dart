@@ -440,4 +440,11 @@ Future<void> loadProfiles() async {
   if (imagePath != null && File(imagePath).existsSync()) {
     profileFile = File(imagePath);
   }
+
+  // Trigger rebuilds
+  profileRefreshNotifier.value = DateTime.now().millisecondsSinceEpoch;
 }
+
+final profileRefreshNotifier = ValueNotifier<int>(
+  DateTime.now().millisecondsSinceEpoch,
+);

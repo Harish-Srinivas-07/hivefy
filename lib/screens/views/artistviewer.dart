@@ -234,7 +234,7 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
           ),
           const SizedBox(width: 8),
 
-          // Play Album / Play First / Shuffle
+          // Play Artist / Top Songs / Shuffle
           StreamBuilder<PlayerState>(
             stream: ref
                 .read(audioHandlerProvider.future)
@@ -243,61 +243,78 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
             builder: (context, snapshot) {
               final isPlaying = snapshot.data?.playing ?? false;
               final currentSong = ref.watch(currentSongProvider);
-              final audioHandlerFuture = ref.read(audioHandlerProvider.future);
 
-              final bool isCurrentPlaylistSong =
-                  currentSong != null &&
-                  _artist != null &&
-                  _artist!.topSongs.any((s) => s.id == currentSong.id);
+              return FutureBuilder(
+                future: ref.read(audioHandlerProvider.future),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox();
+                  final audioHandler = snapshot.data!;
 
-              final icon =
-                  isCurrentPlaylistSong
-                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                      : Icons.play_arrow;
+                  // ✅ Check if current queue matches artist's top songs
+                  final bool isSameSource =
+                      audioHandler.queueSourceId == _artist?.id;
+                  final bool isCurrentInList =
+                      isSameSource &&
+                      currentSong != null &&
+                      _artist!.topSongs.any((s) => s.id == currentSong.id);
 
-              return GestureDetector(
-                onTap: () async {
-                  final audioHandler = await audioHandlerFuture;
+                  // Icon logic
+                  final icon =
+                      isCurrentInList
+                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                          : Icons.play_arrow;
 
-                  if (isCurrentPlaylistSong) {
-                    // 🔁 toggle playback
-                    if (isPlaying) {
-                      await audioHandler.pause();
-                    } else {
-                      await audioHandler.play();
-                    }
-                    return;
-                  }
+                  return GestureDetector(
+                    onTap: () async {
+                      try {
+                        if (isSameSource) {
+                          // 🔁 Current artist queue already loaded → toggle playback
+                          if (isPlaying) {
+                            await audioHandler.pause();
+                          } else {
+                            await audioHandler.play();
+                          }
+                        } else {
+                          // 🚀 New artist queue → load top songs
+                          int startIndex = 0;
 
-                  // 🚀 new playlist or empty queue
-                  int startIndex = 0;
-                  if (isShuffle) {
-                    startIndex =
-                        DateTime.now().millisecondsSinceEpoch %
-                        _artist!.topSongs.length;
-                  }
+                          // Shuffle handling
+                          final isShuffle = ref.read(shuffleProvider);
+                          if (isShuffle && _artist!.topSongs.isNotEmpty) {
+                            startIndex =
+                                DateTime.now().millisecondsSinceEpoch %
+                                _artist!.topSongs.length;
+                          }
 
-                  await audioHandler.loadQueue(
-                    _artist!.topSongs,
-                    startIndex: startIndex,
-                    sourceId: _artist?.id,
-                    sourceName: '${_artist?.title} Artist',
+                          await audioHandler.loadQueue(
+                            _artist!.topSongs,
+                            startIndex: startIndex,
+                            sourceId: _artist?.id,
+                            sourceName: '${_artist?.title} Artist',
+                          );
+
+                          if (isShuffle && !audioHandler.isShuffle) {
+                            audioHandler.toggleShuffle();
+                          }
+
+                          await audioHandler.play();
+                        }
+                      } catch (e, st) {
+                        debugPrint(
+                          "Error handling artist play button: $e\n$st",
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green,
+                      ),
+                      child: Icon(icon, color: Colors.black, size: 30),
+                    ),
                   );
-
-                  if (isShuffle && !audioHandler.isShuffle) {
-                    audioHandler.toggleShuffle();
-                  }
-
-                  await audioHandler.play();
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green,
-                  ),
-                  child: Icon(icon, color: Colors.black, size: 30),
-                ),
               );
             },
           ),
@@ -448,12 +465,11 @@ class ArtistSongRow extends ConsumerWidget {
         SwipeAction(
           color: spotifyGreen,
           icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
-
           performsFirstActionWithFullSwipe: true,
           onTap: (handler) async {
             final audioHandler = await ref.read(audioHandlerProvider.future);
-            await audioHandler.addSongToQueue(song);
-            info('${song.title} added to queue', Severity.success);
+            await audioHandler.addSongNext(song);
+            info('${song.title} will play next', Severity.success);
             await handler(false);
           },
         ),
@@ -484,7 +500,6 @@ class ArtistSongRow extends ConsumerWidget {
               return;
             }
 
-            // 2️⃣ Same queue → just skip
             // 2️⃣ Same queue → just skip
             if (isSameQueue) {
               final shuffleIndex =

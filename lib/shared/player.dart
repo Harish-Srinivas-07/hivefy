@@ -36,7 +36,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     // Initial update
     _updatePlayerCardColour();
-    // Schedule a delayed update after 5 seconds
+    // Schedule a delayed update after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
       _updatePlayerCardColour();
       if (mounted) {}
@@ -171,6 +171,17 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
               );
 
               if (!context.mounted) return;
+              // Stop playback if song vanished but audio is still playing
+              ref.read(audioHandlerProvider.future).then((handler) async {
+                final state = await handler.playerStateStream.first;
+                if (state.playing) {
+                  await handler.stop();
+                  debugPrint(
+                    '--> Playback stopped because currentSong became null',
+                  );
+                }
+              });
+
               FocusScope.of(context).unfocus();
               Navigator.of(
                 context,
@@ -750,7 +761,12 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
             stream: audioHandler.playerStateStream,
             builder: (context, stateSnapshot) {
               final playerState = stateSnapshot.data;
+              final processing = playerState?.processingState;
               final playing = playerState?.playing ?? false;
+
+              final isLoading =
+                  processing == ProcessingState.loading ||
+                  processing == ProcessingState.buffering;
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -780,19 +796,37 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   ),
 
                   // Play / Pause
-                  _ControlButton(
-                    icon: playing ? Icons.pause : Icons.play_arrow,
-                    enabled: true,
-                    onTap:
-                        () =>
-                            playing
-                                ? audioHandler.pause()
-                                : audioHandler.play(),
-                    size: 64,
-                    background: Colors.white,
-                    iconColor: Colors.black,
+                  SizedBox(
+                    width: 75,
+                    height: 75,
+                    child: Center(
+                      child:
+                          isLoading
+                              ? const SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: spotifyGreen,
+                                ),
+                              )
+                              : _ControlButton(
+                                icon:
+                                    playing
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
+                                enabled: true,
+                                onTap:
+                                    () =>
+                                        playing
+                                            ? audioHandler.pause()
+                                            : audioHandler.play(),
+                                size: 64,
+                                background: Colors.white,
+                                iconColor: Colors.black,
+                              ),
+                    ),
                   ),
-
                   // Next
                   _ControlButton(
                     icon: Icons.skip_next,
@@ -1002,6 +1036,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     if (song == null) {
       return const SizedBox.shrink();
     }
+
     final isLiked = ref.watch(likedSongsProvider).contains(song.id);
     double addIconSize = isLiked ? 30 : 35;
 

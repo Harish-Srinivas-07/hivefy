@@ -1,7 +1,7 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:just_audio/just_audio.dart';
 
 import '../../components/showmenu.dart';
 import '../../components/snackbar.dart';
@@ -220,6 +220,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
               if (shuffleIndex == -1) return;
               await audioHandler.skipToQueueItem(shuffleIndex);
             } else {
+              audioHandler.disableShuffle();
               await audioHandler.loadQueue(
                 _albumSongDetails,
                 startIndex: tappedIndex,
@@ -239,6 +240,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             debugPrint("Error playing tapped album song: $e\n$st");
           }
         },
+
         child: Container(
           padding: const EdgeInsets.only(
             top: 8,
@@ -339,11 +341,13 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
 
   Widget _buildShufflePlayButtons() {
     final isShuffle = ref.watch(shuffleProvider);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // --- Menu ---
           IconButton(
             icon: Image.asset(
               'assets/icons/menu.png',
@@ -356,7 +360,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             },
           ),
 
-          // Shuffle button
+          // --- Shuffle Button ---
           GestureDetector(
             onTap: () async {
               final handler = await ref.read(audioHandlerProvider.future);
@@ -375,77 +379,75 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
           ),
           const SizedBox(width: 8),
 
-          // Play Album / Play First / Shuffle
-          StreamBuilder<PlayerState>(
+          // --- Play/Pause or Start Album ---
+          StreamBuilder<PlaybackState>(
             stream: ref
                 .read(audioHandlerProvider.future)
                 .asStream()
-                .asyncExpand((h) => h.playerStateStream),
+                .asyncExpand((h) => h.playbackState),
             builder: (context, snapshot) {
-              final isPlaying = snapshot.data?.playing ?? false;
-              final currentSong = ref.watch(currentSongProvider);
+              final state = snapshot.data;
+              final isPlaying = state?.playing ?? false;
 
-              final bool isCurrentAlbumSong =
-                  currentSong != null &&
-                  _albumSongDetails.any((s) => s.id == currentSong.id);
+              return FutureBuilder(
+                future: ref.read(audioHandlerProvider.future),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox();
+                  final audioHandler = snapshot.data!;
+                  final currentSourceId = audioHandler.queueSourceId;
+                  final bool isSameSource = currentSourceId == widget.albumId;
 
-              // --- Icon logic ---
-              IconData icon;
-              if (isCurrentAlbumSong) {
-                icon = isPlaying ? Icons.pause : Icons.play_arrow;
-              } else {
-                icon = Icons.play_arrow;
-              }
+                  // --- Icon logic ---
+                  final icon =
+                      (isSameSource && isPlaying)
+                          ? Icons.pause
+                          : Icons.play_arrow;
 
-              return GestureDetector(
-                onTap: () async {
-                  try {
-                    final audioHandler = await ref.read(
-                      audioHandlerProvider.future,
-                    );
+                  return GestureDetector(
+                    onTap: () async {
+                      try {
+                        if (isSameSource) {
+                          // 🔁 Current album already loaded → just toggle playback
+                          if (isPlaying) {
+                            await audioHandler.pause();
+                          } else {
+                            await audioHandler.play();
+                          }
+                        } else {
+                          // 🎵 New album — load full queue
+                          await audioHandler.loadQueue(
+                            _albumSongDetails,
+                            startIndex: 0, // load all songs in order
+                            sourceId: widget.albumId,
+                            sourceName: '${_album?.title} Album',
+                          );
 
-                    if (isCurrentAlbumSong) {
-                      // If this album’s song is already playing -> toggle pause/play
-                      if (isPlaying) {
-                        await audioHandler.pause();
-                      } else {
-                        await audioHandler.play();
+                          // ✅ Shuffle handled internally by loadQueue()
+                          // If shuffle is ON, just move to a random start position
+                          final isShuffle = ref.read(shuffleProvider);
+                          if (isShuffle && _albumSongDetails.isNotEmpty) {
+                            final randomIndex =
+                                DateTime.now().millisecondsSinceEpoch %
+                                _albumSongDetails.length;
+                            await audioHandler.skipToQueueItem(randomIndex);
+                          }
+
+                          await audioHandler.play();
+                        }
+                      } catch (e, st) {
+                        debugPrint("Error handling album play: $e\n$st");
                       }
-                    } else {
-                      // Load full album queue
-                      int startIndex = 0;
-                      if (isShuffle) {
-                        startIndex =
-                            DateTime.now().millisecondsSinceEpoch %
-                            _albumSongDetails.length;
-                      }
-
-                      await audioHandler.loadQueue(
-                        _albumSongDetails,
-                        startIndex: startIndex,
-                        sourceId: widget.albumId,
-                        sourceName: '${_album?.title} Album',
-                      );
-
-                      // If shuffle is enabled, apply it after loading
-                      if (isShuffle) {
-                        audioHandler.toggleShuffle();
-                      }
-
-                      await audioHandler.play();
-                    }
-                  } catch (e, st) {
-                    debugPrint("Error handling album play: $e\n$st");
-                  }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green,
+                      ),
+                      child: Icon(icon, color: Colors.black, size: 30),
+                    ),
+                  );
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green,
-                  ),
-                  child: Icon(icon, color: Colors.black, size: 30),
-                ),
               );
             },
           ),

@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/database.dart';
 import '../../components/snackbar.dart';
+import '../../services/jiosaavn.dart';
 import '../../services/offlinemanager.dart';
+import '../../shared/serversource.dart';
 import '../../utils/theme.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -387,6 +389,102 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ],
                   );
                 },
+              ),
+            ),
+          ),
+          _buildDivider(),
+
+          // --- API Server Selection ---
+          _buildSectionTitle(
+            "Stream Server",
+            subtitle: "Choose which server the app will use for APIs",
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FutureBuilder<ServerType>(
+                    future: ServerManager.getSelectedServer(),
+                    builder: (context, snapshot) {
+                      final selected = snapshot.data ?? ServerType.main;
+
+                      final servers = [
+                        ServerType.main,
+                        ServerType.mirror,
+                        ServerType.dupe,
+                      ];
+
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children:
+                            servers.map((server) {
+                              final isSelected = server == selected;
+
+                              return ChoiceChip(
+                                label: Text(
+                                  isSelected
+                                      ? server.displayName
+                                      : server.displayName.replaceAll(
+                                        " Server",
+                                        "",
+                                      ),
+                                  style: TextStyle(
+                                    color:
+                                        isSelected
+                                            ? spotifyGreen
+                                            : Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                selected: isSelected,
+                                color: WidgetStateProperty.resolveWith<Color?>((
+                                  states,
+                                ) {
+                                  return Colors.grey.shade900;
+                                }),
+                                selectedColor: spotifyGreen.withAlpha(51),
+                                backgroundColor: Colors.grey[900],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  side: BorderSide(
+                                    color:
+                                        isSelected
+                                            ? spotifyGreen
+                                            : Colors.grey.shade800,
+                                    width: isSelected ? 1 : 0,
+                                  ),
+                                ),
+                                showCheckmark: false,
+                                onSelected: (_) async {
+                                  await ServerManager.setServer(server);
+                                  if (mounted) setState(() {});
+                                  info(
+                                    '${server.displayName} selected for streaming!',
+                                    Severity.success,
+                                  );
+                                  await saavn.refreshServer();
+                                  if (mounted) setState(() {});
+                                },
+                              );
+                            }).toList(),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+                  const Text(
+                    "If you face any playback or streaming issues, try switching servers. "
+                    "Best performance is usually with the Main server.",
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

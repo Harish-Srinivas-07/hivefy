@@ -477,7 +477,11 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _downloadSongSet('likedSongs', _songs.map((a) => a.id).toSet()),
+              if (widget.showLikedSongs) ...[
+                _downloadSongSet('likedSongs', _songs.map((a) => a.id).toSet()),
+              ] else ...[
+                const Spacer(),
+              ],
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -533,65 +537,70 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                       final isPlaying = snapshot.data?.playing ?? false;
                       final currentSong = ref.watch(currentSongProvider);
 
-                      final bool isCurrentLikedSong =
-                          currentSong != null &&
-                          _songs.any((s) => s.id == currentSong.id);
+                      return FutureBuilder(
+                        future: ref.read(audioHandlerProvider.future),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const SizedBox();
+                          final audioHandler = snapshot.data!;
 
-                      final icon =
-                          isCurrentLikedSong
-                              ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                              : Icons.play_arrow;
+                          // ✅ Check if current queue belongs to this list
+                          final bool isSameSource =
+                              audioHandler.queueSourceId == "liked_songs";
 
-                      return GestureDetector(
-                        onTap: () async {
-                          try {
-                            final audioHandler = await ref.read(
-                              audioHandlerProvider.future,
-                            );
+                          // Icon logic
+                          final bool isCurrentInList =
+                              isSameSource && currentSong != null;
+                          final icon =
+                              isCurrentInList
+                                  ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                                  : Icons.play_arrow;
 
-                            if (isCurrentLikedSong) {
-                              // 🔁 Toggle play/pause
-                              if (isPlaying) {
-                                await audioHandler.pause();
-                              } else {
-                                await audioHandler.play();
+                          return GestureDetector(
+                            onTap: () async {
+                              try {
+                                if (isSameSource) {
+                                  // 🔁 Current queue already loaded → toggle playback
+                                  if (isPlaying) {
+                                    await audioHandler.pause();
+                                  } else {
+                                    await audioHandler.play();
+                                  }
+                                } else {
+                                  // 🚀 New queue → load liked songs
+                                  int startIndex = 0;
+
+                                  // Shuffle handling
+                                  audioHandler.disableShuffle();
+
+                                  await audioHandler.loadQueue(
+                                    _songs,
+                                    startIndex: startIndex,
+                                    sourceId: "liked_songs",
+                                    sourceName: "Liked Songs",
+                                  );
+
+                                  if (isShuffle && !audioHandler.isShuffle) {
+                                    audioHandler.toggleShuffle();
+                                  }
+
+                                  await audioHandler.play();
+                                }
+                              } catch (e, st) {
+                                debugPrint(
+                                  "Error handling liked play button: $e\n$st",
+                                );
                               }
-                            } else {
-                              // 🚀 Load liked songs queue
-                              int startIndex = 0;
-                              if (isShuffle) {
-                                startIndex =
-                                    DateTime.now().millisecondsSinceEpoch %
-                                    _songs.length;
-                              }
-
-                              await audioHandler.loadQueue(
-                                _songs,
-                                startIndex: startIndex,
-                                sourceId: "liked_songs",
-                                sourceName: "Liked Songs",
-                              );
-
-                              if (isShuffle && !audioHandler.isShuffle) {
-                                audioHandler.toggleShuffle();
-                              }
-
-                              await audioHandler.play();
-                            }
-                          } catch (e, st) {
-                            debugPrint(
-                              "Error handling liked play button: $e\n$st",
-                            );
-                          }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.green,
+                              ),
+                              child: Icon(icon, color: Colors.black, size: 30),
+                            ),
+                          );
                         },
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.green,
-                          ),
-                          child: Icon(icon, color: Colors.black, size: 30),
-                        ),
                       );
                     },
                   ),

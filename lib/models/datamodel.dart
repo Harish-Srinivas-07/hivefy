@@ -1,4 +1,7 @@
 import 'package:html_unescape/html_unescape.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'database.dart';
 
 final unescape = HtmlUnescape();
 
@@ -758,5 +761,37 @@ class SearchArtistsResponse {
       start: int.tryParse('${data['start'] ?? 0}') ?? 0,
       results: results,
     );
+  }
+}
+
+// last queue store
+class LastQueueStorage {
+  static const _key = 'last_queue';
+
+  static Future<void> save(
+    List<SongDetail> queue, {
+    int currentIndex = 0,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = queue.map((s) => s.id).toList();
+    await prefs.setStringList(_key, data);
+    await prefs.setInt('last_queue_index', currentIndex);
+  }
+
+  static Future<Map<String, dynamic>?> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList(_key);
+    final idx = prefs.getInt('last_queue_index') ?? 0;
+    if (ids == null || ids.isEmpty) return null;
+
+    // Fetch full song details from DB
+    final songs = <SongDetail>[];
+    for (final id in ids) {
+      final s = await AppDatabase.getSong(id);
+      if (s != null) songs.add(s);
+    }
+    return songs.isNotEmpty
+        ? {'queue': songs, 'index': idx.clamp(0, songs.length - 1)}
+        : null;
   }
 }

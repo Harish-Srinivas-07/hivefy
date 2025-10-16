@@ -6,12 +6,28 @@ import 'package:http/http.dart';
 
 import '../models/database.dart';
 import '../models/datamodel.dart';
+import '../shared/serversource.dart';
 
 final saavn = SaavnAPI();
 
 class SaavnAPI {
-  final String baseUrl =
+  String baseUrl =
       "https://jiosaavn-c451wwyru-sumit-kolhes-projects-94a4846a.vercel.app/";
+
+  SaavnAPI() {
+    // Set default base URL from current selected server
+    initBaseUrl();
+  }
+
+  Future<void> initBaseUrl() async {
+    final selectedServer = await ServerManager.getSelectedServer();
+    baseUrl = selectedServer.baseUrl;
+  }
+
+  Future<void> refreshServer() async {
+    final selectedServer = await ServerManager.getSelectedServer();
+    baseUrl = selectedServer.baseUrl;
+  }
 
   final Map<String, String> headers = {
     "Accept": "application/json",

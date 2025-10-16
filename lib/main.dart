@@ -11,6 +11,7 @@ import 'package:toastification/toastification.dart';
 import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/search.dart';
+import 'services/jiosaavn.dart';
 import 'services/systemconfig.dart';
 import 'services/audiohandler.dart';
 import 'services/localnotification.dart';
@@ -57,6 +58,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     });
     // Await the audioHandler FutureProvider
     await ref.read(audioHandlerProvider.future);
+    await saavn.initBaseUrl();
   }
 
   @override

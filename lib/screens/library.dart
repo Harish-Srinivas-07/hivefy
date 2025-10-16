@@ -225,9 +225,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return Scaffold(
       backgroundColor: spotifyBgColor,
       appBar: AppBar(
-        title: FutureBuilder(
-          future: loadProfiles(),
-          builder: (context, snapshot) {
+        title: ValueListenableBuilder(
+          valueListenable: profileRefreshNotifier,
+          builder: (context, value, child) {
             return Row(
               children: [
                 GestureDetector(
@@ -255,7 +255,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             );
           },
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: spotifyBgColor,
         elevation: 0,
       ),
       body:

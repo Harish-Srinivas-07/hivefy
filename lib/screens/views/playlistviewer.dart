@@ -13,6 +13,7 @@ import '../../components/shimmers.dart';
 import '../../services/audiohandler.dart';
 import '../../services/jiosaavn.dart';
 import '../../services/latestsaavnfetcher.dart';
+import '../../services/offlinemanager.dart';
 import '../../services/sleeptimer.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
@@ -269,7 +270,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           ),
           const SizedBox(width: 8),
 
-          // Play Album / Play First / Shuffle
+          // Play Playlist / Play First / Shuffle
           StreamBuilder<PlayerState>(
             stream: ref
                 .read(audioHandlerProvider.future)
@@ -278,65 +279,150 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
             builder: (context, snapshot) {
               final isPlaying = snapshot.data?.playing ?? false;
               final currentSong = ref.watch(currentSongProvider);
-              final audioHandlerFuture = ref.read(audioHandlerProvider.future);
 
-              final bool isCurrentPlaylistSong =
-                  currentSong != null &&
-                  _playlistSongDetails.any((s) => s.id == currentSong.id);
+              return FutureBuilder(
+                future: ref.read(audioHandlerProvider.future),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox();
+                  final audioHandler = snapshot.data!;
 
-              final icon =
-                  isCurrentPlaylistSong
-                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                      : Icons.play_arrow;
+                  // ✅ Check if current queue belongs to this playlist
+                  final bool isSameSource =
+                      audioHandler.queueSourceId == widget.playlistId;
 
-              return GestureDetector(
-                onTap: () async {
-                  final audioHandler = await audioHandlerFuture;
+                  // Icon logic
+                  final bool isCurrentInList =
+                      isSameSource && currentSong != null;
+                  final icon =
+                      isCurrentInList
+                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                          : Icons.play_arrow;
 
-                  if (isCurrentPlaylistSong) {
-                    // 🔁 toggle playback
-                    if (isPlaying) {
-                      await audioHandler.pause();
-                    } else {
-                      await audioHandler.play();
-                    }
-                    return;
-                  }
+                  return GestureDetector(
+                    onTap: () async {
+                      try {
+                        if (isSameSource) {
+                          // 🔁 Current queue already loaded → toggle playback
+                          if (isPlaying) {
+                            await audioHandler.pause();
+                          } else {
+                            await audioHandler.play();
+                          }
+                        } else {
+                          // 🚀 New playlist → load queue
+                          int startIndex = 0;
 
-                  // 🚀 new playlist or empty queue
-                  int startIndex = 0;
-                  if (isShuffle) {
-                    startIndex =
-                        DateTime.now().millisecondsSinceEpoch %
-                        _playlistSongDetails.length;
-                  }
+                          // Shuffle handling
+                          audioHandler.disableShuffle();
 
-                  await audioHandler.loadQueue(
-                    _playlistSongDetails,
-                    startIndex: startIndex,
-                    sourceId: widget.playlistId,
-                    sourceName: '${_playlist?.title} Playlist',
+                          await audioHandler.loadQueue(
+                            _playlistSongDetails,
+                            startIndex: startIndex,
+                            sourceId: widget.playlistId,
+                            sourceName: '${_playlist?.title} Playlist',
+                          );
+
+                          if (isShuffle && !audioHandler.isShuffle) {
+                            audioHandler.toggleShuffle();
+                          }
+
+                          await audioHandler.play();
+                        }
+                      } catch (e, st) {
+                        debugPrint(
+                          "Error handling playlist play button: $e\n$st",
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green,
+                      ),
+                      child: Icon(icon, color: Colors.black, size: 30),
+                    ),
                   );
-
-                  if (isShuffle && !audioHandler.isShuffle) {
-                    audioHandler.toggleShuffle();
-                  }
-
-                  await audioHandler.play();
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green,
-                  ),
-                  child: Icon(icon, color: Colors.black, size: 30),
-                ),
               );
             },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _downloadSongSet(String setId, Set<String> songIds) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.songsSetStatusNotifier(setId),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: offlineManager.songsSetDownloadedCountNotifier(
+            setId,
+          ),
+          builder: (context, downloadedCount, _) {
+            final total = songIds.length;
+            Widget icon;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              icon = Image.asset(
+                'assets/icons/complete_download.png',
+                width: 32,
+                height: 32,
+                color: spotifyGreen,
+              );
+              onTap = () => offlineManager.deleteSongsSet(setId, songIds);
+            } else if (status == DownloadStatus.downloading) {
+              icon = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: downloadedCount / total,
+                    color: spotifyGreen,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              icon = Image.asset(
+                'assets/icons/download.png',
+                width: 32,
+                height: 32,
+                color: Colors.white70,
+              );
+              onTap =
+                  () =>
+                      offlineManager.downloadSongsSetWithStatus(setId, songIds);
+            }
+
+            return GestureDetector(
+              onTap: onTap,
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "$downloadedCount of $total done"
+                        : status == DownloadStatus.completed
+                        ? "Offline"
+                        : "",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -576,8 +662,18 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                               ],
                             ),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [_buildShufflePlayButtons()],
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (_playlist != null) ...[
+                                  _downloadSongSet(
+                                    _playlist!.id,
+                                    _playlist!.songs.map((a) => a.id).toSet(),
+                                  ),
+                                ] else ...[
+                                  const Spacer(),
+                                ],
+                                _buildShufflePlayButtons(),
+                              ],
                             ),
                           ],
                         ),

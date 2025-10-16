@@ -9,6 +9,7 @@ import '../components/shimmers.dart';
 import '../services/defaultfetcher.dart';
 import '../models/database.dart';
 import '../models/datamodel.dart';
+import '../services/jiosaavn.dart';
 import '../services/offlinemanager.dart';
 import '../services/latestsaavnfetcher.dart';
 
@@ -61,6 +62,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
     setState(() => loading = true);
 
     await _initInternetChecker();
+    await saavn.initBaseUrl();
     await initLanguage(ref);
 
     final prefs = await SharedPreferences.getInstance();
@@ -196,9 +198,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
   }
 
   Widget _buildHeader() {
-    return FutureBuilder(
-      future: loadProfiles(),
-      builder: (context, snapshot) {
+    return ValueListenableBuilder(
+      valueListenable: profileRefreshNotifier,
+      builder: (context, value, child) {
         return Row(
           children: [
             GestureDetector(
