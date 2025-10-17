@@ -22,7 +22,7 @@ extension ServerTypeExtension on ServerType {
       case ServerType.mirror:
         return 'https://saavn.dev/';
       case ServerType.dupe:
-        return 'https://jiosaavnapi-dev.vercel.app/';
+        return 'https://saavnapi-latest.vercel.app/';
     }
   }
 

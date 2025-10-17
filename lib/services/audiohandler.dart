@@ -124,18 +124,23 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   // --- Shuffle & repeat
   List<SongDetail>? _originalQueue;
+  bool isShuffleChanging = false;
 
-  void toggleShuffle() async {
+  Future<void> toggleShuffle() async {
+    isShuffleChanging = true;
     _shuffle = !_shuffle;
     final current = currentSong;
 
     if (_shuffle) {
       _originalQueue ??= List.from(_queue); // backup only if not already
+
       if (current != null) {
-        final remaining =
-            _queue.where((s) => s.id != current.id).toList()..shuffle();
-        _queue = [current, ...remaining];
-        _currentIndex = 0;
+        // Keep current song at its current index
+        final beforeCurrent = _queue.sublist(0, _currentIndex + 1);
+        final afterCurrent = _queue.sublist(_currentIndex + 1)..shuffle();
+
+        _queue = [...beforeCurrent, ...afterCurrent];
+        // currentIndex remains the same
       } else {
         _queue.shuffle();
         _currentIndex = 0;
@@ -145,14 +150,17 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         final currentId = current?.id;
         _queue = List.from(_originalQueue!);
         _originalQueue = null;
+
         if (currentId != null) {
           _currentIndex = _queue.indexWhere((s) => s.id == currentId);
         }
       }
     }
 
+    // Broadcast new queue
     queue.add(_queue.map(songToMediaItem).toList());
     ref.read(shuffleProvider.notifier).state = _shuffle;
+    isShuffleChanging = false;
   }
 
   /// Turn shuffle OFF if currently enabled
@@ -603,26 +611,64 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   Future<void> _initLastPlayed() async {
+    debugPrint('--> Initializing last played queue...');
     final lastQueueData = await LastQueueStorage.load();
     _shuffle = false;
+    debugPrint('--> Shuffle set to false');
 
     if (lastQueueData != null) {
-      final songs = lastQueueData['queue'] as List<SongDetail>;
-      final startIndex = lastQueueData['index'] as int;
+      final songs = lastQueueData.songs;
+      final startIndex = lastQueueData.currentIndex;
       _queueSourceId = 'Last played';
+      _queueSourceName = 'Last Played';
 
       if (songs.isNotEmpty) {
-        await loadQueue(
-          songs,
-          startIndex: startIndex,
-          sourceName: 'Last Played',
-          autoPlay: false,
-        );
+        debugPrint('--> Restoring queue: $lastQueueData');
+        _queue = List.from(songs);
+        _currentIndex = startIndex.clamp(0, _queue.length - 1);
+
+        queue.add(_queue.map(songToMediaItem).toList());
+        await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
+
+        final current = _queue[_currentIndex];
+        ref.read(currentSongProvider.notifier).state = current;
+
+        try {
+          final sources =
+              _queue.map((s) {
+                final local = offlineManager.getLocalPath(s.id);
+                final uri =
+                    (local != null && File(local).existsSync())
+                        ? Uri.file(local)
+                        : Uri.parse(s.downloadUrls.last.url);
+                return AudioSource.uri(uri, tag: songToMediaItem(s));
+              }).toList();
+
+          await _player.setAudioSources(
+            sources,
+            initialIndex: _currentIndex,
+            initialPosition: Duration.zero,
+          );
+
+          mediaItem.add(songToMediaItem(current));
+
+          final dominant = await getDominantColorFromImage(
+            current.images.last.url,
+          );
+          ref.read(playerColourProvider.notifier).state = getDominantDarker(
+            dominant,
+          );
+
+          debugPrint('--> Last played queue restored (not autoplaying).');
+        } catch (e, st) {
+          debugPrint('--> initLastPlayed (queue) error: $e\n$st');
+        }
+
         return;
       }
     }
 
-    // fallback: single last played song
+    // fallback: single last played song (previous logic)
     final last = await LastPlayedSongStorage.load();
     if (last != null) {
       _queue = [last];
@@ -631,10 +677,29 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _queueSourceName = 'Last Played';
       _queueSourceId = last.id;
       ref.read(currentSongProvider.notifier).state = last;
-      final dominant = await getDominantColorFromImage(last.images.last.url);
-      ref.read(playerColourProvider.notifier).state = getDominantDarker(
-        dominant,
-      );
+
+      try {
+        final localPath = offlineManager.getLocalPath(last.id);
+        final uri =
+            (localPath != null && File(localPath).existsSync())
+                ? Uri.file(localPath)
+                : Uri.parse(last.downloadUrls.last.url);
+
+        await _player.setAudioSource(
+          AudioSource.uri(uri, tag: songToMediaItem(last)),
+        );
+
+        mediaItem.add(songToMediaItem(last));
+
+        final dominant = await getDominantColorFromImage(last.images.last.url);
+        ref.read(playerColourProvider.notifier).state = getDominantDarker(
+          dominant,
+        );
+
+        debugPrint('--> Fallback single last-played loaded (not autoplaying).');
+      } catch (e, st) {
+        debugPrint('--> initLastPlayed (single) error: $e\n$st');
+      }
     }
   }
 }

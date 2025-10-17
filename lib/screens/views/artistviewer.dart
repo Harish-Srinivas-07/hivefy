@@ -481,18 +481,21 @@ class ArtistSongRow extends ConsumerWidget {
             final audioHandler = await ref.read(audioHandlerProvider.future);
             final queue = audioHandler.queue.valueOrNull ?? [];
             final queueIds = queue.map((m) => m.id).toList();
-            final isSameQueue =
-                queueIds.length == artist.topSongs.length &&
-                queueIds.every((id) => artist.topSongs.any((s) => s.id == id));
 
             final tappedIndex = artist.topSongs.indexWhere(
               (s) => s.id == song.id,
             );
             if (tappedIndex == -1) return;
 
-            // 1️⃣ Same song toggle play/pause
+            final currentSong = ref.read(currentSongProvider);
+            final isPlaying = currentSong?.id == song.id;
+            final isShuffle = audioHandler.isShuffle;
+
+            // 1️⃣ Same song → toggle play/pause
             if (isPlaying) {
-              if (audioHandler.playbackState.value.playing) {
+              final playing =
+                  (await audioHandler.playerStateStream.first).playing;
+              if (playing) {
                 await audioHandler.pause();
               } else {
                 await audioHandler.play();
@@ -500,25 +503,46 @@ class ArtistSongRow extends ConsumerWidget {
               return;
             }
 
-            // 2️⃣ Same queue → just skip
+            // Check if current queue already has all artist top songs
+            final isSameQueue =
+                queueIds.length == artist.topSongs.length &&
+                queueIds.every((id) => artist.topSongs.any((s) => s.id == id));
+
             if (isSameQueue) {
-              final shuffleIndex =
-                  audioHandler.isShuffle
-                      ? queue.indexWhere((m) => m.id == song.id)
-                      : tappedIndex;
-              if (shuffleIndex == -1) return;
-              await audioHandler.skipToQueueItem(shuffleIndex);
-              await audioHandler.play();
-              return;
+              // Try to find tapped song after current song index
+              final currentIndex = queue.indexWhere(
+                (m) => m.id == currentSong?.id,
+              );
+
+              int nextIndex = -1;
+              if (currentIndex != -1 && currentIndex + 1 < queue.length) {
+                final subQueue = queue.sublist(currentIndex + 1);
+                final subIndex = subQueue.indexWhere((m) => m.id == song.id);
+                if (subIndex != -1) nextIndex = currentIndex + 1 + subIndex;
+              }
+
+              // Fallback: search entire queue
+              if (nextIndex == -1) {
+                nextIndex = queue.indexWhere((m) => m.id == song.id);
+              }
+
+              if (nextIndex != -1) {
+                await audioHandler.skipToQueueItem(nextIndex);
+                await audioHandler.play();
+                return;
+              }
             }
 
-            // 3️⃣ Load artist songs as new queue
+            // 2️⃣ Load artist top songs as new queue
+            if (isShuffle) await audioHandler.disableShuffle();
             await audioHandler.loadQueue(
               artist.topSongs,
               startIndex: tappedIndex,
               sourceId: artist.id,
               sourceName: '${artist.title} Artist',
             );
+            if (isShuffle) await audioHandler.toggleShuffle();
+
             await audioHandler.play();
           } catch (e, st) {
             debugPrint("Error playing artist song: $e\n$st");

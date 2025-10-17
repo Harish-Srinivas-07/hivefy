@@ -171,17 +171,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
               );
 
               if (!context.mounted) return;
-              // Stop playback if song vanished but audio is still playing
-              ref.read(audioHandlerProvider.future).then((handler) async {
-                final state = await handler.playerStateStream.first;
-                if (state.playing) {
-                  await handler.stop();
-                  debugPrint(
-                    '--> Playback stopped because currentSong became null',
-                  );
-                }
-              });
-
               FocusScope.of(context).unfocus();
               Navigator.of(
                 context,
@@ -449,6 +438,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     ),
                   ),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       // Drag handle
                       const Padding(
@@ -1176,14 +1166,20 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                       controller: _pageController,
                                       itemCount: handler.queueLength,
                                       onPageChanged: (index) async {
-                                        final handler = await ref.read(
+                                        final audioHandler = await ref.read(
                                           audioHandlerProvider.future,
                                         );
-                                        if (handler.currentIndex != index) {
-                                          await handler.skipToQueueItem(index);
+
+                                        // Only skip if the user actually swiped
+                                        if (_pageController.hasClients &&
+                                            audioHandler.currentIndex !=
+                                                index &&
+                                            !audioHandler.isShuffleChanging) {
+                                          await audioHandler.skipToQueueItem(
+                                            index,
+                                          );
                                         }
                                       },
-
                                       itemBuilder: (context, index) {
                                         final song = handler.queueSongs[index];
                                         return Column(
@@ -1206,7 +1202,6 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                       },
                                     ),
                                   ),
-
                                   const SizedBox(height: 35),
 
                                   Padding(

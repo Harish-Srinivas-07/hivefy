@@ -746,32 +746,46 @@ class SongRow extends ConsumerWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () async {
-          final audioHandler = await ref.read(audioHandlerProvider.future);
-          final currentQueue = audioHandler.queueSongs;
-          final currentSource = audioHandler.queueSourceId;
+          try {
+            final audioHandler = await ref.read(audioHandlerProvider.future);
+            final currentQueue = audioHandler.queueSongs;
+            final currentSource = audioHandler.queueSourceId;
+            final isShuffle = audioHandler.isShuffle;
 
-          final isSamePlaylist = currentSource == playlist.id;
-          final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+            final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+            if (tappedIndex == -1) return;
 
-          if (tappedIndex == -1) return;
+            final isSamePlaylist = currentSource == playlist.id;
 
-          if (isSamePlaylist && currentQueue.isNotEmpty) {
-            final shuffleIndex =
-                audioHandler.isShuffle
-                    ? currentQueue.indexWhere((s) => s.id == song.id)
-                    : tappedIndex;
-            if (shuffleIndex == -1) return;
-            await audioHandler.skipToQueueItem(shuffleIndex);
-          } else {
+            // Case 1: Queue already has playlist songs
+            if (isSamePlaylist && currentQueue.isNotEmpty) {
+              final shuffleIndex =
+                  isShuffle
+                      ? currentQueue.indexWhere((s) => s.id == song.id)
+                      : tappedIndex;
+              if (shuffleIndex != -1) {
+                await audioHandler.skipToQueueItem(shuffleIndex);
+                await audioHandler.play();
+                return;
+              }
+            }
+
+            // Case 2: Queue missing playlist songs → load full playlist
+            if (isShuffle) await audioHandler.disableShuffle();
+
             await audioHandler.loadQueue(
               allSongs,
               startIndex: tappedIndex,
               sourceId: playlist.id,
               sourceName: '${playlist.title} Playlist',
             );
-          }
 
-          await audioHandler.play();
+            if (isShuffle) await audioHandler.toggleShuffle();
+
+            await audioHandler.play();
+          } catch (e, st) {
+            debugPrint("Error playing tapped playlist song: $e\n$st");
+          }
         },
         child: Container(
           padding: const EdgeInsets.only(

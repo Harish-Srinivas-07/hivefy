@@ -185,11 +185,13 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                 );
                 final currentQueue = audioHandler.queueSongs;
                 final sourceId = audioHandler.queueSourceId;
+                final isShuffle = audioHandler.isShuffle;
+
+                final tappedIndex = _songs.indexWhere((s) => s.id == song.id);
+                if (tappedIndex == -1) return;
 
                 final isPlaying = ref.read(currentSongProvider)?.id == song.id;
-
                 if (isPlaying) {
-                  // Toggle pause/play
                   final playing =
                       (await audioHandler.playerStateStream.first).playing;
                   if (playing) {
@@ -200,36 +202,53 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                   return;
                 }
 
+                // Check if current queue is already "Liked Songs"
                 final isSameLikedQueue =
                     sourceId == "liked_songs" && currentQueue.isNotEmpty;
 
                 if (isSameLikedQueue) {
-                  final isShuffle = audioHandler.isShuffle;
-                  final queue = audioHandler.queueSongs;
-                  final targetIndex =
-                      isShuffle
-                          ? queue.indexWhere((s) => s.id == song.id)
-                          : currentQueue.indexWhere((s) => s.id == song.id);
+                  // Try to find tapped song after current song
+                  final currentIndex = currentQueue.indexWhere(
+                    (s) => s.id == ref.read(currentSongProvider)?.id,
+                  );
 
-                  if (targetIndex != -1) {
-                    await audioHandler.skipToQueueItem(targetIndex);
+                  int nextIndex = -1;
+                  if (currentIndex != -1 &&
+                      currentIndex + 1 < currentQueue.length) {
+                    final subQueue = currentQueue.sublist(currentIndex + 1);
+                    final subIndex = subQueue.indexWhere(
+                      (s) => s.id == song.id,
+                    );
+                    if (subIndex != -1) nextIndex = currentIndex + 1 + subIndex;
+                  }
+
+                  // Fallback: search entire queue
+                  if (nextIndex == -1) {
+                    nextIndex = currentQueue.indexWhere((s) => s.id == song.id);
+                  }
+
+                  if (nextIndex != -1) {
+                    await audioHandler.skipToQueueItem(nextIndex);
                   } else {
+                    if (isShuffle) await audioHandler.disableShuffle();
                     await audioHandler.loadQueue(
                       _songs,
-                      startIndex: _songs.indexWhere((s) => s.id == song.id),
+                      startIndex: tappedIndex,
                       sourceId: "liked_songs",
                       sourceName: "Liked Songs",
                     );
+                    if (isShuffle) await audioHandler.toggleShuffle();
                   }
                 } else {
-                  final startIndex = _songs.indexWhere((s) => s.id == song.id);
-                  if (startIndex == -1) return;
+                  // Queue is different → load full liked songs
+                  if (isShuffle) await audioHandler.disableShuffle();
                   await audioHandler.loadQueue(
                     _songs,
-                    startIndex: startIndex,
+                    startIndex: tappedIndex,
                     sourceId: "liked_songs",
                     sourceName: "Liked Songs",
                   );
+                  if (isShuffle) await audioHandler.toggleShuffle();
                 }
 
                 await audioHandler.play();

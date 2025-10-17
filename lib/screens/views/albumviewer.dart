@@ -178,28 +178,37 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             if (tappedIndex == -1) return;
 
             final audioHandler = await ref.read(audioHandlerProvider.future);
-            final currentSong = ref.read(currentSongProvider);
             final currentQueue = audioHandler.queueSongs;
+            final isShuffle = audioHandler.isShuffle;
 
-            bool isSameAlbumQueue = false;
+            // Check if queue contains all album songs
+            final albumIds = _albumSongDetails.map((s) => s.id).toSet();
+            final queueIds = currentQueue.map((s) => s.id).toSet();
+            final hasAlbumSongs = albumIds.difference(queueIds).isEmpty;
 
-            // 🔹 Check if current queue belongs to the same album source
-            if (audioHandler.queueSourceId == widget.albumId) {
-              isSameAlbumQueue = true;
-            } else if (currentQueue.isNotEmpty &&
-                _albumSongDetails.isNotEmpty) {
-              // Fallback: compare IDs if no source match
-              final currentIds = currentQueue.map((s) => s.id).toSet();
-              final albumIds = _albumSongDetails.map((s) => s.id).toSet();
-              final overlap = currentIds.intersection(albumIds).length;
-              final ratio = overlap / albumIds.length;
-              if (ratio > 0.8) isSameAlbumQueue = true;
+            // Case 1: Queue does not have album songs → load album
+            if (!hasAlbumSongs) {
+              if (isShuffle) await audioHandler.disableShuffle();
+
+              await audioHandler.loadQueue(
+                _albumSongDetails,
+                startIndex: tappedIndex,
+                sourceId: widget.albumId,
+                sourceName: '${_album?.title} Album',
+              );
+
+              if (isShuffle) await audioHandler.toggleShuffle();
+              return;
             }
 
-            final bool isCurrentSong = currentSong?.id == song.id;
+            // Case 2: Queue already has album songs
+            final currentSong = ref.read(currentSongProvider);
+            final currentIndex = currentQueue.indexWhere(
+              (s) => s.id == currentSong?.id,
+            );
 
-            if (isCurrentSong) {
-              // 🎵 Toggle play/pause
+            // If tapped song is currently playing → toggle play/pause
+            if (currentSong?.id == song.id) {
               final playing =
                   (await audioHandler.playerStateStream.first).playing;
               if (playing) {
@@ -210,32 +219,23 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
               return;
             }
 
-            if (isSameAlbumQueue) {
-              final isShuffle = audioHandler.isShuffle;
-              final queue = audioHandler.queueSongs;
-              final shuffleIndex =
-                  isShuffle
-                      ? queue.indexWhere((s) => s.id == song.id)
-                      : tappedIndex;
-              if (shuffleIndex == -1) return;
-              await audioHandler.skipToQueueItem(shuffleIndex);
-            } else {
-              audioHandler.disableShuffle();
-              await audioHandler.loadQueue(
-                _albumSongDetails,
-                startIndex: tappedIndex,
-                sourceId: widget.albumId,
-                sourceName: '${_album?.title} Album',
-              );
+            // Try to find tapped song after the current song index
+            int nextIndex = -1;
+            if (currentIndex != -1 && currentIndex + 1 < currentQueue.length) {
+              final subQueue = currentQueue.sublist(currentIndex + 1);
+              final subIndex = subQueue.indexWhere((s) => s.id == song.id);
+              if (subIndex != -1) nextIndex = currentIndex + 1 + subIndex;
             }
 
-            // 🔁 Handle shuffle toggle
-            final isShuffle = ref.read(shuffleProvider);
-            if (isShuffle) {
-              audioHandler.toggleShuffle();
+            // Fallback: search entire queue
+            if (nextIndex == -1) {
+              nextIndex = currentQueue.indexWhere((s) => s.id == song.id);
             }
 
-            await audioHandler.play();
+            if (nextIndex != -1) {
+              await audioHandler.skipToQueueItem(nextIndex);
+              await audioHandler.play();
+            }
           } catch (e, st) {
             debugPrint("Error playing tapped album song: $e\n$st");
           }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:html_unescape/html_unescape.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -765,33 +766,78 @@ class SearchArtistsResponse {
 }
 
 // last queue store
-class LastQueueStorage {
-  static const _key = 'last_queue';
+class LastQueueData {
+  final List<SongDetail> songs;
+  final int currentIndex;
 
+  const LastQueueData({required this.songs, required this.currentIndex});
+
+  bool get isEmpty => songs.isEmpty;
+  bool get isNotEmpty => songs.isNotEmpty;
+
+  @override
+  String toString() =>
+      'LastQueueData(songs: ${songs.length}, currentIndex: $currentIndex)';
+}
+
+/// Handles persistence of the last played queue
+class LastQueueStorage {
+  static const _keySongs = 'last_queue';
+  static const _keyIndex = 'last_queue_index';
+
+  /// Save the queue (only song IDs) and current index
   static Future<void> save(
     List<SongDetail> queue, {
     int currentIndex = 0,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = queue.map((s) => s.id).toList();
-    await prefs.setStringList(_key, data);
-    await prefs.setInt('last_queue_index', currentIndex);
+    final songIds = queue.map((s) => s.id).toList();
+    await prefs.setStringList(_keySongs, songIds);
+    await prefs.setInt(_keyIndex, currentIndex);
+
+    debugPrint(
+      '[LastQueueStorage] Saved ${songIds.length} songs (index: $currentIndex)',
+    );
   }
 
-  static Future<Map<String, dynamic>?> load() async {
+  /// Load the previously saved queue from SharedPreferences
+  static Future<LastQueueData?> load() async {
     final prefs = await SharedPreferences.getInstance();
-    final ids = prefs.getStringList(_key);
-    final idx = prefs.getInt('last_queue_index') ?? 0;
-    if (ids == null || ids.isEmpty) return null;
+    final ids = prefs.getStringList(_keySongs);
+    final idx = prefs.getInt(_keyIndex) ?? 0;
 
-    // Fetch full song details from DB
+    if (ids == null || ids.isEmpty) {
+      debugPrint('[LastQueueStorage] No saved queue found');
+      return null;
+    }
+
+    // Fetch full song details from local DB
     final songs = <SongDetail>[];
     for (final id in ids) {
-      final s = await AppDatabase.getSong(id);
-      if (s != null) songs.add(s);
+      final song = await AppDatabase.getSong(id);
+      if (song != null) songs.add(song);
     }
-    return songs.isNotEmpty
-        ? {'queue': songs, 'index': idx.clamp(0, songs.length - 1)}
-        : null;
+
+    if (songs.isEmpty) {
+      debugPrint('[LastQueueStorage] All saved song IDs missing in DB');
+      return null;
+    }
+
+    final safeIndex = idx.clamp(0, songs.length - 1);
+    final result = LastQueueData(songs: songs, currentIndex: safeIndex);
+
+    debugPrint(
+      '[LastQueueStorage] Loaded ${songs.length} songs (index: $safeIndex)',
+    );
+
+    return result;
+  }
+
+  /// Clear the last queue
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keySongs);
+    await prefs.remove(_keyIndex);
+    debugPrint('[LastQueueStorage] Cleared stored queue');
   }
 }

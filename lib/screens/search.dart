@@ -320,8 +320,6 @@ class SearchState extends ConsumerState<Search> {
   Widget _buildPlaylistRow(Playlist p, {VoidCallback? onRemove}) {
     final imageUrl = p.images.isNotEmpty ? p.images.last.url : '';
 
-    debugPrint('--> here the type ${p.type}');
-
     final content = Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 16),
