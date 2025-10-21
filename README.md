@@ -3,19 +3,28 @@
 <h1 align="center">🎧 Hivefy — Open Source Music Experience</h1>
 
 <p align="center">
-  <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest"><img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/Harish-Srinivas-07/hivefy/total?style=for-the-badge&label=DOWNLOADS(Git)" >
-<img alt="GitHub Release" src="https://img.shields.io/github/v/release/Harish-Srinivas-07/hivefy?display_name=release&style=for-the-badge&color=f01d7c" ></a>
+  <!-- 🔹 GitHub Badges -->
+  <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
+    <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/Harish-Srinivas-07/hivefy/total?style=for-the-badge&label=DOWNLOADS(Git)">
+  </a>
+  <img src=https://img.shields.io/sourceforge/dt/hivefy?style=for-the-badge&logoSize=auto&label=DOWNLOADS(SF)>
+  <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
+    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/Harish-Srinivas-07/hivefy?display_name=release&style=for-the-badge&color=f01d7c">
+  </a>
   <img alt="Flutter" src="https://img.shields.io/badge/Built%20With-Flutter-02569B?style=for-the-badge&logo=flutter">
   <img alt="Android" src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white">
   <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-Yes-brightgreen?style=for-the-badge">
 </p>
+
 
 **Hivefy** is a Spotify-inspired, ad-free, and offline-ready music app built with **Flutter** using the **unofficial JioSaavn API**.  
 Explore trending charts, languages, albums, and playlists — beautifully designed for a true music experience. 🎵
 
 ## Download
 
-👉 **[Download the Latest APK](https://github.com/Harish-Srinivas-07/hivefy/releases/latest)**
+  <a href="https://sourceforge.net/projects/hivefy/" target="_blank">
+    <img alt="Download hivefy" src="https://a.fsdn.com/con/app/sf-download-button" />
+  </a>
 
 > Enable “Install from unknown sources” in your device settings to install.
 
