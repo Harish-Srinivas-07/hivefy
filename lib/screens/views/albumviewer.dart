@@ -168,6 +168,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
       ],
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+
         onTap: () async {
           try {
             if (_albumSongDetails.isEmpty) return;
@@ -181,13 +182,15 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
             final currentQueue = audioHandler.queueSongs;
             final isShuffle = audioHandler.isShuffle;
 
-            // Check if queue contains all album songs
             final albumIds = _albumSongDetails.map((s) => s.id).toSet();
             final queueIds = currentQueue.map((s) => s.id).toSet();
             final hasAlbumSongs = albumIds.difference(queueIds).isEmpty;
 
-            // Case 1: Queue does not have album songs → load album
+            // -------------------------------
+            // CASE 1: Load album if not in queue
+            // -------------------------------
             if (!hasAlbumSongs) {
+              // Temporarily disable shuffle for ordered album load
               if (isShuffle) await audioHandler.disableShuffle();
 
               await audioHandler.loadQueue(
@@ -197,11 +200,14 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                 sourceName: '${_album?.title} Album',
               );
 
+              // Re-enable shuffle if it was previously ON
               if (isShuffle) await audioHandler.toggleShuffle();
               return;
             }
 
-            // Case 2: Queue already has album songs
+            // -------------------------------
+            // CASE 2: Queue already has album songs
+            // -------------------------------
             final currentSong = ref.read(currentSongProvider);
             final currentIndex = currentQueue.indexWhere(
               (s) => s.id == currentSong?.id,
@@ -219,21 +225,24 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
               return;
             }
 
-            // Try to find tapped song after the current song index
-            int nextIndex = -1;
+            // -------------------------------
+            // CASE 3: Skip to tapped song in queue
+            // Prefer songs after current index to avoid repeating
+            // -------------------------------
+            int targetIndex = -1;
             if (currentIndex != -1 && currentIndex + 1 < currentQueue.length) {
               final subQueue = currentQueue.sublist(currentIndex + 1);
               final subIndex = subQueue.indexWhere((s) => s.id == song.id);
-              if (subIndex != -1) nextIndex = currentIndex + 1 + subIndex;
+              if (subIndex != -1) targetIndex = currentIndex + 1 + subIndex;
             }
 
             // Fallback: search entire queue
-            if (nextIndex == -1) {
-              nextIndex = currentQueue.indexWhere((s) => s.id == song.id);
+            if (targetIndex == -1) {
+              targetIndex = currentQueue.indexWhere((s) => s.id == song.id);
             }
 
-            if (nextIndex != -1) {
-              await audioHandler.skipToQueueItem(nextIndex);
+            if (targetIndex != -1) {
+              await audioHandler.skipToQueueItem(targetIndex);
               await audioHandler.play();
             }
           } catch (e, st) {
@@ -665,7 +674,7 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                     Padding(
                                       padding: const EdgeInsets.only(top: 2.0),
                                       child: Text(
-                                        formatDuration(_totalAlbumDuration),
+                                        '${_albumSongDetails.length} songs • ${formatDuration(_totalAlbumDuration)}',
                                         style: TextStyle(
                                           color: Colors.white54,
                                           fontSize: 12,

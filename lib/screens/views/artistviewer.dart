@@ -491,7 +491,9 @@ class ArtistSongRow extends ConsumerWidget {
             final isPlaying = currentSong?.id == song.id;
             final isShuffle = audioHandler.isShuffle;
 
-            // 1️⃣ Same song → toggle play/pause
+            // -------------------------------
+            // 1️⃣ Tapped song is currently playing → toggle play/pause
+            // -------------------------------
             if (isPlaying) {
               final playing =
                   (await audioHandler.playerStateStream.first).playing;
@@ -503,13 +505,15 @@ class ArtistSongRow extends ConsumerWidget {
               return;
             }
 
-            // Check if current queue already has all artist top songs
+            // -------------------------------
+            // 2️⃣ Queue already contains all artist top songs
+            // -------------------------------
             final isSameQueue =
                 queueIds.length == artist.topSongs.length &&
                 queueIds.every((id) => artist.topSongs.any((s) => s.id == id));
 
             if (isSameQueue) {
-              // Try to find tapped song after current song index
+              // Try to find tapped song after current song
               final currentIndex = queue.indexWhere(
                 (m) => m.id == currentSong?.id,
               );
@@ -533,14 +537,18 @@ class ArtistSongRow extends ConsumerWidget {
               }
             }
 
-            // 2️⃣ Load artist top songs as new queue
+            // -------------------------------
+            // 3️⃣ Queue missing artist songs → load top songs
+            // -------------------------------
             if (isShuffle) await audioHandler.disableShuffle();
+
             await audioHandler.loadQueue(
               artist.topSongs,
               startIndex: tappedIndex,
               sourceId: artist.id,
               sourceName: '${artist.title} Artist',
             );
+
             if (isShuffle) await audioHandler.toggleShuffle();
 
             await audioHandler.play();
@@ -548,6 +556,7 @@ class ArtistSongRow extends ConsumerWidget {
             debugPrint("Error playing artist song: $e\n$st");
           }
         },
+
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           child: Row(

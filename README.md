@@ -1,32 +1,49 @@
 ![Hivefy Banner](./assets/docs/fullbanner.png)
 
-<h1 align="center">🎧 Hivefy — Open Source Music Experience</h1>
+<h1 align="center">Hivefy 🎧</h1>
 
 <p align="center">
-  <!-- 🔹 GitHub Badges -->
+
+  <!-- 🔹 GitHub Downloads -->
   <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
-    <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/Harish-Srinivas-07/hivefy/total?style=for-the-badge&label=DOWNLOADS(Git)">
+    <img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/Harish-Srinivas-07/hivefy/total?label=Downloads(Git)">
   </a>
-  <img src=https://img.shields.io/sourceforge/dt/hivefy?style=for-the-badge&logoSize=auto&label=DOWNLOADS(SF)>
+
+  <!-- 🔹 SourceForge Downloads -->
+  <a href="https://sourceforge.net/projects/hivefy/files/">
+    <img alt="SourceForge Downloads" src="https://img.shields.io/sourceforge/dt/hivefy?label=Downloads(SF)">
+  </a>
+
+  <!-- 🔹 GitHub Latest Release -->
   <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
-    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/Harish-Srinivas-07/hivefy?display_name=release&style=for-the-badge&color=f01d7c">
+    <img alt="GitHub Release" src="https://img.shields.io/github/v/release/Harish-Srinivas-07/hivefy">
   </a>
-  <img alt="Flutter" src="https://img.shields.io/badge/Built%20With-Flutter-02569B?style=for-the-badge&logo=flutter">
-  <img alt="Android" src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white">
-  <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-Yes-brightgreen?style=for-the-badge">
+  <!-- 🔹 Built With / Platform / Open Source -->
+  <img alt="Flutter" src="https://img.shields.io/badge/Built%20With-Flutter-02569B">
+  <img alt="Android" src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white">
+  <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-Yes-brightgreen">
 </p>
 
+**Hivefy** is a **FOSS, Spotify inpired, ad-free, and offline-ready music app** built with **Flutter** using the **unofficial JioSaavn API**.  
+Explore trending charts, albums, playlists, and multi-language content — all **open-source, privacy-respecting, and fully customizable**. 🎵
 
-**Hivefy** is a Spotify-inspired, ad-free, and offline-ready music app built with **Flutter** using the **unofficial JioSaavn API**.  
-Explore trending charts, languages, albums, and playlists — beautifully designed for a true music experience. 🎵
+<h3>Download for Android 😍</h3>
 
-## Download
-
-  <a href="https://sourceforge.net/projects/hivefy/" target="_blank">
-    <img alt="Download hivefy" src="https://a.fsdn.com/con/app/sf-download-button" />
+<!-- GitHub button -->
+<p>
+  <a href="https://github.com/Harish-Srinivas-07/hivefy/releases" target="_blank">
+    <img alt="Github build" src="https://raw.githubusercontent.com/NeoApplications/Neo-Backup/034b226cea5c1b30eb4f6a6f313e4dadcbb0ece4/badge_github.png" height="60" style="vertical-align: middle;" />
   </a>
+</p>
 
-> Enable “Install from unknown sources” in your device settings to install.
+<!-- SourceForge button -->
+<p>
+  <a href="https://sourceforge.net/projects/hivefy/" target="_blank">
+    <img alt="Download Hivefy" src="https://a.fsdn.com/con/app/sf-download-button" height="40" style="vertical-align: middle;" />
+  </a>
+</p>
+
+> ⚠️ Make sure “Install from unknown sources” is enabled in your device settings to install Hivefy.
 
 ## ✨ Features
 
@@ -77,7 +94,8 @@ Explore trending charts, languages, albums, and playlists — beautifully design
 - [ ] 🎼 Lyrics sync & overlay
 - [ ] 🧠 AI-based recommendations
 - [ ] ☁️ Cloud profile sync
-- [ ] 🖥️ Windows & Linux support
+- [ ] 🖥️ Windows app support
+- [ ] 🍏 iOS app support
 - [ ] 🤝 Playlist sharing & collaboration
 
 ---
@@ -136,8 +154,6 @@ flutter run
 ```
 
 Then open a Pull Request — we’ll review it together 🎵
-
----
 
 ## ⚠️ Disclaimer
 

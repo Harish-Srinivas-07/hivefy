@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
@@ -221,6 +223,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                               _marqueeText(
                                 trimAfterParamText(song.title),
                                 fontSize: 12,
+                                letterSpacing: -.5,
                                 fontWeight: FontWeight.w600,
                               ),
                               const SizedBox(height: 2),
@@ -366,8 +369,9 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
 
   @override
   void dispose() {
-    super.dispose();
+    _pageController.dispose();
     _isBioExpanded.dispose();
+    super.dispose();
   }
 
   Future<void> _updateBgColor() async {
@@ -463,7 +467,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
-                            vertical: 4,
+                            vertical: 2,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,21 +528,22 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
           fontFamily: 'SpotifyMix',
           fontSize: 13,
           color: Colors.white70,
+          letterSpacing: 0,
           height: 1.3,
         ),
         children: [
-          TextSpan(
-            text: "${capitalize(label)}:  ",
-            style: const TextStyle(
-              color: Colors.white54,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
           TextSpan(
             text: capitalize(value),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
+            ),
+          ),
+          TextSpan(
+            text: " $label",
+            style: const TextStyle(
+              color: Colors.white54,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -568,7 +573,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   children: [
                     SizedBox(
                       width: double.infinity,
-                      height: 220,
+                      height: 200,
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(16),
@@ -585,7 +590,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     ),
 
                     Container(
-                      height: 220,
+                      height: 200,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -597,39 +602,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                         ),
                       ),
                     ),
-                    Positioned(
-                      bottom: 6,
-                      left: 16,
-                      right: 16,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _artistDetails!.title,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                shadows: [
-                                  Shadow(
-                                    blurRadius: 10.0,
-                                    color: Colors.black,
-                                    offset: Offset(2.0, 2.0),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (_artistDetails!.isVerified == true)
-                            const Icon(
-                              Icons.verified,
-                              color: Colors.blueAccent,
-                              size: 20,
-                            ),
-                        ],
-                      ),
-                    ),
+
                     Positioned(
                       top: 16,
                       left: 16,
@@ -664,6 +637,28 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   spacing: 12,
                   runSpacing: 4,
                   children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _artistDetails!.title,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              letterSpacing: -1.1,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (_artistDetails!.isVerified == true)
+                          const Icon(
+                            Icons.verified,
+                            color: Colors.blueAccent,
+                            size: 20,
+                          ),
+                      ],
+                    ),
                     if (_artistDetails!.followerCount != null)
                       _buildStatItem(
                         "followers",
@@ -1041,22 +1036,22 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     }
 
     final handlerAsync = ref.watch(audioHandlerProvider);
+    ref.read(audioHandlerProvider.future).then((handler) {
+      handler.playbackState.listen((state) {
+        final index = handler.currentIndex;
+        if (_pageController.hasClients &&
+            !handler.isShuffleChanging &&
+            index >= 0 &&
+            index < handler.queueLength &&
+            index != _pageController.page?.round()) {
+          _pageController.jumpToPage(index);
+        }
+      });
+    });
 
     return handlerAsync.when(
       data: (handler) {
         final queueAsync = ref.watch(queueStreamProvider(handler));
-        ref.read(audioHandlerProvider.future).then((handler) {
-          handler.playbackState.listen((state) {
-            final index = handler.currentIndex;
-
-            if (_pageController.hasClients &&
-                index >= 0 &&
-                index < handler.queueLength &&
-                index != _pageController.page?.round()) {
-              _pageController.jumpToPage(index);
-            }
-          });
-        });
 
         return queueAsync.when(
           data: (queue) {
@@ -1159,9 +1154,9 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                               ),
                               child: Column(
                                 children: [
-                                  const SizedBox(height: 45),
+                                  const SizedBox(height: 25),
                                   SizedBox(
-                                    height: 320,
+                                    height: 350,
                                     child: PageView.builder(
                                       controller: _pageController,
                                       itemCount: handler.queueLength,
@@ -1186,27 +1181,42 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            CacheNetWorkImg(
-                                              url:
-                                                  song.images.isNotEmpty
-                                                      ? song.images.last.url
-                                                      : '',
-                                              width: 300,
-                                              height: 300,
-                                              fit: BoxFit.contain,
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
+                                            LayoutBuilder(
+                                              builder: (context, constraints) {
+                                                final screenWidth =
+                                                    MediaQuery.of(
+                                                      context,
+                                                    ).size.width;
+                                                double imageWidth =
+                                                    screenWidth * 0.80 > 400
+                                                        ? 400
+                                                        : screenWidth * 0.80;
+
+                                                return CacheNetWorkImg(
+                                                  url:
+                                                      song.images.isNotEmpty
+                                                          ? song.images.last.url
+                                                          : '',
+                                                  width: imageWidth,
+                                                  height: imageWidth,
+                                                  fit: BoxFit.contain,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                );
+                                              },
                                             ),
+                                            const SizedBox(height: 16),
+                                            // Other content goes here
                                           ],
                                         );
                                       },
                                     ),
                                   ),
-                                  const SizedBox(height: 35),
+                                  const SizedBox(height: 25),
 
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
+                                      horizontal: 15,
                                       vertical: 15,
                                     ),
                                     child: Row(
@@ -1226,10 +1236,9 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 _marqueeText(
-                                                  trimAfterParamText(
-                                                    song.title,
-                                                  ),
+                                                  '  ${trimAfterParamText(song.title)}',
                                                   fontSize: 22,
+                                                  letterSpacing: -1.4,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                                 if (secondaryParts.isNotEmpty)
@@ -1243,6 +1252,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                                         " • ",
                                                       ),
                                                       fontSize: 15,
+                                                      letterSpacing: -1.4,
                                                       fontWeight:
                                                           FontWeight.w300,
                                                       color: Colors.white70,
@@ -1524,6 +1534,8 @@ Widget _marqueeText(
   double fontSize = 14,
   FontWeight fontWeight = FontWeight.w600,
   color = Colors.white,
+  double letterSpacing = 0,
+  double height = 1.2,
 }) {
   if (text.length <= 30) {
     return Text(
@@ -1532,6 +1544,8 @@ Widget _marqueeText(
         color: color,
         fontSize: fontSize,
         fontWeight: fontWeight,
+        letterSpacing: letterSpacing,
+        height: height,
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,

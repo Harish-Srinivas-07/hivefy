@@ -104,7 +104,7 @@ class QueueList extends ConsumerWidget {
                     vertical: 8,
                     horizontal: 16,
                   ),
-                  color: Colors.black26,
+                  color: Colors.transparent,
                   child: Row(
                     children: [
                       CacheNetWorkImg(
@@ -155,6 +155,8 @@ class QueueList extends ConsumerWidget {
                   ),
                 ),
 
+                Divider(thickness: 1, color: Colors.white24),
+
                 // UPCOMING SONGS LIST
                 Expanded(
                   child: DragAndDropLists(
@@ -165,11 +167,22 @@ class QueueList extends ConsumerWidget {
                       oldListIndex,
                       newItemIndex,
                       newListIndex,
-                    ) {
+                    ) async {
                       // Offset by currentIndex + 1 to match full queue
-                      handler.reorderQueue(
-                        oldItemIndex + currentIndex + 1,
-                        newItemIndex + currentIndex + 1,
+                      final startIndex = currentIndex + 1;
+
+                      // 1️⃣ reorder in shuffleManager
+                      handler.shuffleManager.reorder(
+                        oldItemIndex + startIndex,
+                        newItemIndex + startIndex,
+                      );
+
+                      // 2️⃣ update handler queue from shuffleManager
+                      handler.updateQueueFromShuffle();
+
+                      // 3️⃣ notify AudioService / Stream
+                      handler.queue.add(
+                        handler.queueSongs.map(songToMediaItem).toList(),
                       );
                     },
                     onListReorder: (oldListIndex, newListIndex) {
@@ -187,12 +200,18 @@ class QueueList extends ConsumerWidget {
                     ),
                     itemDivider: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(thickness: .8, color: Colors.white12),
+                      child: Divider(thickness: .8, color: Colors.white10),
                     ),
                     listInnerDecoration: const BoxDecoration(
                       color: Colors.transparent,
                     ),
                     itemGhostOpacity: 0.2,
+                    contentsWhenEmpty: Center(
+                      child: Text(
+                        'No Queue songs',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
                   ),
                 ),
               ],

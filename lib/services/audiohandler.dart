@@ -15,6 +15,7 @@ import '../models/datamodel.dart';
 import 'offlinemanager.dart';
 import '../services/jiosaavn.dart';
 import '../shared/constants.dart';
+import 'shufflemanager.dart';
 
 enum RepeatMode { none, one, all }
 
@@ -38,11 +39,12 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final Ref ref;
   final AudioPlayer _player = AudioPlayer();
 
+  // shuffle manager
+  final ShuffleManager _shuffleManager = ShuffleManager();
+  ShuffleManager get shuffleManager => _shuffleManager;
+
   List<SongDetail> _queue = [];
   int _currentIndex = -1;
-
-  bool _shuffle = false;
-  RepeatMode _repeat = RepeatMode.none;
 
   MyAudioHandler(this.ref) {
     // keep system playbackState in sync
@@ -97,7 +99,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
 
     // resume last played song if exists
-    disableShuffle(); // turn shuffle off
     _initLastPlayed();
   }
 
@@ -112,7 +113,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   bool get hasPrevious => _currentIndex > 0 && (_currentIndex < _queue.length);
 
-  bool get isShuffle => _shuffle;
+  RepeatMode _repeat = RepeatMode.none;
   RepeatMode get repeatMode => _repeat;
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
   Stream<Duration> get positionStream => _player.positionStream;
@@ -123,83 +124,68 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int get currentIndex => _currentIndex;
 
   // --- Shuffle & repeat
-  List<SongDetail>? _originalQueue;
+
   bool isShuffleChanging = false;
+  bool get isShuffle => _shuffleManager.isShuffling;
 
   Future<void> toggleShuffle() async {
+    if (_queue.isEmpty) return;
+
     isShuffleChanging = true;
-    _shuffle = !_shuffle;
+
     final current = currentSong;
 
-    if (_shuffle) {
-      _originalQueue ??= List.from(_queue); // backup only if not already
+    // Ensure ShuffleManager has the latest queue
+    _shuffleManager.loadQueue(List.from(_queue), currentIndex: _currentIndex);
 
-      if (current != null) {
-        // Keep current song at its current index
-        final beforeCurrent = _queue.sublist(0, _currentIndex + 1);
-        final afterCurrent = _queue.sublist(_currentIndex + 1)..shuffle();
+    // Toggle shuffle state
+    _shuffleManager.toggleShuffle(currentSong: current);
 
-        _queue = [...beforeCurrent, ...afterCurrent];
-        // currentIndex remains the same
-      } else {
-        _queue.shuffle();
-        _currentIndex = 0;
-      }
-    } else {
-      if (_originalQueue != null) {
-        final currentId = current?.id;
-        _queue = List.from(_originalQueue!);
-        _originalQueue = null;
+    // Sync handler queue and index
+    _queue = List.from(_shuffleManager.currentQueue);
+    _currentIndex = _shuffleManager.currentIndex;
 
-        if (currentId != null) {
-          _currentIndex = _queue.indexWhere((s) => s.id == currentId);
-        }
-      }
-    }
-
-    // Broadcast new queue
+    // Notify listeners
     queue.add(_queue.map(songToMediaItem).toList());
-    ref.read(shuffleProvider.notifier).state = _shuffle;
+    ref.read(shuffleProvider.notifier).state = _shuffleManager.isShuffling;
+
     isShuffleChanging = false;
   }
 
-  /// Turn shuffle OFF if currently enabled
+  /// Explicitly turn shuffle OFF safely
   Future<void> disableShuffle() async {
-    if (_shuffle) {
-      toggleShuffle(); // toggleShuffle will restore original queue
+    if (_shuffleManager.isShuffling) {
+      final current = currentSong;
+
+      // Toggle shuffle off without touching original playlist order
+      _shuffleManager.toggleShuffle(currentSong: current);
+
+      // Sync handler queue/index with original queue
+      _queue = List.from(_shuffleManager.currentQueue);
+      _currentIndex = _shuffleManager.currentIndex;
+
+      // Notify listeners
+      queue.add(_queue.map(songToMediaItem).toList());
+      ref.read(shuffleProvider.notifier).state = false;
     }
-  }
-
-  Future<void> reorderQueue(int oldIndex, int newIndex) async {
-    if (oldIndex < 0 ||
-        newIndex < 0 ||
-        oldIndex >= _queue.length ||
-        newIndex >= _queue.length) {
-      debugPrint("Invalid indices for reordering.");
-      return;
-    }
-
-    final moved = _queue.removeAt(oldIndex);
-    _queue.insert(newIndex, moved);
-
-    if (_currentIndex == oldIndex) {
-      _currentIndex = newIndex;
-    } else if (oldIndex < _currentIndex && newIndex >= _currentIndex) {
-      _currentIndex--;
-    } else if (oldIndex > _currentIndex && newIndex <= _currentIndex) {
-      _currentIndex++;
-    }
-
-    queue.add(_queue.map(songToMediaItem).toList());
-    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
   }
 
   void _enforceQueueLimit() async {
     if (_queue.length > 50) {
-      _queue = _queue.sublist(_queue.length - 50);
-      _currentIndex = _queue.length - 1;
+      final cutoff = _queue.length - 50;
+      if (_currentIndex >= cutoff) {
+        _currentIndex -= cutoff;
+      } else {
+        _currentIndex = 0;
+      }
+      _queue = _queue.sublist(cutoff);
       await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
     }
+  }
+
+  void updateQueueFromShuffle() {
+    _queue = _shuffleManager.currentQueue;
+    _currentIndex = _shuffleManager.currentIndex;
   }
 
   void toggleRepeatMode() {
@@ -225,7 +211,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _isPausedManually = true;
     playbackState.add(playbackState.value.copyWith(playing: false));
     await _player.pause();
-    await _player.pause();
+    await _player.pause(); // temporary bug need to fix later
   }
 
   @override
@@ -240,20 +226,22 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   Future<void> _onSongEnded() async {
-    if (_isPausedManually) {
-      debugPrint('--> Song ended, paused manually, not skipping.');
-      return;
-    }
+    if (_isPausedManually) return;
 
-    // Repeat one: just restart current song
     if (_repeat == RepeatMode.one) {
       await _player.seek(Duration.zero);
       await _player.play();
       return;
     }
 
-    // Get next playable index considering offline availability
-    int? nextIndex = await _getNextPlayableIndex();
+    int? nextIndex;
+
+    // 🔹 use shuffle logic
+    if (_shuffleManager.isShuffling) {
+      nextIndex = _shuffleManager.getNextIndex();
+    } else {
+      nextIndex = await _getNextPlayableIndex();
+    }
 
     if (nextIndex != null) {
       _currentIndex = nextIndex;
@@ -261,14 +249,12 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
 
-    // No next index found
     if (_repeat == RepeatMode.all && _queue.isNotEmpty) {
       _currentIndex = 0;
       await _playCurrent(skipCompletedCheck: true);
       return;
     }
 
-    // Nothing to play, stop playback
     await stop();
     _currentIndex = -1;
     mediaItem.add(null);
@@ -321,7 +307,15 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
 
-    final nextIndex = await _getNextPlayableIndex();
+    int? nextIndex;
+
+    // 🔹 Handle shuffle via ShuffleManager
+    if (_shuffleManager.isShuffling) {
+      nextIndex = _shuffleManager.getNextIndex();
+    } else {
+      nextIndex = await _getNextPlayableIndex();
+    }
+
     if (nextIndex != null) {
       _currentIndex = nextIndex;
       await _playCurrent();
@@ -399,8 +393,17 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
 
-    if (hasPrevious) {
-      _currentIndex--;
+    int? prevIndex;
+
+    // 🔹 Use shuffle manager for back navigation
+    if (_shuffleManager.isShuffling) {
+      prevIndex = _shuffleManager.getPreviousIndex();
+    } else if (hasPrevious) {
+      prevIndex = _currentIndex - 1;
+    }
+
+    if (prevIndex != null && prevIndex >= 0) {
+      _currentIndex = prevIndex;
       await _playCurrent();
     } else if (_repeat == RepeatMode.all) {
       _currentIndex = _queue.length - 1;
@@ -424,19 +427,13 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final song = await AppDatabase.getSong(mediaItem.id);
     if (song == null) return;
 
-    // avoid duplicates, then add at end
+    // Avoid duplicates
     _queue.removeWhere((s) => s.id == song.id);
     _queue.add(song);
     _enforceQueueLimit();
 
-    // if shuffle on, re-shuffle but keep current song first
-    if (_shuffle && _queue.length > 1) {
-      final current = _queue[_currentIndex];
-      _queue.remove(current);
-      _queue.shuffle();
-      _queue.insert(0, current);
-      _currentIndex = 0;
-    }
+    // 🔹 Update shuffle list without re-toggling shuffle
+    _shuffleManager.addSong(song);
 
     queue.add(_queue.map(songToMediaItem).toList());
   }
@@ -454,45 +451,32 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     String? sourceName,
     bool autoPlay = true,
   }) async {
-    // 🔹 Clear existing queue first
     _queue.clear();
     _currentIndex = -1;
     _queueSourceId = sourceId;
     _queueSourceName = sourceName;
-
-    // Broadcast empty queue to listeners
     queue.add([]);
 
-    // Load new queue
+    if (songs.isEmpty) return;
     _queue = List.from(songs);
     _enforceQueueLimit();
 
-    if (_queue.isEmpty) return;
+    final safeStartIndex = startIndex.clamp(0, _queue.length - 1);
 
-    // Ensure incoming startIndex is in-range relative to original songs list
-    final safeStartIndex = startIndex.clamp(0, songs.length - 1);
+    // 🔹 Always load through shuffle manager for unified state
+    _shuffleManager.loadQueue(_queue, currentIndex: safeStartIndex);
 
-    if (_shuffle) {
-      // Shuffle the whole queue but start with the requested song
-      final startSongId = songs[safeStartIndex].id;
-      _queue.shuffle();
-
-      // Find the position of the requested start song in shuffled queue
-      _currentIndex = _queue.indexWhere((s) => s.id == startSongId);
-      if (_currentIndex < 0) _currentIndex = 0;
+    if (_shuffleManager.isShuffling) {
+      _queue = _shuffleManager.currentQueue;
+      _currentIndex = _shuffleManager.currentIndex;
     } else {
-      _currentIndex = safeStartIndex.clamp(0, _queue.length - 1);
+      _currentIndex = safeStartIndex;
     }
 
-    // Broadcast new queue
     queue.add(_queue.map(songToMediaItem).toList());
     await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
 
-    // Start playing
-    // Only play if autoPlay is true
-    if (autoPlay) {
-      await _playCurrent();
-    }
+    if (autoPlay) await _playCurrent();
   }
 
   Future<void> playSongNow(SongDetail song, {bool insertNext = false}) async {
@@ -613,8 +597,11 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> _initLastPlayed() async {
     debugPrint('--> Initializing last played queue...');
     final lastQueueData = await LastQueueStorage.load();
-    _shuffle = false;
-    debugPrint('--> Shuffle set to false');
+
+    // 🔹 Reset shuffle manager properly (instead of _shuffle = false)
+    _shuffleManager.loadQueue([]);
+    ref.read(shuffleProvider.notifier).state = false;
+    debugPrint('--> ShuffleManager reset to non-shuffling mode');
 
     if (lastQueueData != null) {
       final songs = lastQueueData.songs;
@@ -626,6 +613,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         debugPrint('--> Restoring queue: $lastQueueData');
         _queue = List.from(songs);
         _currentIndex = startIndex.clamp(0, _queue.length - 1);
+
+        // 🔹 Sync with ShuffleManager (non-shuffling on restore)
+        _shuffleManager.loadQueue(_queue, currentIndex: _currentIndex);
 
         queue.add(_queue.map(songToMediaItem).toList());
         await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
@@ -668,11 +658,15 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       }
     }
 
-    // fallback: single last played song (previous logic)
+    // 🔹 fallback: restore single last played song if full queue not found
     final last = await LastPlayedSongStorage.load();
     if (last != null) {
       _queue = [last];
       _currentIndex = 0;
+
+      // 🔹 Sync with ShuffleManager
+      _shuffleManager.loadQueue(_queue, currentIndex: _currentIndex);
+
       queue.add([songToMediaItem(last)]);
       _queueSourceName = 'Last Played';
       _queueSourceId = last.id;

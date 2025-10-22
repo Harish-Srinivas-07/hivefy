@@ -14,6 +14,7 @@ import '../services/offlinemanager.dart';
 import '../services/latestsaavnfetcher.dart';
 
 import '../services/localnotification.dart';
+import '../services/systemconfig.dart';
 import '../shared/constants.dart';
 import '../utils/theme.dart';
 import 'features/language.dart';
@@ -46,6 +47,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
   List<Playlist> partyShuffled = [];
   List<Playlist> loveShuffled = [];
   bool _showWaitingCard = true;
+  bool _showUpdateAvailable = true;
 
   @override
   void initState() {
@@ -116,6 +118,8 @@ class _DashboardState extends ConsumerState<Dashboard> {
     if (mounted) setState(() {});
     await Future.delayed(const Duration(seconds: 3));
     await requestNotificationPermission();
+    await checkForUpdate();
+    if (mounted) setState(() {});
   }
 
   void _buildFreqRecent() {
@@ -180,6 +184,19 @@ class _DashboardState extends ConsumerState<Dashboard> {
                   children: [
                     _sectionGrid(freqRecentPlaylists),
                     _sectionList("Top Latest", topLatest),
+                    if (isAppUpdateAvailable && _showUpdateAvailable)
+                      GeneralCards(
+                        iconPath: 'assets/icons/alert.png',
+                        title: 'Update Available!',
+                        content:
+                            'Please update the app to enjoy the best experience and latest features.',
+                        downloadUrl:
+                            'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
+                        onClose: () {
+                          _showUpdateAvailable = false;
+                          setState(() {});
+                        },
+                      ),
                     _sectionAlbumList("Today's biggest hits", topLatestAlbum),
                     _sectionList("Fresh", fresh),
                     _sectionList("Party Mode", partyShuffled),

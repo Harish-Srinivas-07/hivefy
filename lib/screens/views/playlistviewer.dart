@@ -627,7 +627,10 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      if (_playlist!.description.isNotEmpty)
+                                      if (_playlist!.description.isNotEmpty &&
+                                          !_playlist!.description
+                                              .toLowerCase()
+                                              .contains('on cover'))
                                         ReadMoreText(
                                           _playlist!.description,
                                           trimLines: 3,
@@ -647,9 +650,7 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                                             top: 2.0,
                                           ),
                                           child: Text(
-                                            formatDuration(
-                                              _totalPlaylistDuration,
-                                            ),
+                                            '${_playlistSongDetails.length} songs • ${formatDuration(_totalPlaylistDuration)}',
                                             style: TextStyle(
                                               color: Colors.white54,
                                               fontSize: 12,
@@ -756,21 +757,37 @@ class SongRow extends ConsumerWidget {
             if (tappedIndex == -1) return;
 
             final isSamePlaylist = currentSource == playlist.id;
+            final currentSong = ref.read(currentSongProvider);
 
-            // Case 1: Queue already has playlist songs
+            // -------------------------------
+            // CASE 1: Queue already has playlist songs
+            // -------------------------------
             if (isSamePlaylist && currentQueue.isNotEmpty) {
-              final shuffleIndex =
-                  isShuffle
-                      ? currentQueue.indexWhere((s) => s.id == song.id)
-                      : tappedIndex;
-              if (shuffleIndex != -1) {
-                await audioHandler.skipToQueueItem(shuffleIndex);
+              // If tapped song is currently playing → toggle play/pause
+              if (currentSong?.id == song.id) {
+                final playing =
+                    (await audioHandler.playerStateStream.first).playing;
+                if (playing) {
+                  await audioHandler.pause();
+                } else {
+                  await audioHandler.play();
+                }
+                return;
+              }
+
+              // Determine index for skip (shuffle aware)
+              int targetIndex = currentQueue.indexWhere((s) => s.id == song.id);
+
+              if (targetIndex != -1) {
+                await audioHandler.skipToQueueItem(targetIndex);
                 await audioHandler.play();
                 return;
               }
             }
 
-            // Case 2: Queue missing playlist songs → load full playlist
+            // -------------------------------
+            // CASE 2: Queue missing playlist songs → load full playlist
+            // -------------------------------
             if (isShuffle) await audioHandler.disableShuffle();
 
             await audioHandler.loadQueue(
@@ -787,6 +804,7 @@ class SongRow extends ConsumerWidget {
             debugPrint("Error playing tapped playlist song: $e\n$st");
           }
         },
+
         child: Container(
           padding: const EdgeInsets.only(
             top: 8,

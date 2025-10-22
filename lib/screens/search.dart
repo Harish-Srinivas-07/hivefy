@@ -585,10 +585,15 @@ class SearchState extends ConsumerState<Search> {
                 color: Colors.white,
               ),
             ),
-            const Icon(
-              Icons.camera_alt_outlined,
-              size: 28,
-              color: Colors.white,
+            GestureDetector(
+              onTap: () {
+                info('Under construction, will update soon!', Severity.info);
+              },
+              child: const Icon(
+                Icons.camera_alt_outlined,
+                size: 28,
+                color: Colors.white,
+              ),
             ),
           ],
         );

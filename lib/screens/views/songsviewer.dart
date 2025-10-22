@@ -170,7 +170,7 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () async {
-              // Disable tap if no internet AND not offline
+              // Disable tap if no internet AND not available offline
               if (!isEnabled) {
                 info(
                   "No internet and song not available offline",
@@ -190,7 +190,12 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                 final tappedIndex = _songs.indexWhere((s) => s.id == song.id);
                 if (tappedIndex == -1) return;
 
-                final isPlaying = ref.read(currentSongProvider)?.id == song.id;
+                final currentSong = ref.read(currentSongProvider);
+                final isPlaying = currentSong?.id == song.id;
+
+                // -------------------------------
+                // 1️⃣ Tapped song is currently playing → toggle play/pause
+                // -------------------------------
                 if (isPlaying) {
                   final playing =
                       (await audioHandler.playerStateStream.first).playing;
@@ -202,14 +207,19 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                   return;
                 }
 
-                // Check if current queue is already "Liked Songs"
-                final isSameLikedQueue =
-                    sourceId == "liked_songs" && currentQueue.isNotEmpty;
+                // -------------------------------
+                // 2️⃣ Queue already contains all liked songs
+                // -------------------------------
+                final isSameQueue =
+                    sourceId == "liked_songs" &&
+                    currentQueue.isNotEmpty &&
+                    currentQueue.length == _songs.length &&
+                    currentQueue.every((s) => _songs.any((x) => x.id == s.id));
 
-                if (isSameLikedQueue) {
+                if (isSameQueue) {
                   // Try to find tapped song after current song
                   final currentIndex = currentQueue.indexWhere(
-                    (s) => s.id == ref.read(currentSongProvider)?.id,
+                    (s) => s.id == currentSong?.id,
                   );
 
                   int nextIndex = -1;
@@ -229,34 +239,29 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
 
                   if (nextIndex != -1) {
                     await audioHandler.skipToQueueItem(nextIndex);
-                  } else {
-                    if (isShuffle) await audioHandler.disableShuffle();
-                    await audioHandler.loadQueue(
-                      _songs,
-                      startIndex: tappedIndex,
-                      sourceId: "liked_songs",
-                      sourceName: "Liked Songs",
-                    );
-                    if (isShuffle) await audioHandler.toggleShuffle();
+                    await audioHandler.play();
+                    return;
                   }
-                } else {
-                  // Queue is different → load full liked songs
-                  if (isShuffle) await audioHandler.disableShuffle();
-                  await audioHandler.loadQueue(
-                    _songs,
-                    startIndex: tappedIndex,
-                    sourceId: "liked_songs",
-                    sourceName: "Liked Songs",
-                  );
-                  if (isShuffle) await audioHandler.toggleShuffle();
                 }
 
+                // -------------------------------
+                // 3️⃣ Queue missing liked songs → load full liked songs
+                // -------------------------------
+                if (isShuffle) await audioHandler.disableShuffle();
+
+                await audioHandler.loadQueue(
+                  _songs,
+                  startIndex: tappedIndex,
+                  sourceId: "liked_songs",
+                  sourceName: "Liked Songs",
+                );
+
+                if (isShuffle) await audioHandler.toggleShuffle();
                 await audioHandler.play();
               } catch (e, st) {
                 debugPrint("Error playing liked song: $e\n$st");
               }
             },
-
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Row(

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../components/generalcards.dart';
 import '../../components/snackbar.dart';
+import '../../services/systemconfig.dart';
 import '../../shared/constants.dart';
 import '../../utils/theme.dart';
 
@@ -17,6 +19,7 @@ class AboutPage extends ConsumerStatefulWidget {
 class _AboutPageState extends ConsumerState<AboutPage> {
   late ScrollController _scrollController;
   bool _isTitleCollapsed = false;
+  bool _showUpdateAvailable = true;
 
   @override
   void initState() {
@@ -33,6 +36,8 @@ class _AboutPageState extends ConsumerState<AboutPage> {
         });
 
     _loadPackageInfo();
+    checkForUpdate();
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadPackageInfo() async {
@@ -311,6 +316,21 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                 ),
                 _infoRow('INSTALLER', packageInfo.installerStore ?? 'Unknown'),
                 const SizedBox(height: 20),
+                if (isAppUpdateAvailable && _showUpdateAvailable) ...[
+                  const SizedBox(height: 20),
+                  GeneralCards(
+                    iconPath: 'assets/icons/alert.png',
+                    title: 'Update Available!',
+                    content:
+                        'Please update the app to enjoy the best experience and latest features.',
+                    downloadUrl:
+                        'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
+                    onClose: () {
+                      _showUpdateAvailable = false;
+                      setState(() {});
+                    },
+                  ),
+                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -340,7 +360,6 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                         }
                       }
                     },
-
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.black87,
