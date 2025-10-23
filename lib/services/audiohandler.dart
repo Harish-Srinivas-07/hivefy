@@ -528,6 +528,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     ref.read(currentSongProvider.notifier).state = song;
+    await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
     await LastPlayedSongStorage.save(song);
 
     try {

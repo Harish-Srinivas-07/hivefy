@@ -812,11 +812,11 @@ class LastQueueStorage {
     }
 
     // Fetch full song details from local DB
-    final songs = <SongDetail>[];
-    for (final id in ids) {
-      final song = await AppDatabase.getSong(id);
-      if (song != null) songs.add(song);
-    }
+
+    final songs =
+        (await Future.wait(
+          ids.map(AppDatabase.getSong),
+        )).whereType<SongDetail>().toList();
 
     if (songs.isEmpty) {
       debugPrint('[LastQueueStorage] All saved song IDs missing in DB');

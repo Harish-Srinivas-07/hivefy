@@ -1248,9 +1248,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                                           maxHeight: 30,
                                                         ),
                                                     child: _marqueeText(
-                                                      secondaryParts.join(
-                                                        " • ",
-                                                      ),
+                                                      '  ${secondaryParts.join(" • ")}',
                                                       fontSize: 15,
                                                       letterSpacing: -1.4,
                                                       fontWeight:
