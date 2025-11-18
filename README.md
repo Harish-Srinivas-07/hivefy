@@ -22,10 +22,15 @@
   <img alt="Flutter" src="https://img.shields.io/badge/Built%20With-Flutter-02569B">
   <img alt="Android" src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white">
   <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-Yes-brightgreen">
+  
 </p>
 
 **Hivefy** is a **FOSS, Spotify inpired, ad-free, and offline-ready music app** built with **Flutter** using the **unofficial JioSaavn API**.  
 Explore trending charts, albums, playlists, and multi-language content — all **open-source, privacy-respecting, and fully customizable**. 🎵
+
+<a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
+  <img alt="OSS Rising Star Badge for Hivefy" src="https://b.sf-syn.com/badge_img/3922596/oss-rising-star-black" width="170">
+</a>
 
 <h3>Download for Android 😍</h3>
 
@@ -42,6 +47,8 @@ Explore trending charts, albums, playlists, and multi-language content — all *
     <img alt="Download Hivefy" src="https://a.fsdn.com/con/app/sf-download-button" height="40" style="vertical-align: middle;" />
   </a>
 </p>
+
+
 
 > ⚠️ Make sure “Install from unknown sources” is enabled in your device settings to install Hivefy.
 
