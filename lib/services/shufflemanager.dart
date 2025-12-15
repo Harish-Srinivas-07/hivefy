@@ -169,4 +169,23 @@ class ShuffleManager {
       _currentIndex = _originalQueue.indexWhere((s) => s.id == currentSong?.id);
     }
   }
+
+  /// Force update the current index (e.g. when user manually selects a song).
+  void updateCurrentIndex(int index) {
+    _currentIndex = index;
+  }
+
+  /// Insert a song at a specific index in the current queue.
+  /// Used to keep ShuffleManager in sync with AudioHandler's queue modifications.
+  void insertSong(int index, SongDetail song) {
+    if (_isShuffling) {
+      _shuffledQueue.insert(index.clamp(0, _shuffledQueue.length), song);
+      // Also add to original queue if not present
+      if (!_originalQueue.any((s) => s.id == song.id)) {
+        _originalQueue.add(song);
+      }
+    } else {
+      _originalQueue.insert(index.clamp(0, _originalQueue.length), song);
+    }
+  }
 }

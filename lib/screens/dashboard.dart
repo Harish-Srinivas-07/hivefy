@@ -68,9 +68,13 @@ class _DashboardState extends ConsumerState<Dashboard> {
     await initLanguage(ref);
 
     final prefs = await SharedPreferences.getInstance();
-    final lang =
-        prefs.getString('app_language') ??
-        ref.read(languageNotifierProvider).value;
+    final savedLang = prefs.getString('app_language') ?? 'tamil';
+    final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
+    if (langs.isEmpty) langs.add('tamil');
+
+    // Prepare futures for all languages
+    final playlistFutures = langs.map((l) => LatestSaavnFetcher.getLatestPlaylists(l));
+    final albumFutures = langs.map((l) => LatestSaavnFetcher.getLatestAlbums(l));
 
     // primary parallel loads
     final results = await Future.wait([
@@ -78,31 +82,42 @@ class _DashboardState extends ConsumerState<Dashboard> {
       DailyFetches.getPlaylistsFromCache(),
       DailyFetches.getArtistsAsListFromCache(),
       offlineManager.init(),
-      LatestSaavnFetcher.getLatestPlaylists(lang),
-      LatestSaavnFetcher.getLatestAlbums(lang),
+      Future.wait(playlistFutures),
+      Future.wait(albumFutures),
       AppDatabase.getMonthlyListeningHours(),
     ]);
 
     playlists = results[1] as List<Playlist>;
     artists = results[2] as List<ArtistDetails>;
-    latestTamilPlayList = results[4] as List<Playlist>;
-    latestTamilAlbums = results[5] as List<Album>;
+    
+    // Flatten list of lists
+    final allPlaylists = (results[4] as List<List<Playlist>>).expand((x) => x).toList();
+    final allAlbums = (results[5] as List<List<Album>>).expand((x) => x).toList();
+
+    latestTamilPlayList = allPlaylists;
+    latestTamilAlbums = allAlbums;
 
     freqplaylists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
     albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
 
     _buildFreqRecent();
 
-    // secondary cached queries
+    // secondary cached queries for all languages
+    final loveFutures = langs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'));
+    final partyFutures = langs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'));
+
     final secondary = await Future.wait([
-      searchPlaylistcache.searchPlaylistCache(query: 'love $lang'),
-      searchPlaylistcache.searchPlaylistCache(query: 'party $lang'),
+      Future.wait(loveFutures),
+      Future.wait(partyFutures),
     ]);
 
-    lovePlaylists = secondary[0];
-    partyPlaylists = secondary[1];
+    final allLove = (secondary[0] as List<List<Playlist>>).expand((x) => x).toList();
+    final allParty = (secondary[1] as List<List<Playlist>>).expand((x) => x).toList();
 
-    // pre-shuffle once
+    lovePlaylists = allLove;
+    partyPlaylists = allParty;
+
+    // pre-shuffle once (mix content from different languages)
     final mid = (latestTamilPlayList.length / 2).ceil();
     topLatest = List.of(latestTamilPlayList.sublist(0, mid))..shuffle();
     fresh = List.of(latestTamilPlayList.sublist(mid))..shuffle();
@@ -163,11 +178,16 @@ class _DashboardState extends ConsumerState<Dashboard> {
                 padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
                 children: [
                   if (_showWaitingCard)
-                    GeneralCards(
-                      onClose: () {
-                        _showWaitingCard = false;
-                        setState(() {});
-                      },
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: GeneralCards(
+                          onClose: () {
+                            _showWaitingCard = false;
+                            setState(() {});
+                          },
+                        ),
+                      ),
                     ),
                   heroGridShimmer(),
                   const SizedBox(height: 16),
@@ -185,17 +205,23 @@ class _DashboardState extends ConsumerState<Dashboard> {
                     _sectionGrid(freqRecentPlaylists),
                     _sectionList("Top Latest", topLatest),
                     if (isAppUpdateAvailable && _showUpdateAvailable)
-                      GeneralCards(
-                        iconPath: 'assets/icons/alert.png',
-                        title: 'Update Available!',
-                        content:
-                            'Please update the app to enjoy the best experience and latest features.',
-                        downloadUrl:
-                            'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
-                        onClose: () {
-                          _showUpdateAvailable = false;
-                          setState(() {});
-                        },
+                    if (isAppUpdateAvailable && _showUpdateAvailable)
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          child: GeneralCards(
+                            iconPath: 'assets/icons/alert.png',
+                            title: 'Update Available!',
+                            content:
+                                'Please update the app to enjoy the best experience and latest features.',
+                            downloadUrl:
+                                'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
+                            onClose: () {
+                              _showUpdateAvailable = false;
+                              setState(() {});
+                            },
+                          ),
+                        ),
                       ),
                     _sectionAlbumList("Today's biggest hits", topLatestAlbum),
                     _sectionList("Fresh", fresh),
@@ -281,11 +307,12 @@ class _DashboardState extends ConsumerState<Dashboard> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: displayList.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 3.5,
+              childAspectRatio:
+                  MediaQuery.of(context).size.width > 600 ? 3 : 3.5,
             ),
             itemBuilder: (context, index) {
               final playlist = displayList[index];
@@ -449,7 +476,10 @@ class _DashboardState extends ConsumerState<Dashboard> {
           SizedBox(
             height: 220,
             child: PageView.builder(
-              controller: PageController(viewportFraction: 0.45),
+              controller: PageController(
+                viewportFraction:
+                    MediaQuery.of(context).size.width > 600 ? 0.22 : 0.45,
+              ),
               padEnds: false,
               physics: const BouncingScrollPhysics(),
               itemCount: list.length,
@@ -568,7 +598,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Widget _sectionArtistList(String title, List<ArtistDetails> artists) {
     if (artists.isEmpty) return const SizedBox.shrink();
 
-    final PageController controller = PageController(viewportFraction: 0.35);
+    final PageController controller = PageController(
+      viewportFraction: MediaQuery.of(context).size.width > 600 ? 0.18 : 0.35,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -675,7 +707,10 @@ class _DashboardState extends ConsumerState<Dashboard> {
           SizedBox(
             height: 220,
             child: PageView.builder(
-              controller: PageController(viewportFraction: 0.45),
+              controller: PageController(
+                viewportFraction:
+                    MediaQuery.of(context).size.width > 600 ? 0.22 : 0.45,
+              ),
               padEnds: false,
               physics: const BouncingScrollPhysics(),
               itemCount: albums.length,

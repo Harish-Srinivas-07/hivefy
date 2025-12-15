@@ -179,6 +179,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         _currentIndex = 0;
       }
       _queue = _queue.sublist(cutoff);
+      
+      // Sync with ShuffleManager (reloads queue to handle truncation safely)
+      _shuffleManager.loadQueue(_queue, currentIndex: _currentIndex);
+      
       await LastQueueStorage.save(_queue, currentIndex: _currentIndex);
     }
   }
@@ -333,6 +337,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
     _queue.insert(insertIndex, song);
 
+    // Sync with ShuffleManager
+    _shuffleManager.insertSong(insertIndex, song);
+
     final updated = List<MediaItem>.from(queue.value);
     updated.insert(insertIndex, songToMediaItem(song));
     queue.add(updated);
@@ -343,6 +350,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (_queue.any((s) => s.id == song.id)) return;
 
     _queue.add(song);
+    
+    // Sync with ShuffleManager
+    _shuffleManager.addSong(song);
+    
     _enforceQueueLimit();
 
     final updated = List<MediaItem>.from(queue.value)
@@ -366,6 +377,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> skipToQueueItem(int index) async {
     if (index >= 0 && index < _queue.length) {
       _currentIndex = index;
+      _shuffleManager.updateCurrentIndex(index);
       await _playCurrent();
     }
   }
@@ -416,6 +428,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final idx = _queue.indexWhere((s) => s.id == mediaItem.id);
     if (idx >= 0 && idx != _currentIndex) {
       _currentIndex = idx;
+      _shuffleManager.updateCurrentIndex(idx);
       await _playCurrent();
     } else {
       await _player.play();
@@ -484,6 +497,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     if (existingIndex >= 0) {
       _currentIndex = existingIndex;
+      _shuffleManager.updateCurrentIndex(existingIndex);
     } else {
       final insertIndex =
           insertNext
@@ -492,6 +506,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
       _queue.insert(insertIndex, song);
       _currentIndex = insertIndex;
+
+      // Sync with ShuffleManager
+      _shuffleManager.insertSong(insertIndex, song);
+      _shuffleManager.updateCurrentIndex(insertIndex);
 
       queue.add(_queue.map(songToMediaItem).toList());
       _queueSourceName = song.album;

@@ -9,8 +9,8 @@ import '../../shared/constants.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
 
-final languageNotifierProvider = Provider<ValueNotifier<String>>((ref) {
-  final notifier = ValueNotifier<String>('tamil'); // default language
+final languageNotifierProvider = Provider<ValueNotifier<List<String>>>((ref) {
+  final notifier = ValueNotifier<List<String>>(['tamil']); // default language
   ref.onDispose(() => notifier.dispose());
   return notifier;
 });
@@ -18,7 +18,8 @@ final languageNotifierProvider = Provider<ValueNotifier<String>>((ref) {
 Future<void> initLanguage(WidgetRef ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedLang = prefs.getString('app_language') ?? 'tamil';
-  ref.read(languageNotifierProvider).value = savedLang;
+  final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
+  ref.read(languageNotifierProvider).value = langs.isNotEmpty ? langs : ['tamil'];
 }
 
 final List<String> availableLanguages = [
@@ -49,26 +50,27 @@ class LanguageSetPage extends ConsumerStatefulWidget {
 }
 
 class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
-  String? _selectedLang;
+  List<String> _selectedLangs = [];
   bool _loading = false;
   String _loadingMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _selectedLang = ref.read(languageNotifierProvider).value;
+    _selectedLangs = List.from(ref.read(languageNotifierProvider).value);
   }
 
-  Future<void> _applyLanguage(String lang) async {
-    if (!mounted) return;
+  Future<void> _applyLanguages() async {
+    if (!mounted || _selectedLangs.isEmpty) return;
 
     _loading = true;
     _loadingMessage = "Clearing existing data...";
     if (mounted) setState(() {});
 
-    // Persist language
+    // Persist languages as comma-separated string
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_language', lang);
+    final langString = _selectedLangs.join(',');
+    await prefs.setString('app_language', langString);
 
     // Clear existing lists
     latestTamilPlayList.clear();
@@ -79,37 +81,54 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
     setState(() => _loadingMessage = "Fetching latest playlist & albums...");
 
     // Fetch all language-specific data in parallel
-    final primary = await Future.wait([
-      LatestSaavnFetcher.getLatestPlaylists(lang),
-      LatestSaavnFetcher.getLatestAlbums(lang),
-    ]);
+    final playlistFutures = _selectedLangs.map((l) => LatestSaavnFetcher.getLatestPlaylists(l));
+    final albumFutures = _selectedLangs.map((l) => LatestSaavnFetcher.getLatestAlbums(l));
 
-    latestTamilPlayList = primary[0] as List<Playlist>;
-    latestTamilAlbums = primary[1] as List<Album>;
+    final playlistResults = await Future.wait(playlistFutures);
+    final albumResults = await Future.wait(albumFutures);
+
+    // Flatten results
+    latestTamilPlayList = playlistResults.expand((x) => x).toList();
+    latestTamilAlbums = albumResults.expand((x) => x).toList();
 
     setState(() => _loadingMessage = "Fetching your preferences...");
 
-    final secondary = await Future.wait([
-      searchPlaylistcache.searchPlaylistCache(query: 'love $lang'),
-      searchPlaylistcache.searchPlaylistCache(query: 'party $lang'),
-    ]);
+    final loveFutures = _selectedLangs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'));
+    final partyFutures = _selectedLangs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'));
 
-    lovePlaylists = secondary[0];
-    partyPlaylists = secondary[1];
+    final loveResults = await Future.wait(loveFutures);
+    final partyResults = await Future.wait(partyFutures);
+
+    lovePlaylists = loveResults.expand((x) => x).toList();
+    partyPlaylists = partyResults.expand((x) => x).toList();
 
     _loading = false;
     _loadingMessage = '';
     if (mounted) setState(() {});
-    info("Language set to ${capitalize(lang)}", Severity.success);
+    info("Languages updated", Severity.success);
 
     // Update provider
-    ref.read(languageNotifierProvider).value = lang;
+    ref.read(languageNotifierProvider).value = List.from(_selectedLangs);
+  }
+
+  void _toggleLanguage(String lang) {
+    if (_loading) return;
+    setState(() {
+      if (_selectedLangs.contains(lang)) {
+        if (_selectedLangs.length > 1) {
+          _selectedLangs.remove(lang);
+        } else {
+          info("At least one language must be selected", Severity.warning);
+        }
+      } else {
+        _selectedLangs.add(lang);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentLang = ref.watch(languageNotifierProvider).value;
-
+    // Watch not strictly needed if we use local state, but good for initial
     return Scaffold(
       backgroundColor: spotifyBgColor,
       body: Stack(
@@ -183,7 +202,7 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
                       Text(
-                        "Select your preferred language",
+                        "Select your preferred languages",
                         style: TextStyle(
                           color: Colors.white70,
                           fontWeight: FontWeight.bold,
@@ -192,7 +211,7 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        "This language will be used for app content after confirmation.",
+                        "You can select multiple languages for your content.",
                         style: TextStyle(color: Colors.white38, fontSize: 13),
                       ),
                     ],
@@ -212,7 +231,7 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                     runSpacing: 3,
                     children:
                         availableLanguages.map((lang) {
-                          final isSelected = _selectedLang == lang;
+                          final isSelected = _selectedLangs.contains(lang);
                           return ChoiceChip(
                             label: Text(
                               capitalize(lang),
@@ -242,11 +261,7 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                             ),
                             showCheckmark: false,
                             visualDensity: const VisualDensity(vertical: -2),
-                            onSelected: (_) {
-                              if (!_loading) {
-                                setState(() => _selectedLang = lang);
-                              }
-                            },
+                            onSelected: (_) => _toggleLanguage(lang),
                           );
                         }).toList(),
                   ),
@@ -254,39 +269,35 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
               ),
 
               // --- Set Language Button ---
-              if (_selectedLang != null && _selectedLang != currentLang)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 20,
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: spotifyGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: spotifyGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        onPressed:
-                            _loading
-                                ? null
-                                : () => _applyLanguage(_selectedLang!),
-                        child: const Text(
-                          "Set Language",
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
+                      ),
+                      onPressed: _loading ? null : _applyLanguages,
+                      child: const Text(
+                        "Update Languages",
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
                         ),
                       ),
                     ),
                   ),
                 ),
+              ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
