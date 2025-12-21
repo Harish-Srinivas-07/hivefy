@@ -52,101 +52,122 @@ class _DashboardState extends ConsumerState<Dashboard> {
   @override
   void initState() {
     super.initState();
+    _initInternetChecker();
     _init();
-    ref.read(languageNotifierProvider).addListener(() {
-      if (!mounted) return;
-      _init();
-    });
   }
 
+  bool _isInitRunning = false;
+
   Future<void> _init() async {
+    if (_isInitRunning) return;
+    _isInitRunning = true;
     if (!mounted) return;
     setState(() => loading = true);
 
-    await _initInternetChecker();
-    await saavn.initBaseUrl();
-    await initLanguage(ref);
+    try {
+      await saavn.initBaseUrl();
+      await initLanguage(ref);
+      final prefs = await SharedPreferences.getInstance();
 
-    final prefs = await SharedPreferences.getInstance();
-    final savedLang = prefs.getString('app_language') ?? 'tamil';
-    final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
-    if (langs.isEmpty) langs.add('tamil');
+      final savedLang = prefs.getString('app_language') ?? 'tamil';
+      debugPrint('[_init] Saved language string: $savedLang');
 
-    // Prepare futures for all languages
-    final playlistFutures = langs.map((l) => LatestSaavnFetcher.getLatestPlaylists(l));
-    final albumFutures = langs.map((l) => LatestSaavnFetcher.getLatestAlbums(l));
+      final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
+      if (langs.isEmpty) langs.add('tamil');
+      final playlistFutures = langs.map(
+        (l) => LatestSaavnFetcher.getLatestPlaylists(l),
+      );
+      final albumFutures = langs.map(
+        (l) => LatestSaavnFetcher.getLatestAlbums(l),
+      );
+      final results = await Future.wait([
+        DailyFetches.refreshAllDaily(),
+        DailyFetches.getPlaylistsFromCache(),
+        DailyFetches.getArtistsAsListFromCache(),
+        offlineManager.init(),
+        Future.wait(playlistFutures),
+        Future.wait(albumFutures),
+        AppDatabase.getMonthlyListeningHours(),
+      ]);
 
-    // primary parallel loads
-    final results = await Future.wait([
-      DailyFetches.refreshAllDaily(),
-      DailyFetches.getPlaylistsFromCache(),
-      DailyFetches.getArtistsAsListFromCache(),
-      offlineManager.init(),
-      Future.wait(playlistFutures),
-      Future.wait(albumFutures),
-      AppDatabase.getMonthlyListeningHours(),
-    ]);
+      playlists = results[1] as List<Playlist>;
+      artists = results[2] as List<ArtistDetails>;
 
-    playlists = results[1] as List<Playlist>;
-    artists = results[2] as List<ArtistDetails>;
-    
-    // Flatten list of lists
-    final allPlaylists = (results[4] as List<List<Playlist>>).expand((x) => x).toList();
-    final allAlbums = (results[5] as List<List<Album>>).expand((x) => x).toList();
+      final allPlaylists =
+          (results[4] as List<List<Playlist>>).expand((x) => x).toList();
+      final allAlbums =
+          (results[5] as List<List<Album>>).expand((x) => x).toList();
 
-    latestTamilPlayList = allPlaylists;
-    latestTamilAlbums = allAlbums;
+      debugPrint('[_init] Latest playlists fetched: ${allPlaylists.length}');
+      debugPrint('[_init] Latest albums fetched: ${allAlbums.length}');
 
-    freqplaylists = (ref.read(frequentPlaylistsProvider)).take(5).toList();
-    albums = (ref.read(frequentAlbumsProvider)).take(5).toList();
+      latestTamilPlayList = allPlaylists;
+      latestTamilAlbums = allAlbums;
 
-    _buildFreqRecent();
+      freqplaylists = (ref.read(frequentPlaylistsProvider)).take(10).toList();
+      albums = (ref.read(frequentAlbumsProvider)).take(10).toList();
 
-    // secondary cached queries for all languages
-    final loveFutures = langs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'));
-    final partyFutures = langs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'));
+      _buildFreqRecent();
 
-    final secondary = await Future.wait([
-      Future.wait(loveFutures),
-      Future.wait(partyFutures),
-    ]);
+      final loveFutures = langs.map(
+        (l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'),
+      );
+      final partyFutures = langs.map(
+        (l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'),
+      );
 
-    final allLove = (secondary[0] as List<List<Playlist>>).expand((x) => x).toList();
-    final allParty = (secondary[1] as List<List<Playlist>>).expand((x) => x).toList();
+      final secondary = await Future.wait([
+        Future.wait(loveFutures),
+        Future.wait(partyFutures),
+      ]);
 
-    lovePlaylists = allLove;
-    partyPlaylists = allParty;
+      final allLove = (secondary[0]).expand((x) => x).toList();
+      final allParty = (secondary[1]).expand((x) => x).toList();
 
-    // pre-shuffle once (mix content from different languages)
-    final mid = (latestTamilPlayList.length / 2).ceil();
-    topLatest = List.of(latestTamilPlayList.sublist(0, mid))..shuffle();
-    fresh = List.of(latestTamilPlayList.sublist(mid))..shuffle();
+      debugPrint(
+        '[_init] Love playlists: ${allLove.length}, Party playlists: ${allParty.length}',
+      );
 
-    final amid = (latestTamilAlbums.length / 2).ceil();
-    topLatestAlbum = List.of(latestTamilAlbums.sublist(0, amid))..shuffle();
-    freshAlbum = List.of(latestTamilAlbums.sublist(amid))..shuffle();
+      lovePlaylists = allLove;
+      partyPlaylists = allParty;
 
-    partyShuffled = List.of(partyPlaylists)..shuffle();
-    loveShuffled = List.of(lovePlaylists)..shuffle();
+      final mid = (latestTamilPlayList.length / 2).ceil();
+      topLatest = List.of(latestTamilPlayList.sublist(0, mid))..shuffle();
+      fresh = List.of(latestTamilPlayList.sublist(mid))..shuffle();
 
-    loading = false;
-    if (mounted) setState(() {});
-    await Future.delayed(const Duration(seconds: 3));
-    await requestNotificationPermission();
-    await checkForUpdate();
-    if (mounted) setState(() {});
+      final amid = (latestTamilAlbums.length / 2).ceil();
+      topLatestAlbum = List.of(latestTamilAlbums.sublist(0, amid))..shuffle();
+      freshAlbum = List.of(latestTamilAlbums.sublist(amid))..shuffle();
+
+      partyShuffled = List.of(partyPlaylists)..shuffle();
+      loveShuffled = List.of(lovePlaylists)..shuffle();
+
+      loading = false;
+      if (mounted) setState(() {});
+      await Future.delayed(const Duration(seconds: 3));
+      await requestNotificationPermission();
+
+      await checkForUpdate();
+
+      if (mounted) setState(() {});
+    } catch (e, st) {
+      debugPrint('[_init] Error occurred: $e');
+      debugPrintStack(stackTrace: st);
+    } finally {
+      _isInitRunning = false;
+    }
   }
 
   void _buildFreqRecent() {
     freqRecentPlaylists = [...freqplaylists.take(3)];
     final shuffled = List.of(latestTamilPlayList)..shuffle();
-    freqRecentPlaylists.addAll(shuffled.take(7 - freqRecentPlaylists.length));
+    freqRecentPlaylists.addAll(shuffled.take(8 - freqRecentPlaylists.length));
 
-    if (freqRecentPlaylists.length < 7) {
+    if (freqRecentPlaylists.length < 8) {
       final all = List.of(playlists)..shuffle();
-      freqRecentPlaylists.addAll(all.take(7 - freqRecentPlaylists.length));
+      freqRecentPlaylists.addAll(all.take(8 - freqRecentPlaylists.length));
     }
-    freqRecentPlaylists = freqRecentPlaylists.take(7).toList();
+    freqRecentPlaylists = freqRecentPlaylists.take(8).toList();
   }
 
   Future<void> _initInternetChecker() async {
@@ -205,24 +226,24 @@ class _DashboardState extends ConsumerState<Dashboard> {
                     _sectionGrid(freqRecentPlaylists),
                     _sectionList("Top Latest", topLatest),
                     if (isAppUpdateAvailable && _showUpdateAvailable)
-                    if (isAppUpdateAvailable && _showUpdateAvailable)
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 600),
-                          child: GeneralCards(
-                            iconPath: 'assets/icons/alert.png',
-                            title: 'Update Available!',
-                            content:
-                                'Please update the app to enjoy the best experience and latest features.',
-                            downloadUrl:
-                                'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
-                            onClose: () {
-                              _showUpdateAvailable = false;
-                              setState(() {});
-                            },
+                      if (isAppUpdateAvailable && _showUpdateAvailable)
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: GeneralCards(
+                              iconPath: 'assets/icons/alert.png',
+                              title: 'Update Available!',
+                              content:
+                                  'Please update the app to enjoy the best experience and latest features.',
+                              downloadUrl:
+                                  'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
+                              onClose: () {
+                                _showUpdateAvailable = false;
+                                setState(() {});
+                              },
+                            ),
                           ),
                         ),
-                      ),
                     _sectionAlbumList("Today's biggest hits", topLatestAlbum),
                     _sectionList("Fresh", fresh),
                     _sectionList("Party Mode", partyShuffled),
@@ -296,7 +317,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
     ];
 
     // Only take first 10 for the grid
-    final displayList = combined.take(10).toList();
+    final displayList = combined.take(12).toList();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),

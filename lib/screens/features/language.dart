@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hivefy/components/snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/database.dart';
-import '../../models/datamodel.dart';
 import '../../services/latestsaavnfetcher.dart';
 import '../../shared/constants.dart';
 import '../../utils/format.dart';
@@ -19,7 +18,8 @@ Future<void> initLanguage(WidgetRef ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedLang = prefs.getString('app_language') ?? 'tamil';
   final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
-  ref.read(languageNotifierProvider).value = langs.isNotEmpty ? langs : ['tamil'];
+  ref.read(languageNotifierProvider).value =
+      langs.isNotEmpty ? langs : ['tamil'];
 }
 
 final List<String> availableLanguages = [
@@ -81,8 +81,12 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
     setState(() => _loadingMessage = "Fetching latest playlist & albums...");
 
     // Fetch all language-specific data in parallel
-    final playlistFutures = _selectedLangs.map((l) => LatestSaavnFetcher.getLatestPlaylists(l));
-    final albumFutures = _selectedLangs.map((l) => LatestSaavnFetcher.getLatestAlbums(l));
+    final playlistFutures = _selectedLangs.map(
+      (l) => LatestSaavnFetcher.getLatestPlaylists(l),
+    );
+    final albumFutures = _selectedLangs.map(
+      (l) => LatestSaavnFetcher.getLatestAlbums(l),
+    );
 
     final playlistResults = await Future.wait(playlistFutures);
     final albumResults = await Future.wait(albumFutures);
@@ -93,8 +97,12 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
 
     setState(() => _loadingMessage = "Fetching your preferences...");
 
-    final loveFutures = _selectedLangs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'));
-    final partyFutures = _selectedLangs.map((l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'));
+    final loveFutures = _selectedLangs.map(
+      (l) => searchPlaylistcache.searchPlaylistCache(query: 'love $l'),
+    );
+    final partyFutures = _selectedLangs.map(
+      (l) => searchPlaylistcache.searchPlaylistCache(query: 'party $l'),
+    );
 
     final loveResults = await Future.wait(loveFutures);
     final partyResults = await Future.wait(partyFutures);

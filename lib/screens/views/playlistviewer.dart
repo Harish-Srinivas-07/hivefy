@@ -119,14 +119,16 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     } finally {
       if (mounted) setState(() => _loading = false);
 
-      final lang = ref.read(languageNotifierProvider).value;
-      similarPlaylist =
-          (await LatestSaavnFetcher.getLatestPlaylists(
-              lang,
-            )).where((p) => p.id != widget.playlistId).toList()
-            ..shuffle();
+      final langs = ref.read(languageNotifierProvider).value; // List<String>
 
-      similarPlaylist = similarPlaylist.take(5).toList();
+      final playlistLists = await Future.wait(
+        langs.map((lang) => LatestSaavnFetcher.getLatestPlaylists(lang)),
+      );
+      final allPlaylists = playlistLists.expand((e) => e).toList();
+      similarPlaylist =
+          allPlaylists.where((p) => p.id != widget.playlistId).toList()
+            ..shuffle();
+      similarPlaylist = similarPlaylist.take(15).toList();
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:marquee/marquee.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
@@ -1102,10 +1103,12 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                 ),
                                 Consumer(
                                   builder: (context, ref, _) {
-                                    final audioHandler =
-                                        ref
-                                            .watch(audioHandlerProvider)
-                                            .valueOrNull;
+                                    final audioHandler = ref
+                                        .watch(audioHandlerProvider)
+                                        .maybeWhen(
+                                          data: (handler) => handler,
+                                          orElse: () => null,
+                                        );
                                     final sourceName =
                                         audioHandler?.queueSourceName;
 

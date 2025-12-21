@@ -81,13 +81,15 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
     if (mounted) setState(() {});
 
     if (!mounted) return;
-    final lang = ref.read(languageNotifierProvider).value;
+    final langs = ref.read(languageNotifierProvider).value;
+
+    final albumLists = await Future.wait(
+      langs.map((lang) => LatestSaavnFetcher.getLatestAlbums(lang)),
+    );
+    final allAlbums = albumLists.expand((e) => e).toList();
     _similarAlbum =
-        (await LatestSaavnFetcher.getLatestAlbums(
-            lang,
-          )).where((a) => a.id != widget.albumId).toList()
-          ..shuffle();
-    _similarAlbum = _similarAlbum.take(5).toList();
+        allAlbums.where((a) => a.id != widget.albumId).toList()..shuffle();
+    _similarAlbum = _similarAlbum.take(15).toList();
   }
 
   Future<void> _updateBgColor() async {
