@@ -49,7 +49,6 @@ Explore trending charts, albums, playlists, and multi-language content — all *
 </p>
 
 
-
 > ⚠️ Make sure “Install from unknown sources” is enabled in your device settings to install Hivefy.
 
 ## ✨ Features
@@ -106,6 +105,28 @@ Explore trending charts, albums, playlists, and multi-language content — all *
 - [ ] 🤝 Playlist sharing & collaboration
 
 ---
+## 🌐 Hivefy Web (New 🚀)
+
+Hivefy is now available on the **web**!
+
+👉 **Live Demo:** https://hivefyweb.vercel.app
+👉 **Open Source Repo:** https://github.com/Harish-Srinivas-07/hivefyweb
+
+Built with **Next.js**, Hivefy Web brings a fast, responsive, and install-free music experience directly to your browser.
+
+### ✨ Highlights
+
+* 🎨 Spotify-inspired UI
+* ⚡ Lightweight & responsive
+* 🔍 Global search
+* 💾 Offline-first caching
+* 🎧 PiP & Media Session support
+* 🌍 Multi-language support
+
+> No install needed — open and start listening.
+
+---
+
 
 ## 🚀 Getting Started
 
