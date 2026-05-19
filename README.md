@@ -28,9 +28,15 @@
 **Hivefy** is a **FOSS, Spotify-inspired, ad-free, and offline-ready music app** built with **Flutter** using the **unofficial JioSaavn API**.  
 Explore trending charts, albums, playlists, and multi-language content — all **open-source, privacy-respecting, and fully customizable**. 🎵
 
-<a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
-  <img alt="OSS Rising Star Badge for Hivefy" src="https://b.sf-syn.com/badge_img/3922596/oss-rising-star-black" width="170">
-</a>
+<p>
+  <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
+    <img alt="OSS Rising Star Badge for Hivefy" src="https://b.sf-syn.com/badge_img/3922596/oss-rising-star-black" width="170" style="vertical-align: middle;">
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://sourceforge.net/projects/hivefy/" target="_blank">
+    <img alt="SourceForge Favorite" src="https://b.sf-syn.com/badge_img/3922596/oss-sf-favorite-black" width="170" style="vertical-align: middle;" />
+  </a>
+</p>
 
 <h3>Download for Android 😍</h3>
 
