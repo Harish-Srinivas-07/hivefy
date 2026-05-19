@@ -14,6 +14,9 @@ import 'dashboard.dart';
 import 'features/profile.dart';
 import 'library.dart';
 import 'search.dart';
+import 'views/albumviewer.dart';
+import 'views/artistviewer.dart';
+import 'views/playlistviewer.dart';
 
 class Home extends ConsumerStatefulWidget {
   const Home({super.key});
@@ -103,6 +106,41 @@ class HomeState extends ConsumerState<Home> with AutomaticKeepAliveClientMixin {
     final tabIndex = ref.watch(tabIndexProvider);
     final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
 
+    // Listen to global playerNavProvider to switch tabs and push details views
+    ref.listen<PlayerNavCommand?>(playerNavProvider, (previous, command) {
+      if (command == null) return;
+
+      // Switch tab immediately
+      ref.read(tabIndexProvider.notifier).state = command.tabIndex;
+
+      // Navigate after build frame commits
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        final Widget page = switch (command.type) {
+          PlayerNavType.album => AlbumViewer(albumId: command.id),
+          PlayerNavType.artist => ArtistViewer(artistId: command.id),
+          PlayerNavType.playlist => PlaylistViewer(playlistId: command.id),
+        };
+
+        final navigator = _navigatorKeys[command.tabIndex].currentState;
+
+        if (navigator == null) {
+          debugPrint('[PlayerNav] navigator is NULL → push skipped');
+        } else {
+          navigator.push(
+            PageTransition(
+              type: PageTransitionType.rightToLeft,
+              duration: const Duration(milliseconds: 200),
+              child: page,
+            ),
+          );
+        }
+
+        ref.read(playerNavProvider.notifier).clear();
+      });
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -149,9 +187,16 @@ class HomeState extends ConsumerState<Home> with AutomaticKeepAliveClientMixin {
       selectedIndex: tabIndex,
       backgroundColor: const Color.fromARGB(255, 21, 21, 21),
       onItemSelected: (index) async {
-        ref.read(tabIndexProvider.notifier).state = index;
-        final prefs = await SharedPreferences.getInstance();
-        prefs.setInt('last_index', index);
+        if (index == tabIndex) {
+          // If tapping the currently active tab, pop to root
+          _navigatorKeys[index].currentState?.popUntil(
+            (route) => route.isFirst,
+          );
+        } else {
+          ref.read(tabIndexProvider.notifier).state = index;
+          final prefs = await SharedPreferences.getInstance();
+          prefs.setInt('last_index', index);
+        }
       },
       items: [
         FlashyTabBarItem(

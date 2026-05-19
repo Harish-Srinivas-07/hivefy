@@ -105,8 +105,10 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
 
       for (int start = 0; start < totalSongs; start += batchSize) {
         final end = (start + batchSize).clamp(0, totalSongs);
-        final batchIds =
-            playlist.songs.sublist(start, end).map((s) => s.id).toList();
+        final batchIds = playlist.songs
+            .sublist(start, end)
+            .map((s) => s.id)
+            .toList();
 
         final batchDetails = await SaavnAPI().getSongDetails(ids: batchIds);
         _playlistSongDetails.addAll(batchDetails);
@@ -135,8 +137,9 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
   Widget _buildHeader() {
     if (_playlist == null) return const SizedBox.shrink();
 
-    final imageUrl =
-        _playlist!.images.isNotEmpty ? _playlist!.images.last.url : '';
+    final imageUrl = _playlist!.images.isNotEmpty
+        ? _playlist!.images.last.url
+        : '';
 
     return Container(
       decoration: BoxDecoration(
@@ -154,28 +157,27 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
           right: 16,
         ),
         child: Center(
-          child:
-              imageUrl.isNotEmpty
-                  ? CacheNetWorkImg(
-                    url: imageUrl,
-                    width: 300,
-                    height: 300,
-                    fit: BoxFit.cover,
+          child: imageUrl.isNotEmpty
+              ? CacheNetWorkImg(
+                  url: imageUrl,
+                  width: 300,
+                  height: 300,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(20),
+                )
+              : Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
                     borderRadius: BorderRadius.circular(20),
-                  )
-                  : Container(
-                    width: 300,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.playlist_play,
-                      size: 100,
-                      color: Colors.white,
-                    ),
                   ),
+                  child: const Icon(
+                    Icons.playlist_play,
+                    size: 100,
+                    color: Colors.white,
+                  ),
+                ),
         ),
       ),
     );
@@ -193,18 +195,6 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Padding(
-        //   padding: const EdgeInsets.symmetric(horizontal: 16),
-        //   child: Text(
-        //     "Songs",
-        //     style: TextStyle(
-        //       color: Colors.white,
-        //       fontSize: 16,
-        //       fontWeight: FontWeight.w600,
-        //     ),
-        //   ),
-        // ),
-        // const SizedBox(height: 8),
         ..._playlistSongDetails.map(
           (song) => SongRow(
             song: song,
@@ -295,10 +285,9 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                   // Icon logic
                   final bool isCurrentInList =
                       isSameSource && currentSong != null;
-                  final icon =
-                      isCurrentInList
-                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                          : Icons.play_arrow;
+                  final icon = isCurrentInList
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : Icons.play_arrow;
 
                   return GestureDetector(
                     onTap: () async {
@@ -396,9 +385,8 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
                 height: 32,
                 color: Colors.white70,
               );
-              onTap =
-                  () =>
-                      offlineManager.downloadSongsSetWithStatus(setId, songIds);
+              onTap = () =>
+                  offlineManager.downloadSongsSetWithStatus(setId, songIds);
             }
 
             return GestureDetector(
@@ -469,12 +457,12 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
   }
 
   Widget _playlistCard(Playlist playlist) {
-    final imageUrl =
-        playlist.images.isNotEmpty ? playlist.images.first.url : '';
-    final subtitle =
-        playlist.artists.isNotEmpty
-            ? playlist.artists.first.title
-            : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
+    final imageUrl = playlist.images.isNotEmpty
+        ? playlist.images.first.url
+        : '';
+    final subtitle = playlist.artists.isNotEmpty
+        ? playlist.artists.first.title
+        : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
     final description = playlist.description;
 
     return GestureDetector(
@@ -495,17 +483,16 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
             aspectRatio: 1,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child:
-                  imageUrl.isNotEmpty
-                      ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
-                      : Container(
-                        color: Colors.grey.shade800,
-                        child: const Icon(
-                          Icons.album,
-                          color: Colors.white,
-                          size: 32,
-                        ),
+              child: imageUrl.isNotEmpty
+                  ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
+                  : Container(
+                      color: Colors.grey.shade800,
+                      child: const Icon(
+                        Icons.album,
+                        color: Colors.white,
+                        size: 32,
                       ),
+                    ),
             ),
           ),
           const SizedBox(height: 6),
@@ -554,157 +541,149 @@ class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
       backgroundColor: playlistCoverColor,
       body: Container(
         decoration: BoxDecoration(color: spotifyBgColor),
-        child:
-            _loading
-                ? Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: buildAlbumShimmer(),
-                )
-                : _playlist == null
-                ? const Center(
-                  child: Text(
-                    "Failed to load playlist",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                )
-                : CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      backgroundColor: playlistCoverColor,
-                      expandedHeight: 400,
-                      elevation: 0,
-                      leading: const BackButton(color: Colors.white),
-                      flexibleSpace: FlexibleSpaceBar(
-                        collapseMode: CollapseMode.pin,
-                        centerTitle: false,
-                        titlePadding: EdgeInsets.only(
-                          left: _isTitleCollapsed ? 72 : 16,
-                          bottom: 16,
-                          right: 16,
-                        ),
-                        title: AnimatedOpacity(
-                          opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Text(
-                            _playlist?.title ?? "",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        background: _buildHeader(),
+        child: _loading
+            ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: buildAlbumShimmer(),
+              )
+            : _playlist == null
+            ? const Center(
+                child: Text(
+                  "Failed to load playlist",
+                  style: TextStyle(color: Colors.white70),
+                ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: playlistCoverColor,
+                    expandedHeight: 400,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      centerTitle: false,
+                      titlePadding: EdgeInsets.only(
+                        left: _isTitleCollapsed ? 72 : 16,
+                        bottom: 16,
+                        right: 16,
                       ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                      title: AnimatedOpacity(
+                        opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          _playlist?.title ?? "",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!_isTitleCollapsed)
-                              Text(
-                                _playlist!.title,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
+                      ),
+                      background: _buildHeader(),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!_isTitleCollapsed)
+                            Text(
+                              _playlist!.title,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
                               ),
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (_playlist!.description.isNotEmpty &&
-                                          !_playlist!.description
-                                              .toLowerCase()
-                                              .contains('on cover'))
-                                        ReadMoreText(
-                                          _playlist!.description,
-                                          trimLines: 3,
-                                          trimMode: TrimMode.Line,
-                                          colorClickableText: spotifyGreen,
-                                          trimCollapsedText: " ...more",
-                                          trimExpandedText: " Show less",
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_playlist!.description.isNotEmpty &&
+                                        !_playlist!.description
+                                            .toLowerCase()
+                                            .contains('on cover'))
+                                      ReadMoreText(
+                                        _playlist!.description,
+                                        trimLines: 3,
+                                        trimMode: TrimMode.Line,
+                                        colorClickableText: spotifyGreen,
+                                        trimCollapsedText: " ...more",
+                                        trimExpandedText: " Show less",
+                                        style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    if (_totalPlaylistDuration > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 2.0,
+                                        ),
+                                        child: Text(
+                                          '${_playlistSongDetails.length} songs • ${formatDuration(_totalPlaylistDuration)}',
                                           style: TextStyle(
                                             color: Colors.white54,
-                                            fontSize: 14,
+                                            fontSize: 12,
                                           ),
                                         ),
-                                      const SizedBox(height: 4),
-                                      if (_totalPlaylistDuration > 0)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 2.0,
-                                          ),
-                                          child: Text(
-                                            '${_playlistSongDetails.length} songs • ${formatDuration(_totalPlaylistDuration)}',
-                                            style: TextStyle(
-                                              color: Colors.white54,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                      ),
+                                  ],
                                 ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if (_playlist != null) ...[
+                                _downloadSongSet(
+                                  _playlist!.id,
+                                  _playlist!.songs.map((a) => a.id).toSet(),
+                                ),
+                              ] else ...[
+                                const Spacer(),
                               ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                if (_playlist != null) ...[
-                                  _downloadSongSet(
-                                    _playlist!.id,
-                                    _playlist!.songs.map((a) => a.id).toSet(),
-                                  ),
-                                ] else ...[
-                                  const Spacer(),
-                                ],
-                                _buildShufflePlayButtons(),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 10),
-                          _buildSongList(),
+                              _buildShufflePlayButtons(),
+                            ],
+                          ),
                         ],
                       ),
                     ),
+                  ),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 35)),
-
-                    SliverToBoxAdapter(
-                      child: _sectionList(
-                        'You might also like',
-                        similarPlaylist,
-                      ),
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [const SizedBox(height: 10), _buildSongList()],
                     ),
+                  ),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
-                ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 35)),
+
+                  SliverToBoxAdapter(
+                    child: _sectionList('You might also like', similarPlaylist),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
       ),
     );
   }

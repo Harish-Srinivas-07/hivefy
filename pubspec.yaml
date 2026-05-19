@@ -1,54 +1,68 @@
 name: hivefy
-description: "A spotiify like Flutter App"
+description: "A Spotify like Flutter App"
 publish_to: "none"
 
-version: 1.0.11+2
+version: 1.0.12+3
 
 environment:
-  sdk: ">3.7.2 < 4.0.0"
+  sdk: ">3.10.0 < 4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  intl:
-  path:
-  shared_preferences:
-  package_info_plus:
-  dynamic_color:
-  flashy_tab_bar2:
+
+  # Core
   flutter_riverpod:
+  rxdart:
+
+  # Audio
+  just_audio:
+  just_audio_background:
+  audio_service:
+  audio_session:
+
+  # Storage
+  hive:
+  hive_flutter:
+  shared_preferences:
+  path:
+  path_provider:
+
+  # Network
+  http:
+  dio:
+  html:
+  html_unescape:
+
+  # UI
+  dynamic_color:
+  palette_generator_master:
+  flashy_tab_bar2:
   iconly:
   cached_network_image:
   shimmer:
-  app_links:
-  http:
-  dart_des:
-  html:
-  html_unescape:
-  just_audio:
-  audio_session:
-  rxdart:
   figma_squircle:
-  hive:
-  hive_flutter:
   marquee:
   page_transition:
   readmore:
   flutter_swipe_action_cell:
   toastification:
-  audio_service:
-  just_audio_background:
   drag_and_drop_lists:
+
+  # System
+  app_links:
   share_plus:
-  dio:
-  path_provider:
   flutter_local_notifications:
   permission_handler:
   internet_connection_checker_plus:
-  palette_generator_master:
-  disk_space_plus:
   url_launcher:
   image_picker:
+  disk_space_plus:
+  package_info_plus:
+
+  # Misc
+  intl:
+  dart_des:
 
 dev_dependencies:
   flutter_test:

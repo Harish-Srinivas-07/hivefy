@@ -76,23 +76,20 @@ class Playlist extends SongMediaItem {
       id: json['id']?.toString() ?? '',
       title: unescape.convert(json['title'] ?? json['name'] ?? ''),
       type: unescape.convert(json['type']?.toString() ?? ''),
-      images:
-          (json['image'] as List<dynamic>? ?? [])
-              .map((e) => SourceUrl.fromJson(e))
-              .toList(),
+      images: (json['image'] as List<dynamic>? ?? [])
+          .map((e) => SourceUrl.fromJson(e))
+          .toList(),
       url: json['url'] ?? '',
       songCount: json['songCount'],
       language: json['language'] ?? '',
       explicitContent: json['explicitContent'] ?? false,
       description: unescape.convert(json['description'] ?? ''),
-      songs:
-          (json['songs'] as List<dynamic>? ?? [])
-              .map((e) => SongDetail.fromJson(e))
-              .toList(),
-      artists:
-          (json['artists'] as List<dynamic>? ?? [])
-              .map((e) => Artist.fromJson(e))
-              .toList(),
+      songs: (json['songs'] as List<dynamic>? ?? [])
+          .map((e) => SongDetail.fromJson(e))
+          .toList(),
+      artists: (json['artists'] as List<dynamic>? ?? [])
+          .map((e) => Artist.fromJson(e))
+          .toList(),
     );
   }
 
@@ -137,10 +134,9 @@ class Song extends SongMediaItem {
     title: unescape.convert(json['title'] ?? json['name'] ?? ''),
     type: unescape.convert(json['type']?.toString() ?? ''),
     url: json['url'] ?? '',
-    images:
-        (json['image'] as List<dynamic>? ?? [])
-            .map((e) => SourceUrl.fromJson(e))
-            .toList(),
+    images: (json['image'] as List<dynamic>? ?? [])
+        .map((e) => SourceUrl.fromJson(e))
+        .toList(),
     description: unescape.convert(json['description'] ?? ''),
     album: unescape.convert(
       json['album'] is String
@@ -172,10 +168,9 @@ class Contributors {
 
   factory Contributors.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const Contributors();
-    List<Artist> parse(String key) =>
-        (json[key] as List<dynamic>? ?? [])
-            .map((e) => Artist.fromJson(e))
-            .toList();
+    List<Artist> parse(String key) => (json[key] as List<dynamic>? ?? [])
+        .map((e) => Artist.fromJson(e))
+        .toList();
     return Contributors(
       primary: parse('primary'),
       featured: parse('featured'),
@@ -191,6 +186,7 @@ class SongDetail extends Song {
   final String? duration;
   final String? label;
   final String? albumName;
+  final String? albumId;
   final bool explicitContent;
   final List<SourceUrl> downloadUrls;
 
@@ -213,6 +209,7 @@ class SongDetail extends Song {
     this.duration,
     this.label,
     this.albumName,
+    this.albumId,
     this.explicitContent = false,
     this.downloadUrls = const [],
     this.contributors = const Contributors(),
@@ -222,25 +219,27 @@ class SongDetail extends Song {
     // Parse images
     List<SourceUrl> images = [];
     if (json['image'] is List) {
-      images =
-          (json['image'] as List).map((e) => SourceUrl.fromJson(e)).toList();
+      images = (json['image'] as List)
+          .map((e) => SourceUrl.fromJson(e))
+          .toList();
     }
 
     // Parse download URLs
     List<SourceUrl> downloads = [];
     if (json['downloadUrl'] is List) {
-      downloads =
-          (json['downloadUrl'] as List)
-              .map((e) => SourceUrl.fromJson(e))
-              .toList();
+      downloads = (json['downloadUrl'] as List)
+          .map((e) => SourceUrl.fromJson(e))
+          .toList();
     } else if (json['media_url'] != null) {
       downloads = [SourceUrl(url: json['media_url'], quality: 'default')];
     }
 
-    // Parse album name
+    // Parse album name & album ID
     String? albumName;
+    String? albumId;
     if (json['album'] is Map<String, dynamic>) {
       albumName = json['album']['name']?.toString();
+      albumId = json['album']['id']?.toString();
     }
 
     // Parse contributors
@@ -265,6 +264,7 @@ class SongDetail extends Song {
       duration: json['duration']?.toString(),
       label: unescape.convert(json['label']?.toString() ?? ''),
       albumName: unescape.convert(albumName ?? ''),
+      albumId: albumId,
       explicitContent: json['explicitContent'] == true,
       downloadUrls: downloads,
       contributors: contributors,
@@ -361,15 +361,16 @@ class Album extends SongMediaItem {
     if (json['songIds'] is List) {
       songIds = (json['songIds'] as List).map((e) => e.toString()).toList();
     } else if (json['songIds'] is String) {
-      songIds =
-          (json['songIds'] as String).split(',').map((e) => e.trim()).toList();
+      songIds = (json['songIds'] as String)
+          .split(',')
+          .map((e) => e.trim())
+          .toList();
     }
 
     // full songs (SongDetail)
-    final List<SongDetail> parsedSongs =
-        (json['songs'] as List<dynamic>? ?? [])
-            .map((e) => SongDetail.fromJson(e))
-            .toList();
+    final List<SongDetail> parsedSongs = (json['songs'] as List<dynamic>? ?? [])
+        .map((e) => SongDetail.fromJson(e))
+        .toList();
 
     final List<Artist> primaryArtists =
         (json['artists']?['primary'] as List<dynamic>? ?? [])
@@ -378,20 +379,18 @@ class Album extends SongMediaItem {
 
     // fallback artist string for older shapes OR join primary artists when present
     final fallbackArtist = unescape.convert(json['artist']?.toString() ?? '');
-    final joinedPrimary =
-        primaryArtists.isNotEmpty
-            ? primaryArtists.map((a) => a.title).join(', ')
-            : '';
+    final joinedPrimary = primaryArtists.isNotEmpty
+        ? primaryArtists.map((a) => a.title).join(', ')
+        : '';
 
     return Album(
       id: json['id']?.toString() ?? '',
       title: unescape.convert(json['title'] ?? json['name'] ?? ''),
       type: unescape.convert(json['type']?.toString() ?? ''),
       url: json['url'] ?? '',
-      images:
-          (json['image'] as List<dynamic>? ?? [])
-              .map((e) => SourceUrl.fromJson(e))
-              .toList(),
+      images: (json['image'] as List<dynamic>? ?? [])
+          .map((e) => SourceUrl.fromJson(e))
+          .toList(),
       description: unescape.convert(json['description'] ?? ''),
       language: json['language']?.toString() ?? '',
       artist: (joinedPrimary.isNotEmpty ? joinedPrimary : fallbackArtist),
@@ -401,10 +400,9 @@ class Album extends SongMediaItem {
       label: unescape.convert(json['label']?.toString() ?? ''),
       explicitContent: json['explicitContent'] == true,
       artists: primaryArtists,
-      downloadUrls:
-          (json['downloadUrl'] as List<dynamic>? ?? [])
-              .map((e) => SourceUrl.fromJson(e))
-              .toList(),
+      downloadUrls: (json['downloadUrl'] as List<dynamic>? ?? [])
+          .map((e) => SourceUrl.fromJson(e))
+          .toList(),
     );
   }
 
@@ -448,15 +446,13 @@ class Artist extends SongMediaItem {
     title: unescape.convert(json['title'] ?? json['name'] ?? ''),
     type: unescape.convert(json['type']?.toString() ?? ''),
     url: json['url'] ?? '',
-    images:
-        (json['image'] as List<dynamic>? ?? [])
-            .map((e) => SourceUrl.fromJson(e))
-            .toList(),
+    images: (json['image'] as List<dynamic>? ?? [])
+        .map((e) => SourceUrl.fromJson(e))
+        .toList(),
     description: unescape.convert(json['description'] ?? ''),
-    position:
-        json['position'] is int
-            ? json['position']
-            : (int.tryParse('${json['position']}') ?? 0),
+    position: json['position'] is int
+        ? json['position']
+        : (int.tryParse('${json['position']}') ?? 0),
   );
 
   static Map<String, dynamic> artistToJson(Artist a) => {
@@ -528,10 +524,9 @@ class SearchResult<T> {
 
     return SearchResult(
       total: json['total'] ?? 0,
-      results:
-          (json['results'] as List<dynamic>? ?? [])
-              .map((e) => fromJsonT(e as Map<String, dynamic>))
-              .toList(),
+      results: (json['results'] as List<dynamic>? ?? [])
+          .map((e) => fromJsonT(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -587,20 +582,17 @@ class ArtistDetails extends Artist {
   });
 
   factory ArtistDetails.fromJson(Map<String, dynamic> json) {
-    final List<SongDetail> topSongs =
-        (json['topSongs'] as List<dynamic>? ?? [])
-            .map((e) => SongDetail.fromJson(e))
-            .toList();
+    final List<SongDetail> topSongs = (json['topSongs'] as List<dynamic>? ?? [])
+        .map((e) => SongDetail.fromJson(e))
+        .toList();
 
-    final List<Album> topAlbums =
-        (json['topAlbums'] as List<dynamic>? ?? [])
-            .map((e) => Album.fromJson(e))
-            .toList();
+    final List<Album> topAlbums = (json['topAlbums'] as List<dynamic>? ?? [])
+        .map((e) => Album.fromJson(e))
+        .toList();
 
-    final List<Album> singles =
-        (json['singles'] as List<dynamic>? ?? [])
-            .map((e) => Album.fromJson(e))
-            .toList();
+    final List<Album> singles = (json['singles'] as List<dynamic>? ?? [])
+        .map((e) => Album.fromJson(e))
+        .toList();
 
     final List<Artist> similar =
         (json['similarArtists'] as List<dynamic>? ?? [])
@@ -614,27 +606,24 @@ class ArtistDetails extends Artist {
       title: unescape.convert(json['name'] ?? json['title'] ?? ''),
       type: unescape.convert(json['type']?.toString() ?? 'artist'),
       url: json['url'] ?? '',
-      images:
-          (json['image'] as List<dynamic>? ?? [])
-              .map((e) => SourceUrl.fromJson(e))
-              .toList(),
+      images: (json['image'] as List<dynamic>? ?? [])
+          .map((e) => SourceUrl.fromJson(e))
+          .toList(),
       followerCount: asInt(json['followerCount']),
       fanCount: asInt(json['fanCount']),
       isVerified: json['isVerified'] as bool?,
       dominantLanguage: json['dominantLanguage']?.toString() ?? '',
       dominantType: json['dominantType']?.toString() ?? '',
-      bio:
-          (json['bio'] as List<dynamic>? ?? [])
-              .map((e) => e.toString())
-              .toList(),
+      bio: (json['bio'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
       dob: json['dob']?.toString() ?? '',
       fb: json['fb']?.toString() ?? '',
       twitter: json['twitter']?.toString() ?? '',
       wiki: json['wiki']?.toString() ?? '',
-      availableLanguages:
-          (json['availableLanguages'] as List<dynamic>? ?? [])
-              .map((e) => e.toString())
-              .toList(),
+      availableLanguages: (json['availableLanguages'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
       isRadioPresent: json['isRadioPresent'] == true,
       language: json['dominantLanguage']?.toString() ?? '',
       topSongs: topSongs,
@@ -694,24 +683,6 @@ class ArtistDetails extends Artist {
   }
 }
 
-class ArtistSongsResponse {
-  final int total;
-  final List<SongDetail> songs;
-
-  ArtistSongsResponse({required this.total, required this.songs});
-
-  factory ArtistSongsResponse.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] ?? {};
-    final songs =
-        (data['songs'] as List<dynamic>? ?? [])
-            .map((e) => SongDetail.fromJson(e as Map<String, dynamic>))
-            .toList();
-    final total =
-        int.tryParse('${data['total'] ?? songs.length}') ?? songs.length;
-    return ArtistSongsResponse(total: total, songs: songs);
-  }
-}
-
 // SearchPlaylist class
 class SearchPlaylistsResponse {
   final int total;
@@ -726,10 +697,9 @@ class SearchPlaylistsResponse {
 
   factory SearchPlaylistsResponse.fromJson(Map<String, dynamic> json) {
     final data = json['data'] ?? {};
-    final results =
-        (data['results'] as List<dynamic>? ?? [])
-            .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
-            .toList();
+    final results = (data['results'] as List<dynamic>? ?? [])
+        .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
+        .toList();
     return SearchPlaylistsResponse(
       total:
           int.tryParse('${data['total'] ?? results.length}') ?? results.length,
@@ -752,10 +722,9 @@ class SearchArtistsResponse {
 
   factory SearchArtistsResponse.fromJson(Map<String, dynamic> json) {
     final data = json['data'] ?? {};
-    final results =
-        (data['results'] as List<dynamic>? ?? [])
-            .map((e) => Artist.fromJson(e as Map<String, dynamic>))
-            .toList();
+    final results = (data['results'] as List<dynamic>? ?? [])
+        .map((e) => Artist.fromJson(e as Map<String, dynamic>))
+        .toList();
     return SearchArtistsResponse(
       total:
           int.tryParse('${data['total'] ?? results.length}') ?? results.length,
@@ -813,10 +782,9 @@ class LastQueueStorage {
 
     // Fetch full song details from local DB
 
-    final songs =
-        (await Future.wait(
-          ids.map(AppDatabase.getSong),
-        )).whereType<SongDetail>().toList();
+    final songs = (await Future.wait(
+      ids.map(AppDatabase.getSong),
+    )).whereType<SongDetail>().toList();
 
     if (songs.isEmpty) {
       debugPrint('[LastQueueStorage] All saved song IDs missing in DB');

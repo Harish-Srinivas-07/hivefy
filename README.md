@@ -25,7 +25,7 @@
   
 </p>
 
-**Hivefy** is a **FOSS, Spotify inpired, ad-free, and offline-ready music app** built with **Flutter** using the **unofficial JioSaavn API**.  
+**Hivefy** is a **FOSS, Spotify-inspired, ad-free, and offline-ready music app** built with **Flutter** using the **unofficial JioSaavn API**.  
 Explore trending charts, albums, playlists, and multi-language content — all **open-source, privacy-respecting, and fully customizable**. 🎵
 
 <a href="https://github.com/Harish-Srinivas-07/hivefy/releases/latest">
@@ -47,7 +47,6 @@ Explore trending charts, albums, playlists, and multi-language content — all *
     <img alt="Download Hivefy" src="https://a.fsdn.com/con/app/sf-download-button" height="40" style="vertical-align: middle;" />
   </a>
 </p>
-
 
 > ⚠️ Make sure “Install from unknown sources” is enabled in your device settings to install Hivefy.
 
@@ -105,9 +104,14 @@ Explore trending charts, albums, playlists, and multi-language content — all *
 - [ ] 🤝 Playlist sharing & collaboration
 
 ---
+
 ## 🌐 Hivefy Web (New 🚀)
 
 Hivefy is now available on the **web**!
+
+<p align="center">
+  <img src="https://github.com/Harish-Srinivas-07/hivefyweb/blob/main/public/assets/docs/web1.png?raw=true" alt="Hivefy Web Mockup"/>
+</p>
 
 👉 **Live Demo:** https://hivefyweb.vercel.app
 👉 **Open Source Repo:** https://github.com/Harish-Srinivas-07/hivefyweb
@@ -116,17 +120,16 @@ Built with **Next.js**, Hivefy Web brings a fast, responsive, and install-free m
 
 ### ✨ Highlights
 
-* 🎨 Spotify-inspired UI
-* ⚡ Lightweight & responsive
-* 🔍 Global search
-* 💾 Offline-first caching
-* 🎧 PiP & Media Session support
-* 🌍 Multi-language support
+- 🎨 Spotify-inspired UI
+- ⚡ Lightweight & responsive
+- 🔍 Global search
+- 💾 Offline-first caching
+- 🎧 PiP & Media Session support
+- 🌍 Multi-language support
 
 > No install needed — open and start listening.
 
 ---
-
 
 ## 🚀 Getting Started
 

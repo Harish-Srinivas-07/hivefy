@@ -16,28 +16,35 @@ import '../services/audiohandler.dart';
 import '../services/jiosaavn.dart';
 import '../services/offlinemanager.dart';
 import '../shared/constants.dart';
+import '../shared/player.dart';
 import '../utils/theme.dart';
 import 'shimmers.dart';
 import 'snackbar.dart';
 import 'timersheet.dart';
+import '../utils/share_image.dart';
 
 enum MediaType { song, album, playlist, artist }
 
 // Usage:
-void showMediaItemMenu(BuildContext context, SongMediaItem item) {
+void showMediaItemMenu(
+  BuildContext context,
+  SongMediaItem item, {
+  bool closePlayer = false,
+}) {
   showModalBottomSheet(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: spotifyBgColor,
-    builder: (ctx) => MediaItemMenu(item: item),
+    builder: (ctx) => MediaItemMenu(item: item, isPlayer: closePlayer),
   );
 }
 
 class MediaItemMenu extends ConsumerStatefulWidget {
   final SongMediaItem item;
+  final bool isPlayer;
 
-  const MediaItemMenu({super.key, required this.item});
+  const MediaItemMenu({super.key, required this.item, this.isPlayer = false});
 
   @override
   ConsumerState<MediaItemMenu> createState() => _MediaItemMenuState();
@@ -101,10 +108,9 @@ class _MediaItemMenuState extends ConsumerState<MediaItemMenu> {
                     vertical: 4,
                   ),
                   leading: CacheNetWorkImg(
-                    url:
-                        widget.item.images.isNotEmpty
-                            ? widget.item.images.last.url
-                            : '',
+                    url: widget.item.images.isNotEmpty
+                        ? widget.item.images.last.url
+                        : '',
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
@@ -141,19 +147,18 @@ class _MediaItemMenuState extends ConsumerState<MediaItemMenu> {
   }
 
   Widget _buildMenuItems() {
-    final bool alreadyAdded =
-        (() {
-          if (widget.item is Album) {
-            final frequentAlbums = ref.watch(frequentAlbumsProvider);
-            return frequentAlbums.any((a) => a.id == (widget.item as Album).id);
-          } else if (widget.item is Playlist) {
-            final frequentPlaylists = ref.watch(frequentPlaylistsProvider);
-            return frequentPlaylists.any(
-              (p) => p.id == (widget.item as Playlist).id,
-            );
-          }
-          return false;
-        })();
+    final bool alreadyAdded = (() {
+      if (widget.item is Album) {
+        final frequentAlbums = ref.watch(frequentAlbumsProvider);
+        return frequentAlbums.any((a) => a.id == (widget.item as Album).id);
+      } else if (widget.item is Playlist) {
+        final frequentPlaylists = ref.watch(frequentPlaylistsProvider);
+        return frequentPlaylists.any(
+          (p) => p.id == (widget.item as Playlist).id,
+        );
+      }
+      return false;
+    })();
 
     final bool isAlreadyDownloaded = () {
       if (widget.item is Album) {
@@ -190,11 +195,11 @@ class _MediaItemMenuState extends ConsumerState<MediaItemMenu> {
           context,
           icon:
               (widget.item is SongDetail &&
-                      ref
-                          .watch(likedSongsProvider)
-                          .contains((widget.item as SongDetail).id))
-                  ? 'assets/icons/tick.png'
-                  : 'assets/icons/like.png',
+                  ref
+                      .watch(likedSongsProvider)
+                      .contains((widget.item as SongDetail).id))
+              ? 'assets/icons/tick.png'
+              : 'assets/icons/like.png',
 
           text: 'Add to Liked Songs',
           onTap: () {
@@ -225,10 +230,9 @@ class _MediaItemMenuState extends ConsumerState<MediaItemMenu> {
       if (type == MediaType.song || type == MediaType.album)
         _buildAssetMenuItem(
           context,
-          icon:
-              isAlreadyDownloaded
-                  ? 'assets/icons/tick.png'
-                  : 'assets/icons/download.png',
+          icon: isAlreadyDownloaded
+              ? 'assets/icons/tick.png'
+              : 'assets/icons/download.png',
           text: isAlreadyDownloaded ? 'Downloaded' : 'Download',
           onTap: () {
             Navigator.pop(context);
@@ -236,10 +240,134 @@ class _MediaItemMenuState extends ConsumerState<MediaItemMenu> {
           },
         ),
 
+      if (type == MediaType.song) ...[
+        _buildAssetMenuItem(
+          context,
+          icon: 'assets/icons/artist.png',
+          text: 'Go to Artist',
+          onTap: () {
+            Navigator.pop(context);
+            if (widget.isPlayer) {
+              Navigator.pop(context);
+            }
+            _handleGoToArtist();
+          },
+        ),
+        if (widget.item is SongDetail &&
+            (widget.item as SongDetail).albumId != null &&
+            (widget.item as SongDetail).albumId!.isNotEmpty)
+          _buildAssetMenuItem(
+            context,
+            icon: 'assets/icons/disc.png',
+            text: 'Go to Album',
+            onTap: () {
+              Navigator.pop(context);
+              if (widget.isPlayer) {
+                Navigator.pop(context);
+              }
+              _handleGoToAlbum();
+            },
+          ),
+      ],
+
+      if (type == MediaType.album)
+        _buildAssetMenuItem(
+          context,
+          icon: 'assets/icons/artist.png',
+          text: 'Go to Artist',
+          onTap: () {
+            Navigator.pop(context);
+            if (widget.isPlayer) {
+              Navigator.pop(context);
+            }
+            _handleGoToArtist();
+          },
+        ),
+
+      if (type == MediaType.playlist)
+        _buildAssetMenuItem(
+          context,
+          icon: 'assets/icons/playlist.png',
+          text: 'Go to Playlist',
+          onTap: () {
+            Navigator.pop(context);
+            if (widget.isPlayer) {
+              Navigator.pop(context);
+            }
+            _handleGoToPlaylist();
+          },
+        ),
+
       const SizedBox(height: 24),
     ];
 
     return Column(children: items);
+  }
+
+  void _handleGoToArtist() {
+    String? artistId;
+    if (widget.item is SongDetail) {
+      final contributors = (widget.item as SongDetail).contributors;
+      if (contributors.primary.isNotEmpty) {
+        artistId = contributors.primary.first.id;
+      } else if (contributors.all.isNotEmpty) {
+        artistId = contributors.all.first.id;
+      }
+    } else if (widget.item is Album) {
+      final artists = (widget.item as Album).artists;
+      if (artists.isNotEmpty) {
+        artistId = artists.first.id;
+      }
+    }
+
+    if (artistId == null || artistId.isEmpty) return;
+
+    final tabIndex = ref.read(tabIndexProvider);
+    ref
+        .read(playerNavProvider.notifier)
+        .navigate(
+          PlayerNavCommand(
+            type: PlayerNavType.artist,
+            id: artistId,
+            tabIndex: tabIndex,
+          ),
+        );
+  }
+
+  void _handleGoToAlbum() {
+    String? albumId;
+    if (widget.item is SongDetail) {
+      albumId = (widget.item as SongDetail).albumId;
+    }
+
+    if (albumId == null || albumId.isEmpty) return;
+
+    final tabIndex = ref.read(tabIndexProvider);
+    ref
+        .read(playerNavProvider.notifier)
+        .navigate(
+          PlayerNavCommand(
+            type: PlayerNavType.album,
+            id: albumId,
+            tabIndex: tabIndex,
+          ),
+        );
+  }
+
+  void _handleGoToPlaylist() {
+    if (widget.item is Playlist) {
+      final playlistId = (widget.item as Playlist).id;
+      final tabIndex = ref.read(tabIndexProvider);
+      ref
+          .read(playerNavProvider.notifier)
+          .navigate(
+            PlayerNavCommand(
+              type: PlayerNavType.playlist,
+              id: playlistId,
+              tabIndex: tabIndex,
+            ),
+          );
+    }
   }
 }
 
@@ -276,38 +404,41 @@ Future<void> _handleShare(SongMediaItem item) async {
     details.writeln(item.title);
   }
 
-  Uint8List? imageBytes;
-  try {
-    final imageUrl = item.images.isNotEmpty ? item.images.last.url : null;
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-      final provider = CachedNetworkImageProvider(imageUrl);
-      final stream = provider.resolve(const ImageConfiguration());
-      final completer = Completer<ImageInfo>();
+  Uint8List? imageBytes = await generateCustomShareImage(item);
+  if (imageBytes == null) {
+    try {
+      final imageUrl = item.images.isNotEmpty ? item.images.last.url : null;
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        final provider = CachedNetworkImageProvider(imageUrl);
+        final stream = provider.resolve(const ImageConfiguration());
+        final completer = Completer<ImageInfo>();
 
-      void listener(ImageInfo info, bool _) => completer.complete(info);
-      stream.addListener(ImageStreamListener(listener));
+        void listener(ImageInfo info, bool _) => completer.complete(info);
+        stream.addListener(ImageStreamListener(listener));
 
-      final info = await completer.future;
-      final byteData = await info.image.toByteData(format: ImageByteFormat.png);
-      imageBytes = byteData?.buffer.asUint8List();
+        final info = await completer.future;
+        final byteData = await info.image.toByteData(
+          format: ImageByteFormat.png,
+        );
+        imageBytes = byteData?.buffer.asUint8List();
+      }
+    } catch (e) {
+      debugPrint("⚠️ Failed to get image for share: $e");
     }
-  } catch (e) {
-    debugPrint("⚠️ Failed to get image for share: $e");
   }
 
   await SharePlus.instance.share(
     ShareParams(
       text: details.toString(),
-      files:
-          imageBytes != null
-              ? [
-                XFile.fromData(
-                  imageBytes,
-                  name: '${item.title}_hivefy.png',
-                  mimeType: 'image/png',
-                ),
-              ]
-              : [],
+      files: imageBytes != null
+          ? [
+              XFile.fromData(
+                imageBytes,
+                name: '${item.title}_hivefy.png',
+                mimeType: 'image/png',
+              ),
+            ]
+          : [],
       title: "Sharing from Hivefy 🎵",
     ),
   );
@@ -450,9 +581,9 @@ Widget _buildAssetMenuItem(
 }) {
   double iconSize =
       (text.toLowerCase().contains('queue') ||
-              text.toLowerCase().contains('liked'))
-          ? 20
-          : 24;
+          text.toLowerCase().contains('liked'))
+      ? 20
+      : 24;
 
   return InkWell(
     onTap: onTap,
@@ -466,10 +597,9 @@ Widget _buildAssetMenuItem(
             icon,
             width: iconSize,
             height: iconSize,
-            color:
-                icon.toLowerCase().contains('tick')
-                    ? spotifyGreen
-                    : Colors.white70,
+            color: icon.toLowerCase().contains('tick')
+                ? spotifyGreen
+                : Colors.white70,
           ),
           const SizedBox(width: 16),
           Expanded(

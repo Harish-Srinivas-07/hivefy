@@ -177,23 +177,21 @@ class CacheNetWorkImg extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        placeholder:
-            (context, url) => Shimmer.fromColors(
-              baseColor: Colors.grey.shade800,
-              highlightColor: Colors.grey.shade700,
-              child: Container(
-                width: width,
-                height: height,
-                color: Colors.grey.shade800,
-              ),
-            ),
-        errorWidget:
-            (context, url, error) => Container(
-              width: width,
-              height: height,
-              color: Colors.grey.shade800,
-              child: const Icon(Icons.broken_image, color: Colors.white),
-            ),
+        placeholder: (context, url) => Shimmer.fromColors(
+          baseColor: Colors.grey.shade800,
+          highlightColor: Colors.grey.shade700,
+          child: Container(
+            width: width,
+            height: height,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        errorWidget: (context, url, error) => Container(
+          width: width,
+          height: height,
+          color: Colors.grey.shade800,
+          child: const Icon(Icons.broken_image, color: Colors.white),
+        ),
       ),
     );
   }

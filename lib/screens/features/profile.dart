@@ -55,15 +55,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _scrollController =
-        ScrollController()..addListener(() {
-          final offset = _scrollController.offset;
-          if (offset > 120 && !_isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = true);
-          } else if (offset <= 120 && _isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = false);
-          }
-        });
+    _scrollController = ScrollController()
+      ..addListener(() {
+        final offset = _scrollController.offset;
+        if (offset > 120 && !_isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = true);
+        } else if (offset <= 120 && _isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = false);
+        }
+      });
     loadProfileData();
   }
 
@@ -84,9 +84,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               builder: (context, constraints) {
                 final minHeight = kToolbarHeight;
                 final maxHeight = 160.0;
-                final collapsePercent = ((constraints.maxHeight - minHeight) /
-                        (maxHeight - minHeight))
-                    .clamp(0.0, 1.0);
+                final collapsePercent =
+                    ((constraints.maxHeight - minHeight) /
+                            (maxHeight - minHeight))
+                        .clamp(0.0, 1.0);
 
                 return FlexibleSpaceBar(
                   centerTitle: false,
@@ -145,11 +146,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     children: [
                       CircleAvatar(
                         radius: 35,
-                        backgroundImage:
-                            profileFile != null
-                                ? FileImage(profileFile!)
-                                : const AssetImage('assets/icons/logo.png')
-                                    as ImageProvider,
+                        backgroundImage: profileFile != null
+                            ? FileImage(profileFile!)
+                            : const AssetImage('assets/icons/logo.png')
+                                  as ImageProvider,
                       ),
                       Positioned(
                         bottom: -3,
@@ -194,48 +194,48 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         const SizedBox(height: 4),
                         _isEditingName
                             ? Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: SizedBox(
-                                height: 20,
-                                child: TextField(
-                                  autofocus: true,
-                                  onTapOutside:
-                                      (_) => FocusScope.of(context).unfocus(),
-                                  controller: _nameController,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 6,
+                                padding: const EdgeInsets.only(right: 6),
+                                child: SizedBox(
+                                  height: 20,
+                                  child: TextField(
+                                    autofocus: true,
+                                    onTapOutside: (_) =>
+                                        FocusScope.of(context).unfocus(),
+                                    controller: _nameController,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1,
                                     ),
-                                    enabledBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Colors.white24,
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        vertical: 6,
                                       ),
-                                    ),
-                                    focusedBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: spotifyGreen,
+                                      enabledBorder: UnderlineInputBorder(
+                                        borderSide: BorderSide(
+                                          color: Colors.white24,
+                                        ),
+                                      ),
+                                      focusedBorder: UnderlineInputBorder(
+                                        borderSide: BorderSide(
+                                          color: spotifyGreen,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            )
+                              )
                             : Text(
-                              username,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                height: 1,
+                                username,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1,
+                                ),
                               ),
-                            ),
                       ],
                     ),
                   ),

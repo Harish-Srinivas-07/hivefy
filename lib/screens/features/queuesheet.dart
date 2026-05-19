@@ -108,10 +108,9 @@ class QueueList extends ConsumerWidget {
                   child: Row(
                     children: [
                       CacheNetWorkImg(
-                        url:
-                            currentSong.images.isNotEmpty
-                                ? currentSong.images.last.url
-                                : '',
+                        url: currentSong.images.isNotEmpty
+                            ? currentSong.images.last.url
+                            : '',
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
@@ -162,29 +161,30 @@ class QueueList extends ConsumerWidget {
                   child: DragAndDropLists(
                     scrollController: scrollController,
                     children: [DragAndDropList(children: items)],
-                    onItemReorder: (
-                      oldItemIndex,
-                      oldListIndex,
-                      newItemIndex,
-                      newListIndex,
-                    ) async {
-                      // Offset by currentIndex + 1 to match full queue
-                      final startIndex = currentIndex + 1;
+                    onItemReorder:
+                        (
+                          oldItemIndex,
+                          oldListIndex,
+                          newItemIndex,
+                          newListIndex,
+                        ) async {
+                          // Offset by currentIndex + 1 to match full queue
+                          final startIndex = currentIndex + 1;
 
-                      // 1️⃣ reorder in shuffleManager
-                      handler.shuffleManager.reorder(
-                        oldItemIndex + startIndex,
-                        newItemIndex + startIndex,
-                      );
+                          // 1️⃣ reorder in shuffleManager
+                          handler.shuffleManager.reorder(
+                            oldItemIndex + startIndex,
+                            newItemIndex + startIndex,
+                          );
 
-                      // 2️⃣ update handler queue from shuffleManager
-                      handler.updateQueueFromShuffle();
+                          // 2️⃣ update handler queue from shuffleManager
+                          handler.updateQueueFromShuffle();
 
-                      // 3️⃣ notify AudioService / Stream
-                      handler.queue.add(
-                        handler.queueSongs.map(songToMediaItem).toList(),
-                      );
-                    },
+                          // 3️⃣ notify AudioService / Stream
+                          handler.queue.add(
+                            handler.queueSongs.map(songToMediaItem).toList(),
+                          );
+                        },
                     onListReorder: (oldListIndex, newListIndex) {
                       // No list reordering needed
                     },
@@ -218,23 +218,21 @@ class QueueList extends ConsumerWidget {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error:
-              (_, __) => Center(
-                child: Text(
-                  'Error loading queue',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error:
-          (_, __) => Center(
+          error: (_, __) => Center(
             child: Text(
-              'Error loading handler',
+              'Error loading queue',
               style: TextStyle(color: Colors.white),
             ),
           ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => Center(
+        child: Text(
+          'Error loading handler',
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
     );
   }
 }

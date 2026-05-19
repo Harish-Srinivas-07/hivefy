@@ -20,6 +20,7 @@ enum DownloadStatus { idle, downloading, completed, failed }
 class OfflineStorageManager {
   static const _offlineKey = "offlineSongs";
   static const _albumKey = "offlineAlbums";
+  static const _cacheKey = "cachedSongs";
 
   static final OfflineStorageManager _instance =
       OfflineStorageManager._internal();
@@ -27,6 +28,7 @@ class OfflineStorageManager {
   OfflineStorageManager._internal();
 
   Map<String, String> _offlineSongs = {};
+  Map<String, String> _cachedSongs = {};
   Set<String> _downloadedAlbums = {};
 
   Map<String, DownloadStatus> downloadStatus = {};
@@ -37,6 +39,7 @@ class OfflineStorageManager {
   // Below your album-related maps
   final Map<String, ValueNotifier<int>> _setDownloadedCounts = {};
   final Map<String, ValueNotifier<DownloadStatus>> _setStatusNotifiers = {};
+
   ValueNotifier<int> songsSetDownloadedCountNotifier(String setId) {
     if (!_setDownloadedCounts.containsKey(setId)) {
       _setDownloadedCounts[setId] = ValueNotifier<int>(0);
@@ -94,14 +97,29 @@ class OfflineStorageManager {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_offlineKey);
     final storedAlbums = prefs.getStringList(_albumKey);
+    final storedCache = prefs.getString(_cacheKey);
+
     if (stored != null) {
       _offlineSongs = Map<String, String>.from(jsonDecode(stored));
     }
     if (storedAlbums != null) {
       _downloadedAlbums = storedAlbums.toSet();
     }
+    if (storedCache != null) {
+      _cachedSongs = Map<String, String>.from(jsonDecode(storedCache));
+    }
 
     await cleanupInvalidDownloads();
+
+    // Cleanup invalid cache entries
+    final removedCache = <String>[];
+    _cachedSongs.forEach((id, path) {
+      if (!File(path).existsSync()) removedCache.add(id);
+    });
+    for (var id in removedCache) {
+      _cachedSongs.remove(id);
+    }
+
     final removed = <String>[];
     _offlineSongs.forEach((id, path) {
       if (!File(path).existsSync()) removed.add(id);
@@ -109,15 +127,16 @@ class OfflineStorageManager {
     for (var id in removed) {
       _offlineSongs.remove(id);
     }
-    if (removed.isNotEmpty) await _save();
 
-    // ✅ Rebuild in-memory state for all valid downloaded songs
+    if (removed.isNotEmpty || removedCache.isNotEmpty) await _save();
+
+    // Rebuild in-memory state for all valid downloaded songs
     for (final songId in _offlineSongs.keys) {
       updateStatus(songId, DownloadStatus.completed);
       updateProgress(songId, 100.0);
     }
 
-    // ✅ Restore album status based on saved album list
+    // Restore album status based on saved album list
     for (final albumId in _downloadedAlbums) {
       albumStatusNotifier(albumId).value = DownloadStatus.completed;
     }
@@ -133,6 +152,15 @@ class OfflineStorageManager {
     return offlineDir;
   }
 
+  Future<Directory> getCacheDirectory() async {
+    final dir = await getApplicationSupportDirectory();
+    final cacheDir = Directory("${dir.path}/SongCache");
+    if (!cacheDir.existsSync()) {
+      await cacheDir.create(recursive: true);
+    }
+    return cacheDir;
+  }
+
   /// Getters
   DownloadStatus getDownloadStatus(String songId) =>
       downloadStatus[songId] ?? DownloadStatus.idle;
@@ -141,7 +169,80 @@ class OfflineStorageManager {
 
   bool isDownloaded(String songId) => _offlineSongs.containsKey(songId);
 
-  String? getLocalPath(String songId) => _offlineSongs[songId];
+  bool isCached(String songId) => _cachedSongs.containsKey(songId);
+
+  String? getLocalPath(String songId) {
+    if (_offlineSongs.containsKey(songId)) return _offlineSongs[songId];
+    if (_cachedSongs.containsKey(songId)) return _cachedSongs[songId];
+    return null;
+  }
+
+  /// Cache song silently
+  Future<void> cacheSong(String songId) async {
+    if (isDownloaded(songId) || isCached(songId)) return;
+    if (getDownloadStatus(songId) == DownloadStatus.downloading) return;
+
+    debugPrint("⬇️ Starting cache download for songId: $songId");
+
+    final song = await AppDatabase.getSong(songId);
+    if (song == null || song.downloadUrls.isEmpty) return;
+
+    final cacheDir = await getCacheDirectory();
+    final filePath = "${cacheDir.path}/$songId.mp3";
+
+    final dio = Dio(
+      BaseOptions(
+        responseType: ResponseType.bytes,
+        followRedirects: true,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 120),
+        sendTimeout: const Duration(seconds: 60),
+        validateStatus: (_) => true,
+      ),
+    );
+
+    try {
+      await dio.download(song.downloadUrls.last.url, filePath);
+
+      final file = File(filePath);
+      if (await file.exists() && await file.length() > 0) {
+        _cachedSongs[songId] = filePath;
+
+        // FIFO Cache policy limit to 50 songs
+        const int maxCacheSize = 50;
+        if (_cachedSongs.length > maxCacheSize) {
+          final oldestKey = _cachedSongs.keys.first;
+          final oldestPath = _cachedSongs[oldestKey];
+
+          _cachedSongs.remove(oldestKey);
+          if (oldestPath != null) {
+            try {
+              final oldFile = File(oldestPath);
+              if (await oldFile.exists()) {
+                await oldFile.delete();
+                debugPrint(
+                  "🧹 Cache limit reached. Removed oldest: $oldestKey",
+                );
+              }
+            } catch (e) {
+              debugPrint("⚠️ Failed to delete old cache file: $e");
+            }
+          }
+        }
+
+        await _save();
+        debugPrint("✅ Cached successfully: $songId");
+      }
+    } catch (e) {
+      debugPrint("❌ Cache failed for $songId: $e");
+      try {
+        final file = File(filePath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+  }
 
   /// Download song with progress
   Future<void> downloadSong(
@@ -170,6 +271,38 @@ class OfflineStorageManager {
     final filePath = "${offlineDir.path}/$songId.mp3";
     debugPrint("💾 File will be saved at: $filePath");
 
+    // Optimization: Check Cache first
+    if (_cachedSongs.containsKey(songId)) {
+      final cachedPath = _cachedSongs[songId];
+      if (cachedPath != null) {
+        final cachedFile = File(cachedPath);
+        if (cachedFile.existsSync()) {
+          debugPrint("🚀 Found in cache, moving to offline storage: $songId");
+          try {
+            await cachedFile.copy(filePath);
+
+            _offlineSongs[songId] = filePath;
+            updateProgress(songId, 100.0);
+            updateStatus(songId, DownloadStatus.completed);
+
+            _cachedSongs.remove(songId);
+            try {
+              await cachedFile.delete();
+            } catch (_) {}
+
+            await _save();
+            await showSimpleNotification(
+              "Download Completed",
+              "${song.title} is now available offline ⚡",
+            );
+            return;
+          } catch (e) {
+            debugPrint("⚠️ Failed to move from cache: $e");
+          }
+        }
+      }
+    }
+
     final dio = Dio(
       BaseOptions(
         responseType: ResponseType.bytes,
@@ -184,7 +317,7 @@ class OfflineStorageManager {
 
     try {
       await showDownloadNotification('${song.title} from ${song.album}', 0);
-      debugPrint("🔔 Showing download notification for: ${song.title}");
+      debugPrint("抢 Showing download notification for: ${song.title}");
 
       int lastTick = 0;
       await dio.download(
@@ -241,7 +374,7 @@ class OfflineStorageManager {
     updateStatus(songId, DownloadStatus.idle);
     updateProgress(songId, 0.0);
 
-    // ✅ Update all sets containing this song
+    // Update all sets containing this song
     _setDownloadedCounts.forEach((setId, countNotifier) {
       final count = countNotifier.value;
       if (count > 0) {
@@ -258,7 +391,10 @@ class OfflineStorageManager {
 
   /// Quick check if a song or album is downloaded
   bool isAvailableOffline({String? songId, String? albumId}) {
-    if (songId != null) return _offlineSongs.containsKey(songId);
+    if (songId != null) {
+      return _offlineSongs.containsKey(songId) ||
+          _cachedSongs.containsKey(songId);
+    }
     if (albumId != null) return _downloadedAlbums.contains(albumId);
     return false;
   }
@@ -322,8 +458,9 @@ class OfflineStorageManager {
       (id) => getDownloadStatus(id) == DownloadStatus.completed,
     );
 
-    statusNotifier.value =
-        allDownloaded ? DownloadStatus.completed : DownloadStatus.idle;
+    statusNotifier.value = allDownloaded
+        ? DownloadStatus.completed
+        : DownloadStatus.idle;
 
     if (allDownloaded) {
       await showSimpleNotification(
@@ -334,7 +471,7 @@ class OfflineStorageManager {
   }
 
   Future<void> deleteSongsSet(String setId, Set<String> songIds) async {
-    info('Clearing Offline sings caches under progress', Severity.success);
+    info('Clearing Offline songs caches under progress', Severity.success);
     for (final songId in songIds) {
       await deleteSong(songId);
     }
@@ -348,6 +485,7 @@ class OfflineStorageManager {
       await offlineDir.delete(recursive: true);
     }
     _offlineSongs.clear();
+    _cachedSongs.clear();
     downloadStatus.clear();
     downloadProgress.clear();
     _progressNotifiers.clear();
@@ -358,6 +496,7 @@ class OfflineStorageManager {
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     prefs.setString(_offlineKey, jsonEncode(_offlineSongs));
+    prefs.setString(_cacheKey, jsonEncode(_cachedSongs));
     await prefs.setStringList(_albumKey, _downloadedAlbums.toList());
   }
 
@@ -440,10 +579,9 @@ class OfflineStorageManager {
     Album album, {
     Function(String songId, double progress)? onProgress,
   }) async {
-    final songIds =
-        album.songIds.isNotEmpty
-            ? album.songIds
-            : album.songs.map((s) => s.id).toList();
+    final songIds = album.songIds.isNotEmpty
+        ? album.songIds
+        : album.songs.map((s) => s.id).toList();
 
     albumStatusNotifier(album.id).value = DownloadStatus.downloading;
     albumDownloadedCountNotifier(album.id).value = 0;
@@ -479,10 +617,9 @@ class OfflineStorageManager {
   }
 
   int getDownloadedCountForAlbum(Album album) {
-    final songIds =
-        album.songIds.isNotEmpty
-            ? album.songIds
-            : album.songs.map((s) => s.id).toList();
+    final songIds = album.songIds.isNotEmpty
+        ? album.songIds
+        : album.songs.map((s) => s.id).toList();
     return songIds
         .where((id) => getDownloadStatus(id) == DownloadStatus.completed)
         .length;
@@ -533,6 +670,12 @@ class OfflineStorageManager {
   Future<double> getOfflineStorageUsed() async {
     double totalBytes = 0;
     for (final path in _offlineSongs.values) {
+      final file = File(path);
+      if (file.existsSync()) {
+        totalBytes += file.lengthSync();
+      }
+    }
+    for (final path in _cachedSongs.values) {
       final file = File(path);
       if (file.existsSync()) {
         totalBytes += file.lengthSync();

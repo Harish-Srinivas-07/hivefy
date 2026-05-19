@@ -237,10 +237,9 @@ class SearchState extends ConsumerState<Search> {
       final existingIds = playlists.map((p) => p.id).toSet();
 
       // Only add playlists that are not already in the list
-      final newPlaylists =
-          extraPlaylistsResponse.results
-              .where((p) => !existingIds.contains(p.id))
-              .toList();
+      final newPlaylists = extraPlaylistsResponse.results
+          .where((p) => !existingIds.contains(p.id))
+          .toList();
 
       if (newPlaylists.isNotEmpty) {
         playlists.addAll(newPlaylists);
@@ -292,10 +291,9 @@ class SearchState extends ConsumerState<Search> {
         style: TextStyle(
           fontSize: title.toLowerCase().contains('recently') ? 16 : 18,
           fontWeight: FontWeight.w600,
-          color:
-              title.toLowerCase().contains('recently')
-                  ? Colors.white54
-                  : Colors.white,
+          color: title.toLowerCase().contains('recently')
+              ? Colors.white54
+              : Colors.white,
         ),
       ),
     );
@@ -303,10 +301,9 @@ class SearchState extends ConsumerState<Search> {
 
   Widget _buildItemImage(String url, String type) {
     return ClipRRect(
-      borderRadius:
-          type.toLowerCase().contains('artist')
-              ? BorderRadius.circular(50)
-              : BorderRadius.circular(4),
+      borderRadius: type.toLowerCase().contains('artist')
+          ? BorderRadius.circular(50)
+          : BorderRadius.circular(4),
       child: CacheNetWorkImg(
         url: url,
         width: 50,
@@ -334,10 +331,9 @@ class SearchState extends ConsumerState<Search> {
                 Text(
                   p.title,
                   style: TextStyle(
-                    color:
-                        ref.watch(currentSongProvider)?.id == p.id
-                            ? spotifyGreen
-                            : Colors.white,
+                    color: ref.watch(currentSongProvider)?.id == p.id
+                        ? spotifyGreen
+                        : Colors.white,
                     fontWeight: FontWeight.w500,
                     fontSize: 16,
                   ),
@@ -455,24 +451,23 @@ class SearchState extends ConsumerState<Search> {
           padding: EdgeInsets.only(left: 12),
           scrollDirection: Axis.horizontal,
           child: Row(
-            children:
-                searchHistory.map((term) {
-                  return GestureDetector(
-                    onTap: () => _onSuggestionTap(term),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 3, top: 3),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(term, style: TextStyle(color: Colors.white)),
-                    ),
-                  );
-                }).toList(),
+            children: searchHistory.map((term) {
+              return GestureDetector(
+                onTap: () => _onSuggestionTap(term),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 3, top: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(term, style: TextStyle(color: Colors.white)),
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],
@@ -516,10 +511,9 @@ class SearchState extends ConsumerState<Search> {
               selected: _selectedFilter == type,
               selectedColor: spotifyGreen.withAlpha(51),
               checkmarkColor: spotifyGreen,
-              onSelected:
-                  (_) => setState(() {
-                    _selectedFilter = _selectedFilter == type ? null : type;
-                  }),
+              onSelected: (_) => setState(() {
+                _selectedFilter = _selectedFilter == type ? null : type;
+              }),
               labelStyle: TextStyle(
                 color: _selectedFilter == type ? spotifyGreen : Colors.white,
               ),
@@ -532,10 +526,9 @@ class SearchState extends ConsumerState<Search> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color:
-                      _selectedFilter == type
-                          ? spotifyGreen
-                          : Colors.grey.shade800,
+                  color: _selectedFilter == type
+                      ? spotifyGreen
+                      : Colors.grey.shade800,
                   width: _selectedFilter == type ? 1 : 0,
                 ),
               ),
@@ -572,9 +565,9 @@ class SearchState extends ConsumerState<Search> {
                 radius: 18,
                 backgroundImage:
                     (profileFile != null && profileFile!.existsSync())
-                        ? FileImage(profileFile!)
-                        : const AssetImage('assets/icons/logo.png')
-                            as ImageProvider,
+                    ? FileImage(profileFile!)
+                    : const AssetImage('assets/icons/logo.png')
+                          as ImageProvider,
               ),
             ),
             const Text(
@@ -867,8 +860,9 @@ class SearchState extends ConsumerState<Search> {
     }
     final loadedSong = details.first;
 
-    String? imageUrl =
-        loadedSong.images.isNotEmpty ? loadedSong.images.last.url : null;
+    String? imageUrl = loadedSong.images.isNotEmpty
+        ? loadedSong.images.last.url
+        : null;
 
     if (imageUrl != null) {
       final dominant = await getDominantColorFromImage(imageUrl);

@@ -259,10 +259,9 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
                       _artist!.topSongs.any((s) => s.id == currentSong.id);
 
                   // Icon logic
-                  final icon =
-                      isCurrentInList
-                          ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                          : Icons.play_arrow;
+                  final icon = isCurrentInList
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : Icons.play_arrow;
 
                   return GestureDetector(
                     onTap: () async {
@@ -367,78 +366,71 @@ class _ArtistViewerState extends ConsumerState<ArtistViewer> {
       backgroundColor: artistCoverColour,
       body: Container(
         decoration: BoxDecoration(color: spotifyBgColor),
-        child:
-            _loading
-                ? Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: buildAlbumShimmer(),
-                )
-                : _artist == null
-                ? const Center(
-                  child: Text(
-                    "Failed to load album",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                )
-                : CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      backgroundColor: artistCoverColour,
-                      expandedHeight: 400,
-                      elevation: 0,
-                      leading: const BackButton(color: Colors.white),
-                      flexibleSpace: FlexibleSpaceBar(
-                        collapseMode: CollapseMode.pin,
-                        centerTitle: false,
-                        titlePadding: EdgeInsets.only(
-                          left: _isTitleCollapsed ? 72 : 16,
-                          bottom: 16,
-                          right: 16,
-                        ),
-                        title: AnimatedOpacity(
-                          opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Text(
-                            _artist?.title ?? "",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        background: _buildHeaderImage(),
-                      ),
-                    ),
-
-                    SliverToBoxAdapter(child: _buildHeaderDetails()),
-
-                    SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 16),
-                          _buildSongList(),
-
-                          const SizedBox(height: 16),
-                          _buildAlbumList(
-                            "Top Albums",
-                            _artist?.topAlbums ?? [],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildAlbumList(
-                            "Top Singles",
-                            _artist?.singles ?? [],
-                          ),
-                          const SizedBox(height: 100),
-                        ],
-                      ),
-                    ),
-                  ],
+        child: _loading
+            ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: buildAlbumShimmer(),
+              )
+            : _artist == null
+            ? const Center(
+                child: Text(
+                  "Failed to load album",
+                  style: TextStyle(color: Colors.white70),
                 ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: artistCoverColour,
+                    expandedHeight: 400,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      centerTitle: false,
+                      titlePadding: EdgeInsets.only(
+                        left: _isTitleCollapsed ? 72 : 16,
+                        bottom: 16,
+                        right: 16,
+                      ),
+                      title: AnimatedOpacity(
+                        opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          _artist?.title ?? "",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      background: _buildHeaderImage(),
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(child: _buildHeaderDetails()),
+
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 16),
+                        _buildSongList(),
+
+                        const SizedBox(height: 16),
+                        _buildAlbumList("Top Albums", _artist?.topAlbums ?? []),
+                        const SizedBox(height: 16),
+                        _buildAlbumList("Top Singles", _artist?.singles ?? []),
+                        const SizedBox(height: 100),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

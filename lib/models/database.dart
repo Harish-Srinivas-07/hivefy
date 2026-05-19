@@ -147,8 +147,9 @@ class AppDatabase {
   static Future<void> addPlayedDuration(String songId, Duration played) async {
     await _init();
 
-    final Map<String, dynamic> songData =
-        _cache[songId] != null ? Map<String, dynamic>.from(_cache[songId]) : {};
+    final Map<String, dynamic> songData = _cache[songId] != null
+        ? Map<String, dynamic>.from(_cache[songId])
+        : {};
 
     final int oldMs = (songData['playedMs'] as int?) ?? 0;
     final int newMs = oldMs + played.inMilliseconds;
@@ -222,8 +223,8 @@ class ArtistDB {
             .key
             .isNotEmpty
         ? knownArtists.entries
-            .firstWhere((e) => e.value.toLowerCase() == name.toLowerCase())
-            .key
+              .firstWhere((e) => e.value.toLowerCase() == name.toLowerCase())
+              .key
         : null;
   }
 }
@@ -646,8 +647,9 @@ class SearchPlaylistsCache {
     final map = {
       'total': response.total,
       'start': response.start,
-      'results':
-          response.results.map((p) => Playlist.playlistToJson(p)).toList(),
+      'results': response.results
+          .map((p) => Playlist.playlistToJson(p))
+          .toList(),
     };
     _cache[query.toLowerCase()] = response;
     final prefs = await SharedPreferences.getInstance();
@@ -689,20 +691,19 @@ class SearchPlaylistsCache {
     final List<Playlist> fullPlaylists = [];
 
     // Fetch full playlist details in parallel
-    final futures =
-        searchResponse.results.map((partial) async {
-          final full = await saavn.fetchPlaylistById(
-            playlistId: partial.id,
-            page: page,
-            limit: limit,
-            sortBy: sortBy,
-            sortOrder: sortOrder,
-          );
-          if (full != null) {
-            fullPlaylists.add(full);
-            await PlaylistCache().set(full.id, full);
-          }
-        }).toList();
+    final futures = searchResponse.results.map((partial) async {
+      final full = await saavn.fetchPlaylistById(
+        playlistId: partial.id,
+        page: page,
+        limit: limit,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+      );
+      if (full != null) {
+        fullPlaylists.add(full);
+        await PlaylistCache().set(full.id, full);
+      }
+    }).toList();
 
     await Future.wait(futures);
 
@@ -718,10 +719,9 @@ class SearchPlaylistsCache {
         final Map<String, dynamic> decoded = jsonDecode(stored);
         decoded.forEach((key, value) {
           final Map<String, dynamic> map = Map<String, dynamic>.from(value);
-          final results =
-              (map['results'] as List<dynamic>? ?? [])
-                  .map((e) => Playlist.fromJson(Map<String, dynamic>.from(e)))
-                  .toList();
+          final results = (map['results'] as List<dynamic>? ?? [])
+              .map((e) => Playlist.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
           final resp = SearchPlaylistsResponse(
             total: map['total'] ?? results.length,
             start: map['start'] ?? 0,
@@ -774,14 +774,14 @@ Future<void> storeLastSongs(List<SongDetail> newSongs) async {
   final prefs = await SharedPreferences.getInstance();
   final existing = await loadLastSongs();
 
-  final updated =
-      [
-        ...newSongs,
-        ...existing.where((e) => !newSongs.any((n) => n.id == e.id)),
-      ].take(5).toList(); // keep only 5
+  final updated = [
+    ...newSongs,
+    ...existing.where((e) => !newSongs.any((n) => n.id == e.id)),
+  ].take(5).toList(); // keep only 5
 
-  final songsJson =
-      updated.map((s) => jsonEncode(SongDetail.songDetailToJson(s))).toList();
+  final songsJson = updated
+      .map((s) => jsonEncode(SongDetail.songDetailToJson(s)))
+      .toList();
   await prefs.setStringList('last_songs', songsJson);
 }
 
@@ -796,14 +796,14 @@ Future<void> storeLastAlbums(List<Album> newAlbums) async {
   final prefs = await SharedPreferences.getInstance();
   final existing = await loadLastAlbums();
 
-  final updated =
-      [
-        ...newAlbums,
-        ...existing.where((e) => !newAlbums.any((n) => n.id == e.id)),
-      ].take(5).toList();
+  final updated = [
+    ...newAlbums,
+    ...existing.where((e) => !newAlbums.any((n) => n.id == e.id)),
+  ].take(5).toList();
 
-  final albumsJson =
-      updated.map((a) => jsonEncode(Album.albumToJson(a))).toList();
+  final albumsJson = updated
+      .map((a) => jsonEncode(Album.albumToJson(a)))
+      .toList();
   await prefs.setStringList('last_albums', albumsJson);
 }
 
@@ -814,8 +814,9 @@ Future<void> removeLastSong(String songId) async {
 
   final updated = existing.where((s) => s.id != songId).toList();
 
-  final songsJson =
-      updated.map((s) => jsonEncode(SongDetail.songDetailToJson(s))).toList();
+  final songsJson = updated
+      .map((s) => jsonEncode(SongDetail.songDetailToJson(s)))
+      .toList();
   await prefs.setStringList('last_songs', songsJson);
 }
 
@@ -826,8 +827,9 @@ Future<void> removeLastAlbum(String albumId) async {
 
   final updated = existing.where((a) => a.id != albumId).toList();
 
-  final albumsJson =
-      updated.map((a) => jsonEncode(Album.albumToJson(a))).toList();
+  final albumsJson = updated
+      .map((a) => jsonEncode(Album.albumToJson(a)))
+      .toList();
   await prefs.setStringList('last_albums', albumsJson);
 }
 
@@ -857,15 +859,16 @@ class AllSongsNotifier extends StateNotifier<List<SongDetail>> {
 }
 
 // ---------------- ARTIST CACHE PROVIDER ------------------
-final artistsWithUsageNotifier = StateNotifierProvider<
-  ArtistsWithUsageNotifier,
-  List<MapEntry<ArtistDetails, int>>
->((ref) {
-  final notifier = ArtistsWithUsageNotifier();
-  final sub = ArtistCache.artistChanges.listen((_) => notifier.refresh());
-  ref.onDispose(sub.cancel);
-  return notifier;
-});
+final artistsWithUsageNotifier =
+    StateNotifierProvider<
+      ArtistsWithUsageNotifier,
+      List<MapEntry<ArtistDetails, int>>
+    >((ref) {
+      final notifier = ArtistsWithUsageNotifier();
+      final sub = ArtistCache.artistChanges.listen((_) => notifier.refresh());
+      ref.onDispose(sub.cancel);
+      return notifier;
+    });
 
 class ArtistsWithUsageNotifier
     extends StateNotifier<List<MapEntry<ArtistDetails, int>>> {

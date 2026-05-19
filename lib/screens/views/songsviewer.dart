@@ -78,20 +78,18 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
           final freshDetails = await SaavnAPI().getSongDetails(ids: batchIds);
 
           // Keep original liked order
-          final orderedBatch =
-              batchIds.map((id) {
-                return freshDetails.firstWhere(
-                  (s) => s.id == id,
-                  orElse:
-                      () => SongDetail(
-                        id: id,
-                        title: "Unknown Song",
-                        type: "",
-                        url: "",
-                        images: [],
-                      ),
-                );
-              }).toList();
+          final orderedBatch = batchIds.map((id) {
+            return freshDetails.firstWhere(
+              (s) => s.id == id,
+              orElse: () => SongDetail(
+                id: id,
+                title: "Unknown Song",
+                type: "",
+                url: "",
+                images: [],
+              ),
+            );
+          }).toList();
 
           _songs.addAll(orderedBatch);
 
@@ -289,12 +287,11 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                               child: Text(
                                 song.title,
                                 style: TextStyle(
-                                  color:
-                                      isPlaying
-                                          ? spotifyGreen
-                                          : isEnabled
-                                          ? Colors.white
-                                          : Colors.white38,
+                                  color: isPlaying
+                                      ? spotifyGreen
+                                      : isEnabled
+                                      ? Colors.white
+                                      : Colors.white38,
                                   fontWeight: FontWeight.w500,
                                   fontSize: 16,
                                 ),
@@ -440,9 +437,8 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                 height: 32,
                 color: Colors.white70,
               );
-              onTap =
-                  () =>
-                      offlineManager.downloadSongsSetWithStatus(setId, songIds);
+              onTap = () =>
+                  offlineManager.downloadSongsSetWithStatus(setId, songIds);
             }
 
             return GestureDetector(
@@ -574,10 +570,9 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
                           // Icon logic
                           final bool isCurrentInList =
                               isSameSource && currentSong != null;
-                          final icon =
-                              isCurrentInList
-                                  ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                                  : Icons.play_arrow;
+                          final icon = isCurrentInList
+                              ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                              : Icons.play_arrow;
 
                           return GestureDetector(
                             onTap: () async {
@@ -646,84 +641,83 @@ class _SongsViewerState extends ConsumerState<SongsViewer> {
       backgroundColor: ref.watch(playerColourProvider),
       body: Container(
         decoration: BoxDecoration(color: Colors.black),
-        child:
-            _loading
-                ? Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: buildAlbumShimmer(),
-                )
-                : _songs.isEmpty
-                ? Center(
-                  child: Text(
-                    "No ${widget.showLikedSongs ? 'liked' : 'songs'} found",
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                )
-                : CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      backgroundColor: Colors.transparent,
-                      expandedHeight: 300,
-                      elevation: 0,
-                      leading: const BackButton(color: Colors.white),
-                      flexibleSpace: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  getDominantDarker(Colors.pink),
-                                  Colors.black,
-                                ],
-                              ),
-                            ),
-                          ),
-                          FlexibleSpaceBar(
-                            collapseMode: CollapseMode.pin,
-                            centerTitle: false,
-                            titlePadding: EdgeInsets.only(
-                              left: _isTitleCollapsed ? 72 : 16,
-                              bottom: 16,
-                              right: 16,
-                            ),
-                            title: AnimatedOpacity(
-                              opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                widget.showLikedSongs
-                                    ? "Liked Songs"
-                                    : "All Songs",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            background: _buildHeader(),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    SliverToBoxAdapter(child: const SizedBox(height: 16)),
-
-                    SliverList(
-                      delegate: SliverChildListDelegate([
-                        _buildHeaderInfo(),
-                        const SizedBox(height: 16),
-                        ..._songs.map((song) => _buildSongSwipeCard(song)),
-                        const SizedBox(height: 100),
-                      ]),
-                    ),
-                  ],
+        child: _loading
+            ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: buildAlbumShimmer(),
+              )
+            : _songs.isEmpty
+            ? Center(
+                child: Text(
+                  "No ${widget.showLikedSongs ? 'liked' : 'songs'} found",
+                  style: const TextStyle(color: Colors.white70),
                 ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: Colors.transparent,
+                    expandedHeight: 300,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                getDominantDarker(Colors.pink),
+                                Colors.black,
+                              ],
+                            ),
+                          ),
+                        ),
+                        FlexibleSpaceBar(
+                          collapseMode: CollapseMode.pin,
+                          centerTitle: false,
+                          titlePadding: EdgeInsets.only(
+                            left: _isTitleCollapsed ? 72 : 16,
+                            bottom: 16,
+                            right: 16,
+                          ),
+                          title: AnimatedOpacity(
+                            opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Text(
+                              widget.showLikedSongs
+                                  ? "Liked Songs"
+                                  : "All Songs",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          background: _buildHeader(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(child: const SizedBox(height: 16)),
+
+                  SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildHeaderInfo(),
+                      const SizedBox(height: 16),
+                      ..._songs.map((song) => _buildSongSwipeCard(song)),
+                      const SizedBox(height: 100),
+                    ]),
+                  ),
+                ],
+              ),
       ),
     );
   }

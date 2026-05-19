@@ -26,7 +26,6 @@ class LibraryPage extends ConsumerStatefulWidget {
 }
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
-  int _allSongsCount = 0;
   bool isDefined = false;
   List<LibraryCardData> items = [];
   List<Album> albums = [];
@@ -71,9 +70,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       artists = ref.read(frequentArtistsProvider);
     }
 
-    if (!mounted) return;
-    _allSongsCount = ref.read(allSongsProvider).length;
-
     isDefined = true;
     if (mounted) setState(() {});
   }
@@ -83,43 +79,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
-        children:
-            LibraryFilter.values.map((filter) {
-              final isSelected = _currentFilter == filter;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: ChoiceChip(
-                  label: Text(
-                    capitalize(filter.name),
-                    style: TextStyle(
-                      color: isSelected ? spotifyGreen : Colors.white,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  selected: isSelected,
-                  selectedColor: spotifyGreen.withAlpha(51),
-                  backgroundColor: Colors.grey[900],
-                  selectedShadowColor: Colors.grey.shade900,
-                  color: WidgetStateProperty.resolveWith<Color?>((states) {
-                    return Colors.grey.shade900;
-                  }),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                      color: isSelected ? spotifyGreen : Colors.grey.shade800,
-                      width: isSelected ? 1 : 0,
-                    ),
-                  ),
-                  visualDensity: const VisualDensity(
-                    vertical: -2,
-                    horizontal: 0,
-                  ),
-                  showCheckmark: false,
-
-                  onSelected: (_) => setState(() => _currentFilter = filter),
+        children: LibraryFilter.values.map((filter) {
+          final isSelected = _currentFilter == filter;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: ChoiceChip(
+              label: Text(
+                capitalize(filter.name),
+                style: TextStyle(
+                  color: isSelected ? spotifyGreen : Colors.white,
+                  fontWeight: FontWeight.w500,
                 ),
-              );
-            }).toList(),
+              ),
+              selected: isSelected,
+              selectedColor: spotifyGreen.withAlpha(51),
+              backgroundColor: Colors.grey[900],
+              selectedShadowColor: Colors.grey.shade900,
+              color: WidgetStateProperty.resolveWith<Color?>((states) {
+                return Colors.grey.shade900;
+              }),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isSelected ? spotifyGreen : Colors.grey.shade800,
+                  width: isSelected ? 1 : 0,
+                ),
+              ),
+              visualDensity: const VisualDensity(vertical: -2, horizontal: 0),
+              showCheckmark: false,
+
+              onSelected: (_) => setState(() => _currentFilter = filter),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -145,21 +137,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    _allSongsCount = ref.watch(allSongsProvider).length;
-    albums =
-        (_currentFilter == LibraryFilter.all)
-            ? (ref.watch(frequentAlbumsProvider)).take(5).toList()
-            : ref.watch(frequentAlbumsProvider);
+    albums = (_currentFilter == LibraryFilter.all)
+        ? (ref.watch(frequentAlbumsProvider)).take(5).toList()
+        : ref.watch(frequentAlbumsProvider);
 
-    artists =
-        (_currentFilter == LibraryFilter.all)
-            ? (ref.watch(frequentArtistsProvider)).take(5).toList()
-            : ref.watch(frequentArtistsProvider);
+    artists = (_currentFilter == LibraryFilter.all)
+        ? (ref.watch(frequentArtistsProvider)).take(5).toList()
+        : ref.watch(frequentArtistsProvider);
 
-    playlists =
-        (_currentFilter == LibraryFilter.all)
-            ? (ref.watch(frequentPlaylistsProvider)).take(5).toList()
-            : ref.watch(frequentPlaylistsProvider);
+    playlists = (_currentFilter == LibraryFilter.all)
+        ? (ref.watch(frequentPlaylistsProvider)).take(5).toList()
+        : ref.watch(frequentPlaylistsProvider);
 
     // Watch language listener
     ref.watch(languageNotifierProvider);
@@ -173,23 +161,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         fallbackColor: Colors.redAccent,
         type: LibraryItemType.likedSongs,
       ),
-      LibraryCardData(
-        id: 'h_all',
-        title: 'All Songs',
-        count: _allSongsCount,
-        subtitle: 'Playlist',
-        fallbackColor: Colors.greenAccent,
-        type: LibraryItemType.allSongs,
-      ),
       ...albums.map(
         (album) => LibraryCardData(
           id: album.id,
           title: album.title,
           count: album.songs.length,
-          subtitle:
-              album.artists.isNotEmpty
-                  ? album.artists.map((a) => a.title).join(', ')
-                  : 'Unknown Artist',
+          subtitle: album.artists.isNotEmpty
+              ? album.artists.map((a) => a.title).join(', ')
+              : 'Unknown Artist',
           imageUrl: album.images.isNotEmpty ? album.images.last.url : null,
           fallbackColor: Colors.grey,
           type: LibraryItemType.album,
@@ -199,12 +178,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         (playlist) => LibraryCardData(
           title: playlist.title,
           count: playlist.songs.length,
-          subtitle:
-              playlist.artists.isNotEmpty
-                  ? playlist.artists.map((a) => a.title).join(', ')
-                  : 'Unknown Artist',
-          imageUrl:
-              playlist.images.isNotEmpty ? playlist.images.last.url : null,
+          subtitle: playlist.artists.isNotEmpty
+              ? playlist.artists.map((a) => a.title).join(', ')
+              : 'Unknown Artist',
+          imageUrl: playlist.images.isNotEmpty
+              ? playlist.images.last.url
+              : null,
           fallbackColor: Colors.grey,
           type: LibraryItemType.playlist,
           id: playlist.id,
@@ -237,9 +216,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     radius: 18,
                     backgroundImage:
                         (profileFile != null && profileFile!.existsSync())
-                            ? FileImage(profileFile!)
-                            : const AssetImage('assets/icons/logo.png')
-                                as ImageProvider,
+                        ? FileImage(profileFile!)
+                        : const AssetImage('assets/icons/logo.png')
+                              as ImageProvider,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -258,86 +237,84 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         backgroundColor: spotifyBgColor,
         elevation: 0,
       ),
-      body:
-          !isDefined
-              ? Padding(
-                padding: const EdgeInsets.only(top: 60),
-                child: buildAlbumShimmer(),
-              )
-              : Column(
-                children: [
-                  _buildFilterBar(),
+      body: !isDefined
+          ? Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: buildAlbumShimmer(),
+            )
+          : Column(
+              children: [
+                _buildFilterBar(),
 
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
-                      itemCount: _filteredItems().length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final item = _filteredItems()[index];
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 86),
+                    itemCount: _filteredItems().length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = _filteredItems()[index];
 
-                        return LibraryCard(
-                          id: item.id,
-                          title: item.title,
-                          count: item.count,
-                          imageUrl: item.imageUrl,
-                          fallbackColor: item.fallbackColor,
-                          subtitle: item.subtitle,
-                          type: item.type,
-                          onTap: () {
-                            switch (item.type) {
-                              case LibraryItemType.likedSongs:
-                              case LibraryItemType.allSongs:
-                                Navigator.of(context).push(
-                                  PageTransition(
-                                    type: PageTransitionType.rightToLeft,
-                                    duration: const Duration(milliseconds: 300),
-                                    child: SongsViewer(
-                                      showLikedSongs:
-                                          item.type ==
-                                          LibraryItemType.likedSongs,
-                                    ),
+                      return LibraryCard(
+                        id: item.id,
+                        title: item.title,
+                        count: item.count,
+                        imageUrl: item.imageUrl,
+                        fallbackColor: item.fallbackColor,
+                        subtitle: item.subtitle,
+                        type: item.type,
+                        onTap: () {
+                          switch (item.type) {
+                            case LibraryItemType.likedSongs:
+                            case LibraryItemType.allSongs:
+                              Navigator.of(context).push(
+                                PageTransition(
+                                  type: PageTransitionType.rightToLeft,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: SongsViewer(
+                                    showLikedSongs:
+                                        item.type == LibraryItemType.likedSongs,
                                   ),
-                                );
-                                break;
+                                ),
+                              );
+                              break;
 
-                              case LibraryItemType.album:
-                                Navigator.of(context).push(
-                                  PageTransition(
-                                    type: PageTransitionType.rightToLeft,
-                                    duration: const Duration(milliseconds: 300),
-                                    child: AlbumViewer(albumId: item.id),
-                                  ),
-                                );
-                                break;
+                            case LibraryItemType.album:
+                              Navigator.of(context).push(
+                                PageTransition(
+                                  type: PageTransitionType.rightToLeft,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: AlbumViewer(albumId: item.id),
+                                ),
+                              );
+                              break;
 
-                              case LibraryItemType.artist:
-                                Navigator.of(context).push(
-                                  PageTransition(
-                                    type: PageTransitionType.rightToLeft,
-                                    duration: const Duration(milliseconds: 300),
-                                    child: ArtistViewer(artistId: item.id),
-                                  ),
-                                );
-                                break;
+                            case LibraryItemType.artist:
+                              Navigator.of(context).push(
+                                PageTransition(
+                                  type: PageTransitionType.rightToLeft,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: ArtistViewer(artistId: item.id),
+                                ),
+                              );
+                              break;
 
-                              case LibraryItemType.playlist:
-                                Navigator.of(context).push(
-                                  PageTransition(
-                                    type: PageTransitionType.rightToLeft,
-                                    duration: const Duration(milliseconds: 300),
-                                    child: PlaylistViewer(playlistId: item.id),
-                                  ),
-                                );
-                                break;
-                            }
-                          },
-                        );
-                      },
-                    ),
+                            case LibraryItemType.playlist:
+                              Navigator.of(context).push(
+                                PageTransition(
+                                  type: PageTransitionType.rightToLeft,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: PlaylistViewer(playlistId: item.id),
+                                ),
+                              );
+                              break;
+                          }
+                        },
+                      );
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -420,30 +397,27 @@ class LibraryCard extends StatelessWidget {
                 height: 60,
                 decoration: BoxDecoration(
                   color: imageUrl == null ? fallbackColor : null,
-                  borderRadius:
-                      type == LibraryItemType.artist
-                          ? BorderRadius.circular(60)
-                          : BorderRadius.circular(6),
+                  borderRadius: type == LibraryItemType.artist
+                      ? BorderRadius.circular(60)
+                      : BorderRadius.circular(6),
                 ),
-                child:
-                    imageUrl == null
-                        ? Icon(
-                          title.toLowerCase().contains('liked')
-                              ? Icons.favorite
-                              : Icons.music_note,
-                          color: Colors.black54,
-                          size: 24,
-                        )
-                        : CacheNetWorkImg(
-                          url: imageUrl!,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          borderRadius:
-                              type == LibraryItemType.artist
-                                  ? BorderRadius.circular(60)
-                                  : BorderRadius.circular(6),
-                        ),
+                child: imageUrl == null
+                    ? Icon(
+                        title.toLowerCase().contains('liked')
+                            ? Icons.favorite
+                            : Icons.music_note,
+                        color: Colors.black54,
+                        size: 24,
+                      )
+                    : CacheNetWorkImg(
+                        url: imageUrl!,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        borderRadius: type == LibraryItemType.artist
+                            ? BorderRadius.circular(60)
+                            : BorderRadius.circular(6),
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -93,10 +93,12 @@ class _DashboardState extends ConsumerState<Dashboard> {
       playlists = results[1] as List<Playlist>;
       artists = results[2] as List<ArtistDetails>;
 
-      final allPlaylists =
-          (results[4] as List<List<Playlist>>).expand((x) => x).toList();
-      final allAlbums =
-          (results[5] as List<List<Album>>).expand((x) => x).toList();
+      final allPlaylists = (results[4] as List<List<Playlist>>)
+          .expand((x) => x)
+          .toList();
+      final allAlbums = (results[5] as List<List<Album>>)
+          .expand((x) => x)
+          .toList();
 
       debugPrint('[_init] Latest playlists fetched: ${allPlaylists.length}');
       debugPrint('[_init] Latest albums fetched: ${allAlbums.length}');
@@ -168,6 +170,10 @@ class _DashboardState extends ConsumerState<Dashboard> {
       freqRecentPlaylists.addAll(all.take(8 - freqRecentPlaylists.length));
     }
     freqRecentPlaylists = freqRecentPlaylists.take(8).toList();
+
+    if (freqRecentPlaylists.length.isEven && freqRecentPlaylists.isNotEmpty) {
+      freqRecentPlaylists.removeLast();
+    }
   }
 
   Future<void> _initInternetChecker() async {
@@ -193,71 +199,70 @@ class _DashboardState extends ConsumerState<Dashboard> {
         elevation: 0,
         title: _buildHeader(),
       ),
-      body:
-          loading
-              ? ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                children: [
-                  if (_showWaitingCard)
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 600),
-                        child: GeneralCards(
-                          onClose: () {
-                            _showWaitingCard = false;
-                            setState(() {});
-                          },
-                        ),
+      body: loading
+          ? ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+              children: [
+                if (_showWaitingCard)
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: GeneralCards(
+                        onClose: () {
+                          _showWaitingCard = false;
+                          setState(() {});
+                        },
                       ),
                     ),
-                  heroGridShimmer(),
-                  const SizedBox(height: 16),
-                  buildPlaylistSectionShimmer(),
-                  const SizedBox(height: 16),
-                  buildPlaylistSectionShimmer(),
-                  const SizedBox(height: 70),
-                ],
-              )
-              : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _sectionGrid(freqRecentPlaylists),
-                    _sectionList("Top Latest", topLatest),
+                  ),
+                heroGridShimmer(),
+                const SizedBox(height: 16),
+                buildPlaylistSectionShimmer(),
+                const SizedBox(height: 16),
+                buildPlaylistSectionShimmer(),
+                const SizedBox(height: 70),
+              ],
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionGrid(freqRecentPlaylists),
+                  _sectionList("Top Latest", topLatest),
+                  if (isAppUpdateAvailable && _showUpdateAvailable)
                     if (isAppUpdateAvailable && _showUpdateAvailable)
-                      if (isAppUpdateAvailable && _showUpdateAvailable)
-                        Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 600),
-                            child: GeneralCards(
-                              iconPath: 'assets/icons/alert.png',
-                              title: 'Update Available!',
-                              content:
-                                  'Please update the app to enjoy the best experience and latest features.',
-                              downloadUrl:
-                                  'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
-                              onClose: () {
-                                _showUpdateAvailable = false;
-                                setState(() {});
-                              },
-                            ),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          child: GeneralCards(
+                            iconPath: 'assets/icons/alert.png',
+                            title: 'Update Available!',
+                            content:
+                                'Please update the app to enjoy the best experience and latest features.',
+                            downloadUrl:
+                                'https://github.com/Harish-Srinivas-07/hivefy/releases/latest',
+                            onClose: () {
+                              _showUpdateAvailable = false;
+                              setState(() {});
+                            },
                           ),
                         ),
-                    _sectionAlbumList("Today's biggest hits", topLatestAlbum),
-                    _sectionList("Fresh", fresh),
-                    _sectionList("Party Mode", partyShuffled),
-                    _sectionArtistList("Fav Artists", artists),
-                    _sectionAlbumList("Recent Albums", albums),
-                    _sectionAlbumList("Recommended for today", freshAlbum),
-                    _sectionList("Always Love", loveShuffled),
-                    _sectionList("Century Playlist", playlists),
-                    const SizedBox(height: 60),
-                    makeItHappenCard(),
-                    const SizedBox(height: 100),
-                  ],
-                ),
+                      ),
+                  _sectionAlbumList("Today's biggest hits", topLatestAlbum),
+                  _sectionList("Fresh", fresh),
+                  _sectionList("Party Mode", partyShuffled),
+                  _sectionArtistList("Fav Artists", artists),
+                  _sectionAlbumList("Recent Albums", albums),
+                  _sectionAlbumList("Recommended for today", freshAlbum),
+                  _sectionList("Always Love", loveShuffled),
+                  _sectionList("Century Playlist", playlists),
+                  const SizedBox(height: 60),
+                  makeItHappenCard(),
+                  const SizedBox(height: 100),
+                ],
               ),
+            ),
     );
   }
 
@@ -274,9 +279,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
                 radius: 18,
                 backgroundImage:
                     (profileFile != null && profileFile!.existsSync())
-                        ? FileImage(profileFile!)
-                        : const AssetImage('assets/icons/logo.png')
-                            as ImageProvider,
+                    ? FileImage(profileFile!)
+                    : const AssetImage('assets/icons/logo.png')
+                          as ImageProvider,
               ),
             ),
             const SizedBox(width: 15),
@@ -306,13 +311,6 @@ class _DashboardState extends ConsumerState<Dashboard> {
         url: '',
         images: [],
       ),
-      // Playlist(
-      //   id: 'all',
-      //   title: 'All Songs',
-      //   type: 'custom',
-      //   url: '',
-      //   images: [],
-      // ),
       ...playlists,
     ];
 
@@ -332,8 +330,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
               crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio:
-                  MediaQuery.of(context).size.width > 600 ? 3 : 3.5,
+              childAspectRatio: MediaQuery.of(context).size.width > 600
+                  ? 3
+                  : 3.5,
             ),
             itemBuilder: (context, index) {
               final playlist = displayList[index];
@@ -348,10 +347,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
   Widget _gridCard(Playlist p) {
     final isSpecial = p.id == 'liked' || p.id == 'all';
     final img = p.images.isNotEmpty ? p.images.first.url : '';
-    final subtitle =
-        (p.artists.isNotEmpty
-            ? p.artists.first.title
-            : (p.songCount != null ? '${p.songCount} songs' : ''));
+    final subtitle = (p.artists.isNotEmpty
+        ? p.artists.first.title
+        : (p.songCount != null ? '${p.songCount} songs' : ''));
 
     return GestureDetector(
       onTap: () {
@@ -363,17 +361,7 @@ class _DashboardState extends ConsumerState<Dashboard> {
               child: SongsViewer(showLikedSongs: true),
             ),
           );
-        }
-        // else if (p.id == 'all') {
-        //   Navigator.of(context).push(
-        //     PageTransition(
-        //       type: PageTransitionType.rightToLeft,
-        //       duration: const Duration(milliseconds: 300),
-        //       child: SongsViewer(showLikedSongs: false),
-        //     ),
-        //   );
-        // }
-        else {
+        } else {
           Navigator.of(context).push(
             PageTransition(
               type: PageTransitionType.rightToLeft,
@@ -402,36 +390,32 @@ class _DashboardState extends ConsumerState<Dashboard> {
                 topLeft: Radius.circular(6),
                 bottomLeft: Radius.circular(6),
               ),
-              child:
-                  isSpecial
-                      ? Container(
-                        height: double.infinity,
-                        width: 50,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors:
-                                p.id == 'liked'
-                                    ? [Colors.purpleAccent, Colors.deepPurple]
-                                    : [spotifyGreen, Colors.teal],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+              child: isSpecial
+                  ? Container(
+                      height: double.infinity,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: p.id == 'liked'
+                              ? [Colors.purpleAccent, Colors.deepPurple]
+                              : [spotifyGreen, Colors.teal],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        child: Icon(
-                          p.id == 'liked'
-                              ? Icons.favorite
-                              : Icons.library_music,
-                          color: Colors.white,
-                        ),
-                      )
-                      : (img.isNotEmpty
-                          ? CacheNetWorkImg(
+                      ),
+                      child: Icon(
+                        p.id == 'liked' ? Icons.favorite : Icons.library_music,
+                        color: Colors.white,
+                      ),
+                    )
+                  : (img.isNotEmpty
+                        ? CacheNetWorkImg(
                             url: img,
                             width: 50,
                             height: double.infinity,
                             fit: BoxFit.cover,
                           )
-                          : Container(
+                        : Container(
                             width: 60,
                             color: Colors.grey[800],
                             child: const Icon(Icons.album, color: Colors.white),
@@ -498,8 +482,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
             height: 220,
             child: PageView.builder(
               controller: PageController(
-                viewportFraction:
-                    MediaQuery.of(context).size.width > 600 ? 0.22 : 0.45,
+                viewportFraction: MediaQuery.of(context).size.width > 600
+                    ? 0.22
+                    : 0.45,
               ),
               padEnds: false,
               physics: const BouncingScrollPhysics(),
@@ -519,12 +504,12 @@ class _DashboardState extends ConsumerState<Dashboard> {
   }
 
   Widget _playlistCard(Playlist playlist) {
-    final imageUrl =
-        playlist.images.isNotEmpty ? playlist.images.first.url : '';
-    final subtitle =
-        playlist.artists.isNotEmpty
-            ? playlist.artists.first.title
-            : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
+    final imageUrl = playlist.images.isNotEmpty
+        ? playlist.images.first.url
+        : '';
+    final subtitle = playlist.artists.isNotEmpty
+        ? playlist.artists.first.title
+        : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
     final description = playlist.description;
 
     return GestureDetector(
@@ -563,17 +548,16 @@ class _DashboardState extends ConsumerState<Dashboard> {
             aspectRatio: 1,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child:
-                  imageUrl.isNotEmpty
-                      ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
-                      : Container(
-                        color: Colors.grey.shade800,
-                        child: const Icon(
-                          Icons.album,
-                          color: Colors.white,
-                          size: 32,
-                        ),
+              child: imageUrl.isNotEmpty
+                  ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
+                  : Container(
+                      color: Colors.grey.shade800,
+                      child: const Icon(
+                        Icons.album,
+                        color: Colors.white,
+                        size: 32,
                       ),
+                    ),
             ),
           ),
           const SizedBox(height: 6),
@@ -673,13 +657,13 @@ class _DashboardState extends ConsumerState<Dashboard> {
         children: [
           CircleAvatar(
             radius: 50,
-            backgroundImage:
-                imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            backgroundImage: imageUrl.isNotEmpty
+                ? NetworkImage(imageUrl)
+                : null,
             backgroundColor: Colors.grey.shade800,
-            child:
-                imageUrl.isEmpty
-                    ? const Icon(Icons.person, color: Colors.white, size: 30)
-                    : null,
+            child: imageUrl.isEmpty
+                ? const Icon(Icons.person, color: Colors.white, size: 30)
+                : null,
           ),
           const SizedBox(height: 6),
           SizedBox(
@@ -729,8 +713,9 @@ class _DashboardState extends ConsumerState<Dashboard> {
             height: 220,
             child: PageView.builder(
               controller: PageController(
-                viewportFraction:
-                    MediaQuery.of(context).size.width > 600 ? 0.22 : 0.45,
+                viewportFraction: MediaQuery.of(context).size.width > 600
+                    ? 0.22
+                    : 0.45,
               ),
               padEnds: false,
               physics: const BouncingScrollPhysics(),
@@ -768,17 +753,16 @@ class _DashboardState extends ConsumerState<Dashboard> {
             aspectRatio: 1,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child:
-                  imageUrl.isNotEmpty
-                      ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
-                      : Container(
-                        color: Colors.grey.shade800,
-                        child: const Icon(
-                          Icons.album,
-                          color: Colors.white,
-                          size: 32,
-                        ),
+              child: imageUrl.isNotEmpty
+                  ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
+                  : Container(
+                      color: Colors.grey.shade800,
+                      child: const Icon(
+                        Icons.album,
+                        color: Colors.white,
+                        size: 32,
                       ),
+                    ),
             ),
           ),
 

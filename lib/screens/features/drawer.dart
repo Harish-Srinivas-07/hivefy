@@ -39,9 +39,9 @@ class SideDrawer extends StatelessWidget {
                         radius: 20,
                         backgroundImage:
                             (profileFile != null && profileFile!.existsSync())
-                                ? FileImage(profileFile!)
-                                : const AssetImage('assets/icons/logo.png')
-                                    as ImageProvider,
+                            ? FileImage(profileFile!)
+                            : const AssetImage('assets/icons/logo.png')
+                                  as ImageProvider,
                       ),
                       const SizedBox(width: 10),
                       Column(

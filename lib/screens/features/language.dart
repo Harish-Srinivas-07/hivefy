@@ -18,8 +18,9 @@ Future<void> initLanguage(WidgetRef ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedLang = prefs.getString('app_language') ?? 'tamil';
   final langs = savedLang.split(',').where((e) => e.isNotEmpty).toList();
-  ref.read(languageNotifierProvider).value =
-      langs.isNotEmpty ? langs : ['tamil'];
+  ref.read(languageNotifierProvider).value = langs.isNotEmpty
+      ? langs
+      : ['tamil'];
 }
 
 final List<String> availableLanguages = [
@@ -153,10 +154,10 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                   builder: (context, constraints) {
                     final minHeight = kToolbarHeight;
                     final maxHeight = 160.0;
-                    final collapsePercent = ((constraints.maxHeight -
-                                minHeight) /
-                            (maxHeight - minHeight))
-                        .clamp(0.0, 1.0);
+                    final collapsePercent =
+                        ((constraints.maxHeight - minHeight) /
+                                (maxHeight - minHeight))
+                            .clamp(0.0, 1.0);
 
                     return FlexibleSpaceBar(
                       centerTitle: false,
@@ -237,41 +238,39 @@ class _LanguageSetPageState extends ConsumerState<LanguageSetPage> {
                   child: Wrap(
                     spacing: 6,
                     runSpacing: 3,
-                    children:
-                        availableLanguages.map((lang) {
-                          final isSelected = _selectedLangs.contains(lang);
-                          return ChoiceChip(
-                            label: Text(
-                              capitalize(lang),
-                              style: TextStyle(
-                                color: isSelected ? spotifyGreen : Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            selected: isSelected,
-                            selectedColor: spotifyGreen.withAlpha(51),
-                            backgroundColor: Colors.grey[900],
-                            selectedShadowColor: Colors.grey.shade900,
-                            color: WidgetStateProperty.resolveWith<Color?>((
-                              states,
-                            ) {
-                              return Colors.grey.shade900;
-                            }),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(
-                                color:
-                                    isSelected
-                                        ? spotifyGreen
-                                        : Colors.grey.shade800,
-                                width: isSelected ? 1 : 0,
-                              ),
-                            ),
-                            showCheckmark: false,
-                            visualDensity: const VisualDensity(vertical: -2),
-                            onSelected: (_) => _toggleLanguage(lang),
-                          );
-                        }).toList(),
+                    children: availableLanguages.map((lang) {
+                      final isSelected = _selectedLangs.contains(lang);
+                      return ChoiceChip(
+                        label: Text(
+                          capitalize(lang),
+                          style: TextStyle(
+                            color: isSelected ? spotifyGreen : Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        selected: isSelected,
+                        selectedColor: spotifyGreen.withAlpha(51),
+                        backgroundColor: Colors.grey[900],
+                        selectedShadowColor: Colors.grey.shade900,
+                        color: WidgetStateProperty.resolveWith<Color?>((
+                          states,
+                        ) {
+                          return Colors.grey.shade900;
+                        }),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? spotifyGreen
+                                : Colors.grey.shade800,
+                            width: isSelected ? 1 : 0,
+                          ),
+                        ),
+                        showCheckmark: false,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        onSelected: (_) => _toggleLanguage(lang),
+                      );
+                    }).toList(),
                   ),
                 ),
               ),

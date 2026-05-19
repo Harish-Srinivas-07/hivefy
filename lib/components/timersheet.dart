@@ -100,20 +100,18 @@ class _SleepTimerSheetState extends ConsumerState<SleepTimerSheet> {
                               style: TextStyle(
                                 fontSize: 14,
                                 color: isActive ? spotifyGreen : Colors.white38,
-                                fontWeight:
-                                    isActive
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
+                                fontWeight: isActive
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                               ),
                             ),
-                            trailing:
-                                isActive
-                                    ? const Icon(
-                                      Icons.check,
-                                      color: spotifyGreen,
-                                      size: 20,
-                                    )
-                                    : null,
+                            trailing: isActive
+                                ? const Icon(
+                                    Icons.check,
+                                    color: spotifyGreen,
+                                    size: 20,
+                                  )
+                                : null,
                           ),
                         );
                       }),

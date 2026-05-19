@@ -150,10 +150,9 @@ Future<Map<String, dynamic>> sourceforgeUpdate() async {
     final build = buildMatch?.group(1) ?? '0';
     final downloadUrl = latest['download_url'];
 
-    final currBuild =
-        int.parse(packageInfo.buildNumber) > 1000
-            ? (int.parse(packageInfo.buildNumber) % 1000).toString()
-            : packageInfo.buildNumber;
+    final currBuild = int.parse(packageInfo.buildNumber) > 1000
+        ? (int.parse(packageInfo.buildNumber) % 1000).toString()
+        : packageInfo.buildNumber;
 
     return {
       'newVer': version,
@@ -190,14 +189,14 @@ Future<Map<String, dynamic>> githubUpdate() async {
 
       // Safe parsing for tagName like "v1.0.0+12"
       final tagParts = tagName.split('+');
-      final version =
-          tagParts.isNotEmpty ? tagParts.first.replaceFirst('v', '') : '0.0.0';
+      final version = tagParts.isNotEmpty
+          ? tagParts.first.replaceFirst('v', '')
+          : '0.0.0';
       final newBuildVer = tagParts.length > 1 ? tagParts[1] : '0';
 
-      final currBuild =
-          int.parse(packageInfo.buildNumber) > 1000
-              ? (int.parse(packageInfo.buildNumber) % 1000).toString()
-              : packageInfo.buildNumber;
+      final currBuild = int.parse(packageInfo.buildNumber) > 1000
+          ? (int.parse(packageInfo.buildNumber) % 1000).toString()
+          : packageInfo.buildNumber;
 
       return {
         'results': isUpdateAvailable(

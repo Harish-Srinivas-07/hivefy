@@ -30,15 +30,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void initState() {
     super.initState();
 
-    _scrollController =
-        ScrollController()..addListener(() {
-          final offset = _scrollController.offset;
-          if (offset > 120 && !_isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = true);
-          } else if (offset <= 120 && _isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = false);
-          }
-        });
+    _scrollController = ScrollController()
+      ..addListener(() {
+        final offset = _scrollController.offset;
+        if (offset > 120 && !_isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = true);
+        } else if (offset <= 120 && _isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = false);
+        }
+      });
     _checkNotificationStatus();
     _refreshStorageFuture();
   }
@@ -66,8 +66,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       debugPrint('--> free space $freeMB MB, total $totalMB MB');
 
       // Use totalMB if valid, otherwise fallback to 32 GB (converted to MB)
-      final safeMB =
-          (totalMB > 0 && totalMB < 1024 * 1024) ? totalMB : 32 * 1024;
+      final safeMB = (totalMB > 0 && totalMB < 1024 * 1024)
+          ? totalMB
+          : 32 * 1024;
 
       return safeMB * 1024 * 1024; // convert MB → bytes
     } catch (_) {
@@ -102,9 +103,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               builder: (context, constraints) {
                 final minHeight = kToolbarHeight;
                 final maxHeight = 160.0;
-                final collapsePercent = ((constraints.maxHeight - minHeight) /
-                        (maxHeight - minHeight))
-                    .clamp(0.0, 1.0);
+                final collapsePercent =
+                    ((constraints.maxHeight - minHeight) /
+                            (maxHeight - minHeight))
+                        .clamp(0.0, 1.0);
 
                 return FlexibleSpaceBar(
                   centerTitle: false,
@@ -419,57 +421,52 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       return Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children:
-                            servers.map((server) {
-                              final isSelected = server == selected;
+                        children: servers.map((server) {
+                          final isSelected = server == selected;
 
-                              return ChoiceChip(
-                                label: Text(
-                                  isSelected
-                                      ? server.displayName
-                                      : server.displayName.replaceAll(
-                                        " Server",
-                                        "",
-                                      ),
-                                  style: TextStyle(
-                                    color:
-                                        isSelected
-                                            ? spotifyGreen
-                                            : Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                selected: isSelected,
-                                color: WidgetStateProperty.resolveWith<Color?>((
-                                  states,
-                                ) {
-                                  return Colors.grey.shade900;
-                                }),
-                                selectedColor: spotifyGreen.withAlpha(51),
-                                backgroundColor: Colors.grey[900],
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  side: BorderSide(
-                                    color:
-                                        isSelected
-                                            ? spotifyGreen
-                                            : Colors.grey.shade800,
-                                    width: isSelected ? 1 : 0,
-                                  ),
-                                ),
-                                showCheckmark: false,
-                                onSelected: (_) async {
-                                  await ServerManager.setServer(server);
-                                  if (mounted) setState(() {});
-                                  info(
-                                    '${server.displayName} selected for streaming!',
-                                    Severity.success,
-                                  );
-                                  await saavn.refreshServer();
-                                  if (mounted) setState(() {});
-                                },
+                          return ChoiceChip(
+                            label: Text(
+                              isSelected
+                                  ? server.displayName
+                                  : server.displayName.replaceAll(
+                                      " Server",
+                                      "",
+                                    ),
+                              style: TextStyle(
+                                color: isSelected ? spotifyGreen : Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            selected: isSelected,
+                            color: WidgetStateProperty.resolveWith<Color?>((
+                              states,
+                            ) {
+                              return Colors.grey.shade900;
+                            }),
+                            selectedColor: spotifyGreen.withAlpha(51),
+                            backgroundColor: Colors.grey[900],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? spotifyGreen
+                                    : Colors.grey.shade800,
+                                width: isSelected ? 1 : 0,
+                              ),
+                            ),
+                            showCheckmark: false,
+                            onSelected: (_) async {
+                              await ServerManager.setServer(server);
+                              if (mounted) setState(() {});
+                              info(
+                                '${server.displayName} selected for streaming!',
+                                Severity.success,
                               );
-                            }).toList(),
+                              await saavn.refreshServer();
+                              if (mounted) setState(() {});
+                            },
+                          );
+                        }).toList(),
                       );
                     },
                   ),

@@ -204,9 +204,9 @@ class SaavnAPI {
 
     return ids != null
         ? ids
-            .where((id) => resultMap.containsKey(id))
-            .map((id) => resultMap[id]!)
-            .toList()
+              .where((id) => resultMap.containsKey(id))
+              .map((id) => resultMap[id]!)
+              .toList()
         : resultMap.values.toList();
   }
 
@@ -225,32 +225,6 @@ class SaavnAPI {
       log('Error in getSearchSuggestions: $e', name: "YoutubeAPI");
       return [];
     }
-  }
-
-  Future<ArtistSongsResponse?> getArtistSongsByIdWithTotal({
-    required String artistId,
-    int page = 0,
-    ArtistSongsSortBy sortBy = ArtistSongsSortBy.popularity,
-    SortOrder sortOrder = SortOrder.desc,
-  }) async {
-    final url = Uri.parse(
-      '$baseUrl/api/artists/$artistId/songs?page=$page&sortBy=${sortBy.value}&sortOrder=${sortOrder.value}',
-    );
-
-    try {
-      final response = await get(url, headers: headers);
-      if (response.statusCode == 200) {
-        final jsonBody = json.decode(response.body);
-        if (jsonBody['success'] == true && jsonBody['data'] != null) {
-          return ArtistSongsResponse.fromJson(jsonBody);
-        }
-      } else {
-        debugPrint('❌ getArtistSongsWithTotal failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error in getArtistSongsWithTotal: $e');
-    }
-    return null;
   }
 
   Future<ArtistDetails?> fetchArtistDetailsById({
@@ -478,10 +452,9 @@ extension SortOrderExt on SortOrder {
 
 int getTotalDuration(List<SongDetail> songs) {
   return songs.fold<int>(0, (sum, song) {
-    final dur =
-        (song.duration is int)
-            ? song.duration as int
-            : int.tryParse(song.duration.toString()) ?? 0;
+    final dur = (song.duration is int)
+        ? song.duration as int
+        : int.tryParse(song.duration.toString()) ?? 0;
     return sum + dur;
   });
 }

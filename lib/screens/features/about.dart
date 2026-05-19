@@ -25,15 +25,15 @@ class _AboutPageState extends ConsumerState<AboutPage> {
   void initState() {
     super.initState();
 
-    _scrollController =
-        ScrollController()..addListener(() {
-          final offset = _scrollController.offset;
-          if (offset > 120 && !_isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = true);
-          } else if (offset <= 120 && _isTitleCollapsed) {
-            setState(() => _isTitleCollapsed = false);
-          }
-        });
+    _scrollController = ScrollController()
+      ..addListener(() {
+        final offset = _scrollController.offset;
+        if (offset > 120 && !_isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = true);
+        } else if (offset <= 120 && _isTitleCollapsed) {
+          setState(() => _isTitleCollapsed = false);
+        }
+      });
 
     _loadPackageInfo();
     checkForUpdate();
@@ -80,6 +80,18 @@ class _AboutPageState extends ConsumerState<AboutPage> {
 
   SliverToBoxAdapter _buildCreditsSection() {
     final credits = [
+      {
+        'icon': 'assets/icons/case.png',
+        'title': 'HiveMinds',
+        'username': 'thehiveminds.in',
+        'url': 'https://thehiveminds.in',
+      },
+      {
+        'icon': 'assets/icons/atsign.png',
+        'title': 'Contact Us',
+        'username': 'info@thehiveminds.in',
+        'url': 'mailto:info@thehiveminds.in',
+      },
       {
         'icon': 'assets/icons/github.png',
         'title': 'GitHub',
@@ -141,12 +153,15 @@ class _AboutPageState extends ConsumerState<AboutPage> {
             ...credits.map(
               (c) => GestureDetector(
                 onTap: () async {
-                  final uri = Uri.parse(c['url']!);
+                  final urlStr = c['url']!;
+                  final uri = Uri.parse(urlStr);
                   try {
-                    // Use launchUrl with universal links fallback
+                    if (urlStr.startsWith('mailto:')) {
+                      await launchUrl(uri);
+                      return;
+                    }
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   } catch (e) {
-                    // Fallback: open in webview if external fails
                     debugPrint('--> URL launch failed: $e');
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri, mode: LaunchMode.inAppWebView);
@@ -225,9 +240,10 @@ class _AboutPageState extends ConsumerState<AboutPage> {
               builder: (context, constraints) {
                 final minHeight = kToolbarHeight;
                 final maxHeight = 160.0;
-                final collapsePercent = ((constraints.maxHeight - minHeight) /
-                        (maxHeight - minHeight))
-                    .clamp(0.0, 1.0);
+                final collapsePercent =
+                    ((constraints.maxHeight - minHeight) /
+                            (maxHeight - minHeight))
+                        .clamp(0.0, 1.0);
 
                 return FlexibleSpaceBar(
                   centerTitle: false,
@@ -338,6 +354,124 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                   ),
                   child: GestureDetector(
                     onTap: () async {
+                      final uri = Uri.parse('https://hivefyweb.vercel.app');
+                      try {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      } catch (e) {
+                        debugPrint('--> URL launch failed: $e');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.inAppWebView);
+                        } else {
+                          info(
+                            'Cannot open link: https://hivefyweb.vercel.app',
+                            Severity.error,
+                          );
+                        }
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withAlpha(25),
+                          width: 1.0,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset(
+                              'assets/icons/logo.png',
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Hivefy Web',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: spotifyGreen,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'WEB',
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Stream your favorite music anywhere via browser',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'hivefyweb.vercel.app',
+                                  style: TextStyle(
+                                    color: spotifyGreen.withAlpha(204),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white54,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: GestureDetector(
+                    onTap: () async {
                       final uri = Uri.parse(
                         'https://github.com/Harish-Srinivas-07/hivefy',
                       );
@@ -421,9 +555,54 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: GestureDetector(
+                    onTap: () async {
+                      final uri = Uri.parse('https://thehiveminds.in');
+                      try {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      } catch (e) {
+                        debugPrint('--> URL launch failed: $e');
+                      }
+                    },
+                    child: Center(
+                      child: RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          text: 'Need Custom Software?\n',
+                          style: TextStyle(
+                            color: spotifyGreen,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'SpotifyMix',
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                          children: const [
+                            TextSpan(
+                              text:
+                                  'If any software needed to build just contact us.\nWe build any application, web app, and more.',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
+                const SizedBox(height: 12),
                 Divider(color: Colors.grey.shade800),
-
                 const SizedBox(height: 20),
               ],
             ),

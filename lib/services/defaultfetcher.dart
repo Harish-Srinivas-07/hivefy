@@ -46,10 +46,9 @@ class DailyFetches {
     final stale = force || _isStale(_prefs!.getString(_artistsTsKey));
     if (!stale) return getArtistsFromCache();
 
-    final ids =
-        (artistIds ?? ArtistDB.knownArtists.keys.toList())
-            .where((e) => e.isNotEmpty)
-            .toList();
+    final ids = (artistIds ?? ArtistDB.knownArtists.keys.toList())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     final results = await Future.wait(
       ids.map((id) async {
@@ -113,8 +112,9 @@ class DailyFetches {
     final validPlaylists = results.whereType<Playlist>().toList();
     if (validPlaylists.isEmpty) return [];
 
-    final jsonList =
-        validPlaylists.map((p) => Playlist.playlistToJson(p)).toList();
+    final jsonList = validPlaylists
+        .map((p) => Playlist.playlistToJson(p))
+        .toList();
 
     await _prefs!.setString(_plKey, jsonEncode(jsonList));
     await _prefs!.setString(_plTsKey, DateTime.now().toIso8601String());

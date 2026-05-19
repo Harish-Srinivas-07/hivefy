@@ -20,13 +20,13 @@ class LatestSaavnFetcher {
     final cacheKey = "latest_${lang}_playlists";
     final cacheTimeKey = "latest_${lang}_playlists_time";
 
-    // Check cache validity (24h)
-    const dayMs = 24 * 60 * 60 * 1000;
+    // Check cache validity (6h)
+    const cacheMs = 6 * 60 * 60 * 1000;
     final lastFetch = prefs.getInt(cacheTimeKey) ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Try cache if still valid
-    if (now - lastFetch < dayMs) {
+    if (now - lastFetch < cacheMs) {
       final cached = prefs.getString(cacheKey);
       if (cached != null) {
         final jsonList = json.decode(cached);
@@ -97,13 +97,13 @@ class LatestSaavnFetcher {
     final cacheKey = "latest_${lang}_albums";
     final cacheTimeKey = "latest_${lang}_albums_time";
 
-    // Check cache validity (24h)
-    const dayMs = 24 * 60 * 60 * 1000;
+    // Check cache validity (6h)
+    const cacheMs = 6 * 60 * 60 * 1000;
     final lastFetch = prefs.getInt(cacheTimeKey) ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Use cache if still valid
-    if (now - lastFetch < dayMs) {
+    if (now - lastFetch < cacheMs) {
       final cached = prefs.getString(cacheKey);
       if (cached != null) {
         final jsonList = json.decode(cached);

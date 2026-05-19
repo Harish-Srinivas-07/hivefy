@@ -87,8 +87,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
       langs.map((lang) => LatestSaavnFetcher.getLatestAlbums(lang)),
     );
     final allAlbums = albumLists.expand((e) => e).toList();
-    _similarAlbum =
-        allAlbums.where((a) => a.id != widget.albumId).toList()..shuffle();
+    _similarAlbum = allAlbums.where((a) => a.id != widget.albumId).toList()
+      ..shuffle();
     _similarAlbum = _similarAlbum.take(15).toList();
   }
 
@@ -287,8 +287,9 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                                 child: Text(
                                   song.title,
                                   style: TextStyle(
-                                    color:
-                                        isPlaying ? spotifyGreen : Colors.white,
+                                    color: isPlaying
+                                        ? spotifyGreen
+                                        : Colors.white,
                                     fontWeight: FontWeight.w500,
                                     fontSize: 16,
                                   ),
@@ -409,10 +410,9 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                   final bool isSameSource = currentSourceId == widget.albumId;
 
                   // --- Icon logic ---
-                  final icon =
-                      (isSameSource && isPlaying)
-                          ? Icons.pause
-                          : Icons.play_arrow;
+                  final icon = (isSameSource && isPlaying)
+                      ? Icons.pause
+                      : Icons.play_arrow;
 
                   return GestureDetector(
                     onTap: () async {
@@ -511,8 +511,8 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
                 height: 32,
                 color: Colors.white70,
               );
-              onTap =
-                  () async => await offlineManager.downloadAlbumSongs(album);
+              onTap = () async =>
+                  await offlineManager.downloadAlbumSongs(album);
             }
 
             return GestureDetector(
@@ -554,173 +554,171 @@ class _AlbumViewerState extends ConsumerState<AlbumViewer> {
       backgroundColor: albumCoverColour,
       body: Container(
         decoration: BoxDecoration(color: spotifyBgColor),
-        child:
-            _loading
-                ? Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: buildAlbumShimmer(),
-                )
-                : _album == null
-                ? const Center(
-                  child: Text(
-                    "Failed to load album",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                )
-                : CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      backgroundColor: getDominantDarker(albumCoverColour),
-                      expandedHeight: 300,
-                      elevation: 0,
-                      leading: const BackButton(color: Colors.white),
-                      flexibleSpace: FlexibleSpaceBar(
-                        collapseMode: CollapseMode.pin,
-                        centerTitle: false,
-                        titlePadding: EdgeInsets.only(
-                          left: _isTitleCollapsed ? 72 : 16,
-                          bottom: 16,
-                          right: 16,
+        child: _loading
+            ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: buildAlbumShimmer(),
+              )
+            : _album == null
+            ? const Center(
+                child: Text(
+                  "Failed to load album",
+                  style: TextStyle(color: Colors.white70),
+                ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: getDominantDarker(albumCoverColour),
+                    expandedHeight: 300,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      centerTitle: false,
+                      titlePadding: EdgeInsets.only(
+                        left: _isTitleCollapsed ? 72 : 16,
+                        bottom: 16,
+                        right: 16,
+                      ),
+                      title: AnimatedOpacity(
+                        opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          _album!.title,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        title: AnimatedOpacity(
-                          opacity: _isTitleCollapsed ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Text(
-                            _album!.title,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                      ),
+                      background: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              getDominantDarker(albumCoverColour),
+                              spotifyBgColor,
+                            ],
                           ),
                         ),
-                        background: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                getDominantDarker(albumCoverColour),
-                                spotifyBgColor,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: kToolbarHeight),
+                          child: Center(
+                            child: CacheNetWorkImg(
+                              url: _album!.images.isNotEmpty
+                                  ? _album!.images.last.url
+                                  : "",
+                              width: 280,
+                              height: 280,
+                              fit: BoxFit.cover,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!_isTitleCollapsed)
+                                  Text(
+                                    _album!.title,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 20,
+                                    ),
+                                    // overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (_album!.artist.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text(
+                                      _album!.artist,
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                if (_album!.description.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2.0),
+                                    child: Text(
+                                      _album!.description,
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                if (_totalAlbumDuration > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2.0),
+                                    child: Text(
+                                      '${_albumSongDetails.length} songs • ${formatDuration(_totalAlbumDuration)}',
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: kToolbarHeight),
-                            child: Center(
-                              child: CacheNetWorkImg(
-                                url:
-                                    _album!.images.isNotEmpty
-                                        ? _album!.images.last.url
-                                        : "",
-                                width: 280,
-                                height: 280,
-                                fit: BoxFit.cover,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
                     ),
+                  ),
 
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (!_isTitleCollapsed)
-                                    Text(
-                                      _album!.title,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 20,
-                                      ),
-                                      // overflow: TextOverflow.ellipsis,
-                                    ),
-                                  if (_album!.artist.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4.0),
-                                      child: Text(
-                                        _album!.artist,
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_album!.description.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2.0),
-                                      child: Text(
-                                        _album!.description,
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_totalAlbumDuration > 0)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2.0),
-                                      child: Text(
-                                        '${_albumSongDetails.length} songs • ${formatDuration(_totalAlbumDuration)}',
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          if (_album != null) _downloadAlbumSong(_album!),
+                          _buildShufflePlayButtons(),
+                        ],
                       ),
                     ),
+                  ),
 
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            if (_album != null) _downloadAlbumSong(_album!),
-                            _buildShufflePlayButtons(),
-                          ],
-                        ),
-                      ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final song = _album!.songs[index];
+                      return _buildSwipeSongCard(song);
+                    }, childCount: _album!.songs.length),
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: _buildAlbumList(
+                      'You might also like',
+                      _similarAlbum,
                     ),
+                  ),
 
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final song = _album!.songs[index];
-                        return _buildSwipeSongCard(song);
-                      }, childCount: _album!.songs.length),
-                    ),
-
-                    SliverToBoxAdapter(
-                      child: _buildAlbumList(
-                        'You might also like',
-                        _similarAlbum,
-                      ),
-                    ),
-
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
-                ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
       ),
     );
   }
