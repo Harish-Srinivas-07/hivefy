@@ -1,0 +1,779 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import '../../components/staggered_appearance.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_swipe_action_cell/core/cell.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:page_transition/page_transition.dart';
+import 'package:readmore/readmore.dart';
+import 'package:hivefy/utils/logger.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../components/empty_state.dart';
+import '../../components/song_row_parts.dart';
+import '../../components/showmenu.dart';
+import '../../components/snackbar.dart';
+import '../../components/timersheet.dart';
+import '../../models/datamodel.dart';
+import '../../components/shimmers.dart';
+import '../../services/audiohandler.dart';
+import '../../services/youtube.dart';
+import '../../services/latest_music_fetcher.dart';
+import '../../services/offlinemanager.dart';
+import '../../services/sleeptimer.dart';
+import '../../shared/constants.dart';
+import '../../utils/format.dart';
+import '../../utils/playlist_subtitle.dart';
+import '../../utils/theme.dart';
+import '../features/language.dart';
+
+class PlaylistViewer extends ConsumerStatefulWidget {
+  final String playlistId;
+
+  const PlaylistViewer({super.key, required this.playlistId});
+
+  @override
+  ConsumerState<PlaylistViewer> createState() => _PlaylistViewerState();
+}
+
+class _PlaylistViewerState extends ConsumerState<PlaylistViewer> {
+  Playlist? _playlist;
+  bool _loading = true;
+
+  final ScrollController _scrollController = ScrollController();
+  bool _isTitleCollapsed = false;
+  List<SongDetail> _playlistSongDetails = [];
+  int _totalPlaylistDuration = 0;
+  Color playlistCoverColor = Colors.indigo;
+  List<Playlist> similarPlaylist = [];
+  late final ValueNotifier<List<String>> _languages;
+  int _similarGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _languages = ref.read(languageNotifierProvider);
+    _languages.addListener(_onLanguagesChanged);
+    _fetchPlaylist();
+
+    _scrollController.addListener(() {
+      bool isCollapsed = _scrollController.hasClients && _scrollController.offset > (400 - kToolbarHeight - 20);
+
+      if (isCollapsed != _isTitleCollapsed) {
+        _isTitleCollapsed = isCollapsed;
+        if (mounted) setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _languages.removeListener(_onLanguagesChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updateBgColor() async {
+    if (_playlist == null || _playlist!.images.isEmpty || _playlist!.images.last.url.isEmpty) {
+      return;
+    }
+
+    final dominant = await getDominantColorFromImage(_playlist!.images.last.url);
+
+    if (!mounted) return;
+
+    playlistCoverColor = getDominantDarker(dominant);
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _fetchPlaylist() async {
+    if (mounted) setState(() => _loading = true);
+
+    try {
+      final playlist = await YoutubeAPI().fetchPlaylistById(playlistId: widget.playlistId, limit: 50);
+
+      if (playlist == null) {
+        Logger.log('PlaylistViewer', 'No playlist or songs available for ${widget.playlistId}');
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      _playlist = playlist;
+      Logger.log('PlaylistViewer', '--> ${widget.playlistId} Playlist has ${_playlist?.songs.length} songs');
+      await _updateBgColor();
+      _playlistSongDetails = playlist.songs;
+      _totalPlaylistDuration = getTotalDuration(_playlistSongDetails);
+    } catch (e, st) {
+      Logger.error('PlaylistViewer', "Error fetching playlist: $e\n$st");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+
+      if (mounted) unawaited(_loadSimilar());
+    }
+  }
+
+  void _onLanguagesChanged() => unawaited(_loadSimilar());
+
+  Future<void> _loadSimilar() async {
+    final generation = ++_similarGeneration;
+    final langs = List<String>.from(_languages.value);
+    try {
+      final results = await Future.wait(langs.map(LatestMusicFetcher.getLatestPlaylists));
+      if (!mounted || generation != _similarGeneration) return;
+      final matches = results.expand((items) => items).where((p) => p.id != widget.playlistId).toList()..shuffle();
+      setState(() => similarPlaylist = matches.take(15).toList());
+    } catch (e) {
+      Logger.error('PlaylistViewer', 'Unable to load recommendations: $e');
+    }
+  }
+
+  Widget _buildHeader() {
+    if (_playlist == null) return const SizedBox.shrink();
+
+    final imageUrl = _playlist!.images.isNotEmpty ? _playlist!.images.last.url : '';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [playlistCoverColor, spotifyBgColor],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: kToolbarHeight + 16, bottom: 16, left: 16, right: 16),
+        child: Center(
+          child: imageUrl.isNotEmpty
+              ? CacheNetWorkImg(
+                  url: imageUrl,
+                  width: 300,
+                  height: 300,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(20),
+                )
+              : Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(20)),
+                  child: const Icon(Icons.playlist_play, size: 100, color: Colors.white),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSongList() {
+    if (_loading && _playlistSongDetails.isEmpty) {
+      return buildAlbumShimmer();
+    }
+
+    if (_playlistSongDetails.isEmpty) {
+      return const EmptyState(
+        icon: LucideIcons.listMusic,
+        title: 'No songs available',
+        subtitle: 'Songs for this playlist could not be found.',
+        compact: true,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var index = 0; index < _playlistSongDetails.length; index++)
+          StaggeredAppearance(
+            index: index,
+            child: SongRow(song: _playlistSongDetails[index], allSongs: _playlistSongDetails, playlist: _playlist!),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildShufflePlayButtons() {
+    final isShuffle = ref.watch(shuffleProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final sleepState = ref.watch(sleepTimerProvider);
+              final hasTimer = sleepState.option != SleepTimerOption.off;
+
+              return IconButton(
+                icon: Image.asset(
+                  'assets/icons/timer.png',
+                  width: 26,
+                  height: 26,
+                  color: hasTimer ? spotifyGreen : Colors.white70,
+                ),
+                onPressed: () {
+                  showSleepTimerSheet(context);
+                },
+              );
+            },
+          ),
+          IconButton(
+            icon: Image.asset('assets/icons/menu.png', width: 26, height: 26, color: Colors.grey[600]),
+            onPressed: () {
+              if (_playlist != null) showMediaItemMenu(context, _playlist!);
+            },
+          ),
+
+          // Shuffle button
+          GestureDetector(
+            onTap: () async {
+              final handler = await ref.read(audioHandlerProvider.future);
+              handler.toggleShuffle();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(shape: BoxShape.circle),
+              child: Image.asset(
+                'assets/icons/shuffle.png',
+                width: 24,
+                height: 24,
+                color: isShuffle ? spotifyGreen : Colors.grey[600],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Play Playlist / Play First / Shuffle
+          StreamBuilder<PlayerState>(
+            stream: ref.read(audioHandlerProvider.future).asStream().asyncExpand((h) => h.playerStateStream),
+            builder: (context, snapshot) {
+              final isPlaying = snapshot.data?.playing ?? false;
+              final currentSong = ref.watch(currentSongProvider);
+
+              return FutureBuilder(
+                future: ref.read(audioHandlerProvider.future),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox();
+                  final audioHandler = snapshot.data!;
+
+                  // ✅ Check if current queue belongs to this playlist
+                  final bool isSameSource = audioHandler.queueSourceId == widget.playlistId;
+
+                  // Icon logic
+                  final bool isCurrentInList = isSameSource && currentSong != null;
+                  final icon = isCurrentInList ? (isPlaying ? Icons.pause : Icons.play_arrow) : Icons.play_arrow;
+
+                  return GestureDetector(
+                    onTap: () async {
+                      try {
+                        if (isSameSource) {
+                          // 🔁 Current queue already loaded → toggle playback
+                          if (isPlaying) {
+                            await audioHandler.pause();
+                          } else {
+                            await audioHandler.play();
+                          }
+                        } else {
+                          // 🚀 New playlist → load queue
+                          int startIndex = 0;
+
+                          // Shuffle handling
+                          audioHandler.disableShuffle();
+
+                          await audioHandler.loadQueue(
+                            _playlistSongDetails,
+                            startIndex: startIndex,
+                            sourceId: widget.playlistId,
+                            sourceName: '${_playlist?.title} Playlist',
+                          );
+
+                          if (isShuffle && !audioHandler.isShuffle) {
+                            audioHandler.toggleShuffle();
+                          }
+
+                          await audioHandler.play();
+                        }
+                      } catch (e, st) {
+                        Logger.error('PlaylistViewer', "Error handling playlist play button: $e\n$st");
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.green),
+                      child: Icon(icon, color: Colors.black, size: 30),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _downloadSongSet(String setId, Set<String> songIds) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.songsSetStatusNotifier(setId),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: offlineManager.songsSetDownloadedCountNotifier(setId),
+          builder: (context, downloadedCount, _) {
+            final total = songIds.length;
+            Widget icon;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              icon = Image.asset('assets/icons/complete_download.png', width: 32, height: 32, color: spotifyGreen);
+              onTap = () => offlineManager.deleteSongsSet(setId, songIds);
+            } else if (status == DownloadStatus.downloading) {
+              icon = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: downloadedCount / total,
+                    color: spotifyGreen,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              icon = Image.asset('assets/icons/download.png', width: 32, height: 32, color: Colors.white70);
+              onTap = () => offlineManager.downloadSongsSetWithStatus(setId, songIds, songs: _playlistSongDetails);
+            }
+
+            return GestureDetector(
+              onTap: onTap,
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "$downloadedCount of $total done"
+                        : status == DownloadStatus.completed
+                        ? "Offline"
+                        : "",
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _playlistCard(Playlist playlist) {
+    final imageUrl = playlist.images.isNotEmpty ? playlist.images.last.url : '';
+    final subtitle = playlist.artists.isNotEmpty
+        ? playlist.artists.first.title
+        : (playlist.songCount != null ? '${playlist.songCount} songs' : '');
+    final description = playlist.description;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(context).push(
+          PageTransition(
+            type: PageTransitionType.rightToLeft,
+            duration: const Duration(milliseconds: 300),
+            child: PlaylistViewer(playlistId: playlist.id),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: imageUrl.isNotEmpty
+                  ? CacheNetWorkImg(url: imageUrl, fit: BoxFit.cover)
+                  : Container(
+                      color: Colors.grey.shade800,
+                      child: const Icon(Icons.album, color: Colors.white, size: 32),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Text(
+              playlist.title,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          if (subtitle.isNotEmpty)
+            Flexible(
+              child: Text(
+                subtitle,
+                style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w400),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          if (description.isNotEmpty)
+            Flexible(
+              child: Text(
+                description,
+                style: TextStyle(color: Colors.white38, fontSize: 10),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: playlistCoverColor,
+      body: Container(
+        decoration: BoxDecoration(color: spotifyBgColor),
+        child: _loading
+            ? Padding(padding: const EdgeInsets.only(top: 60), child: buildAlbumShimmer())
+            : _playlist == null
+            ? const EmptyStatePage(
+                state: EmptyState(
+                  icon: LucideIcons.listMusic,
+                  title: 'Playlist unavailable',
+                  subtitle: 'This playlist could not be loaded. Please try again later.',
+                ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: playlistCoverColor,
+                    expandedHeight: 400,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      centerTitle: false,
+                      titlePadding: EdgeInsets.only(left: _isTitleCollapsed ? 72 : 16, bottom: 16, right: 16),
+                      title: AnimatedOpacity(
+                        opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          _playlist?.title ?? "",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      background: _buildHeader(),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!_isTitleCollapsed)
+                            Text(
+                              _playlist!.title,
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_playlist!.description.isNotEmpty &&
+                                        !_playlist!.description.toLowerCase().contains('on cover'))
+                                      ReadMoreText(
+                                        _playlist!.description,
+                                        trimLines: 3,
+                                        trimMode: TrimMode.Line,
+                                        colorClickableText: spotifyGreen,
+                                        trimCollapsedText: " ...more",
+                                        trimExpandedText: " Show less",
+                                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    if (cleanPlaylistSubtitle(_playlist!.summary).isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2.0),
+                                        child: Text(
+                                          cleanPlaylistSubtitle(_playlist!.summary),
+                                          style: TextStyle(color: Colors.white54, fontSize: 12),
+                                        ),
+                                      ),
+                                    if (_playlist!.summary.isEmpty && _playlist!.songCount != null)
+                                      Text(
+                                        '${_playlist!.songCount} songs',
+                                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      ),
+                                    if (_playlist!.summary.isEmpty &&
+                                        _playlist!.songCount != null &&
+                                        _playlistSongDetails.length == _playlist!.songCount &&
+                                        _totalPlaylistDuration > 0 &&
+                                        _playlistSongDetails.every(
+                                          (song) => (int.tryParse(song.duration ?? '') ?? 0) > 0,
+                                        ))
+                                      Text(
+                                        formatDuration(_totalPlaylistDuration),
+                                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if (_playlist != null) ...[
+                                _downloadSongSet(_playlist!.id, _playlist!.songs.map((a) => a.id).toSet()),
+                              ] else ...[
+                                const Spacer(),
+                              ],
+                              _buildShufflePlayButtons(),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [const SizedBox(height: 10), _buildSongList()],
+                    ),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 35)),
+
+                  SliverToBoxAdapter(
+                    child: SimilarPlaylistsSection(playlists: similarPlaylist, cardBuilder: _playlistCard),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class SimilarPlaylistsSection extends StatelessWidget {
+  const SimilarPlaylistsSection({super.key, required this.playlists, required this.cardBuilder});
+
+  final List<Playlist> playlists;
+  final Widget Function(Playlist) cardBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (playlists.isEmpty) return const SizedBox.shrink();
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textHeight = (textScaler.scale(13) + textScaler.scale(11) + textScaler.scale(10)) * 1.5 + 12;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            child: Text(
+              'You might also like',
+              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = ((constraints.maxWidth - 48) / 2).clamp(0.0, double.infinity);
+              return GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  mainAxisExtent: cardWidth + textHeight,
+                ),
+                itemCount: playlists.length,
+                itemBuilder: (context, index) => StaggeredAppearance(
+                  key: ValueKey(playlists[index].id),
+                  index: index,
+                  child: cardBuilder(playlists[index]),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SongRow extends ConsumerStatefulWidget {
+  final SongDetail song;
+  final List<SongDetail> allSongs;
+  final Playlist playlist;
+
+  const SongRow({super.key, required this.song, required this.allSongs, required this.playlist});
+
+  @override
+  ConsumerState<SongRow> createState() => _SongRowState();
+}
+
+class _SongRowState extends ConsumerState<SongRow> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final song = widget.song;
+    final allSongs = widget.allSongs;
+    final playlist = widget.playlist;
+    final currentSong = ref.watch(currentSongProvider);
+    final isPlaying = currentSong?.id == song.id;
+    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+
+    return SwipeActionCell(
+      backgroundColor: Colors.transparent,
+      key: ValueKey(song.id),
+      fullSwipeFactor: 0.01,
+      editModeOffset: 2,
+      leadingActions: [
+        SwipeAction(
+          color: spotifyGreen,
+          icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+          performsFirstActionWithFullSwipe: true,
+          onTap: (handler) async {
+            final audioHandler = await ref.read(audioHandlerProvider.future);
+            await audioHandler.addSongNext(song);
+            info('${song.title} will play next', Severity.success);
+            await handler(false);
+          },
+        ),
+      ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          if (_isLoading) return;
+          setState(() => _isLoading = true);
+          try {
+            final audioHandler = await ref.read(audioHandlerProvider.future);
+            final currentQueue = audioHandler.queueSongs;
+            final currentSource = audioHandler.queueSourceId;
+            final isShuffle = audioHandler.isShuffle;
+
+            final tappedIndex = allSongs.indexWhere((s) => s.id == song.id);
+            if (tappedIndex == -1) return;
+
+            final isSamePlaylist = currentSource == playlist.id;
+            final currentSong = ref.read(currentSongProvider);
+
+            // -------------------------------
+            // CASE 1: Queue already has playlist songs
+            // -------------------------------
+            if (isSamePlaylist && currentQueue.isNotEmpty) {
+              // If tapped song is currently playing → toggle play/pause
+              if (currentSong?.id == song.id) {
+                final playing = (await audioHandler.playerStateStream.first).playing;
+                if (playing) {
+                  await audioHandler.pause();
+                } else {
+                  await audioHandler.play();
+                }
+                return;
+              }
+
+              // Determine index for skip (shuffle aware)
+              int targetIndex = currentQueue.indexWhere((s) => s.id == song.id);
+
+              if (targetIndex != -1) {
+                await audioHandler.skipToQueueItem(targetIndex);
+                await audioHandler.play();
+                return;
+              }
+            }
+
+            // -------------------------------
+            // CASE 2: Queue missing playlist songs → load full playlist
+            // -------------------------------
+            if (isShuffle) await audioHandler.disableShuffle();
+
+            await audioHandler.loadQueue(
+              allSongs,
+              startIndex: tappedIndex,
+              sourceId: playlist.id,
+              sourceName: '${playlist.title} Playlist',
+            );
+
+            if (isShuffle) await audioHandler.toggleShuffle();
+
+            await audioHandler.play();
+          } catch (e, st) {
+            Logger.error('PlaylistViewer', "Error playing tapped playlist song: $e\n$st");
+          } finally {
+            if (mounted) setState(() => _isLoading = false);
+          }
+        },
+
+        child: Container(
+          padding: const EdgeInsets.only(top: 8, left: 16, right: 6, bottom: 10),
+          child: Row(
+            children: [
+              SongRowArtwork(imageUrl: song.images.isNotEmpty ? song.images.last.url : ''),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SongRowTitle(title: song.title, isPlaying: isPlaying, isLoading: _isLoading),
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if (song.primaryArtists.isNotEmpty) song.primaryArtists,
+                        if (song.album.isNotEmpty) song.album,
+                        if (song.language.isNotEmpty) song.language,
+                      ].join(' • '),
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isLiked)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6, left: 6),
+                  child: Image.asset(
+                    'assets/icons/tick.png',
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.contain,
+                    color: spotifyGreen,
+                  ),
+                ),
+
+              // Menu icon
+              IconButton(
+                icon: Image.asset('assets/icons/menu.png', width: 20, height: 20, color: Colors.white70),
+                onPressed: () {
+                  showMediaItemMenu(context, song);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

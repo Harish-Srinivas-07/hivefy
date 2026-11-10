@@ -1,0 +1,170 @@
+name: Android Build & Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.41.6"
+
+jobs:
+  build-release:
+    name: Build and publish Android APKs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GRADLE_OPTS: -Dorg.gradle.project.kotlin.incremental=false -Dorg.gradle.caching=true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Select build JDK
+        run: flutter config --jdk-dir="$JAVA_HOME"
+
+      - name: Accept Android SDK licenses and install NDK
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            echo "Android SDK manager not found: $SDKMANAGER" >&2
+            exit 1
+          fi
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses
+          set -o pipefail
+          "$SDKMANAGER" --install "ndk;29.0.13113456"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Read release version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(awk '/^version:/ { print $2; exit }' pubspec.yaml | cut -d '+' -f 1)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid or missing version in pubspec.yaml: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # Add these GitHub Actions repository secrets:
+      # KEY_STORE (base64-encoded JKS), STORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS.
+      - name: Configure release signing
+        shell: bash
+        env:
+          KEY_STORE: ${{ secrets.KEY_STORE }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          def required(name):
+              value = os.environ.get(name, "")
+              if not value:
+                  raise SystemExit(f"Missing required GitHub Actions secret: {name}")
+              return value
+
+          encoded = "".join(required("KEY_STORE").split())
+          keystore = base64.b64decode(encoded, validate=True)
+          if not keystore:
+              raise SystemExit("KEY_STORE decoded to an empty file")
+
+          def java_property_value(value):
+              raw = value.encode("utf-16-be")
+              return "".join(
+                  "\\u" + raw[i:i + 2].hex() for i in range(0, len(raw), 2)
+              )
+
+          Path("android/hivefy-release.jks").write_bytes(keystore)
+          properties = {
+              "storePassword": required("STORE_PASSWORD"),
+              "keyPassword": required("KEY_PASSWORD"),
+              "keyAlias": required("KEY_ALIAS"),
+              "storeFile": "../hivefy-release.jks",
+          }
+          Path("android/key.properties").write_text(
+              "".join(
+                  f"{key}={java_property_value(value)}\n"
+                  for key, value in properties.items()
+              ),
+              encoding="ascii",
+          )
+          PY
+          keytool -list -storetype JKS \
+            -keystore android/hivefy-release.jks \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
+
+      - name: Build universal APK
+        run: flutter build apk --release
+
+      - name: Save universal APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "dist/Hivefy_${VERSION}_universal.apk"
+
+      - name: Build ARM64 and x86_64 APKs
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64
+
+      - name: Verify and name APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUTPUT="build/app/outputs/flutter-apk"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BUILD_TOOLS/apksigner"
+          mkdir -p dist
+          cp "$OUTPUT/app-arm64-v8a-release.apk" "dist/Hivefy_${VERSION}_common.apk"
+          cp "$OUTPUT/app-x86_64-release.apk" "dist/Hivefy_${VERSION}_x86.apk"
+          for APK in dist/*.apk; do
+            test -s "$APK"
+            "$BUILD_TOOLS/apksigner" verify "$APK"
+          done
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Hivefy v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/*.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+
+      - name: Remove signing files
+        if: always()
+        run: rm -f android/key.properties android/hivefy-release.jks

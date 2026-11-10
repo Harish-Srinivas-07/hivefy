@@ -1,0 +1,693 @@
+import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
+import '../../components/staggered_appearance.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_swipe_action_cell/core/cell.dart';
+import 'package:hivefy/utils/logger.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../components/empty_state.dart';
+import '../../components/showmenu.dart';
+import '../../components/snackbar.dart';
+import '../../components/timersheet.dart';
+import '../../models/database.dart';
+import '../../models/datamodel.dart';
+import '../../components/shimmers.dart';
+import '../../services/audiohandler.dart';
+import '../../services/youtube.dart';
+import '../../services/offlinemanager.dart';
+import '../../services/sleeptimer.dart';
+import '../../shared/constants.dart';
+import '../../shared/player.dart';
+import '../../utils/format.dart';
+import '../../utils/theme.dart';
+
+class SongsViewer extends ConsumerStatefulWidget {
+  final bool showLikedSongs;
+  final bool showDownloadedSongs;
+
+  const SongsViewer({super.key, this.showLikedSongs = false, this.showDownloadedSongs = false})
+    : assert(!showLikedSongs || !showDownloadedSongs);
+
+  @override
+  ConsumerState<SongsViewer> createState() => _SongsViewerState();
+}
+
+class _SongsViewerState extends ConsumerState<SongsViewer> {
+  List<SongDetail> _songs = [];
+  bool _loading = true;
+  int _totalDuration = 0;
+  late ScrollController _scrollController;
+  bool _isTitleCollapsed = false;
+  int _downloadFetchGeneration = 0;
+  String? _loadingSongId;
+
+  String get _title => widget.showDownloadedSongs
+      ? 'Downloaded Songs'
+      : widget.showLikedSongs
+      ? 'Liked Songs'
+      : 'All Songs';
+  String get _sourceId => widget.showDownloadedSongs
+      ? 'downloaded_songs'
+      : widget.showLikedSongs
+      ? 'liked_songs'
+      : 'all_songs';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showDownloadedSongs) offlineManager.downloadedSongsRevision.addListener(_fetchSongs);
+    _fetchSongs();
+    _scrollController = ScrollController();
+    _scrollController.addListener(() {
+      _isTitleCollapsed = _scrollController.offset > 200;
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    if (widget.showDownloadedSongs) offlineManager.downloadedSongsRevision.removeListener(_fetchSongs);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchSongs() async {
+    final generation = ++_downloadFetchGeneration;
+    if (mounted) setState(() => _loading = true);
+
+    try {
+      if (widget.showDownloadedSongs) {
+        final songs = await offlineManager.getDownloadedSongs();
+        if (!mounted || generation != _downloadFetchGeneration) return;
+        _songs = songs;
+        _totalDuration = songs.fold(0, (sum, song) => sum + (int.tryParse(song.duration ?? '0') ?? 0));
+      } else if (widget.showLikedSongs) {
+        final ids = ref.read(likedSongsProvider);
+        if (ids.isEmpty) {
+          _songs = [];
+          _totalDuration = 0;
+          if (mounted) setState(() => _loading = false);
+          return;
+        }
+
+        _songs = [];
+        _totalDuration = 0;
+
+        const batchSize = 20;
+        final total = ids.length;
+
+        for (int start = 0; start < total; start += batchSize) {
+          final end = (start + batchSize).clamp(0, total);
+          final batchIds = ids.sublist(start, end);
+
+          // Fetch this batch of song details
+          final freshDetails = await YoutubeAPI().getSongDetails(ids: batchIds);
+
+          // Keep original liked order
+          final orderedBatch = batchIds.map((id) {
+            return freshDetails.firstWhere(
+              (s) => s.id == id,
+              orElse: () => SongDetail(id: id, title: "Unknown Song", type: "", url: "", images: []),
+            );
+          }).toList();
+
+          _songs.addAll(orderedBatch);
+
+          // Recalculate total duration
+          _totalDuration = _songs.fold(0, (sum, s) => sum + (int.tryParse(s.duration ?? '0') ?? 0));
+
+          // Update UI progressively
+          if (mounted) setState(() {});
+        }
+      } else {
+        // For offline songs, no batching needed
+        _songs = await AppDatabase.getAllSongs();
+        _totalDuration = _songs.fold(0, (sum, s) => sum + (int.tryParse(s.duration ?? '0') ?? 0));
+      }
+    } catch (e, st) {
+      Logger.error('SongsViewer', "Failed to fetch songs: $e\n$st");
+      _songs = [];
+    } finally {
+      if (mounted && generation == _downloadFetchGeneration) setState(() => _loading = false);
+    }
+  }
+
+  Widget _buildItemImage(String url) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: CacheNetWorkImg(url: url, width: 50, height: 50, fit: BoxFit.cover, borderRadius: BorderRadius.circular(6)),
+  );
+
+  Widget _buildSongSwipeCard(SongDetail song) {
+    final currentSong = ref.watch(currentSongProvider);
+
+    final isPlaying = currentSong?.id == song.id;
+    final isLiked = ref.watch(likedSongsProvider).contains(song.id);
+
+    return ValueListenableBuilder(
+      valueListenable: hasInternet,
+      builder: (context, hasNet, child) {
+        final isOfflineAvailable = offlineManager.isAvailableOffline(songId: song.id);
+
+        // ✅ Enable only if online OR offline copy exists
+        final isEnabled = hasNet || isOfflineAvailable;
+
+        return SwipeActionCell(
+          backgroundColor: Colors.transparent,
+          key: ValueKey(song.id),
+          fullSwipeFactor: 0.01,
+          editModeOffset: 2,
+          leadingActions: [
+            SwipeAction(
+              color: spotifyGreen,
+              icon: Image.asset('assets/icons/add_to_queue.png', height: 20),
+              performsFirstActionWithFullSwipe: true,
+              onTap: (handler) async {
+                final audioHandler = await ref.read(audioHandlerProvider.future);
+                await audioHandler.addSongNext(song);
+                info('${song.title} will play next', Severity.success);
+                await handler(false);
+              },
+            ),
+          ],
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              // Disable tap if no internet AND not available offline
+              if (!isEnabled) {
+                info("No internet and song not available offline", Severity.warning);
+                return;
+              }
+
+              final tappedIndex = _songs.indexWhere((s) => s.id == song.id);
+              if (tappedIndex == -1) return;
+              setState(() => _loadingSongId = song.id);
+
+              try {
+                final audioHandler = await ref.read(audioHandlerProvider.future);
+                final currentQueue = audioHandler.queueSongs;
+                final sourceId = audioHandler.queueSourceId;
+                final isShuffle = audioHandler.isShuffle;
+
+                final currentSong = ref.read(currentSongProvider);
+                final isPlaying = currentSong?.id == song.id;
+
+                // -------------------------------
+                // 1️⃣ Tapped song is currently playing → toggle play/pause
+                // -------------------------------
+                if (isPlaying) {
+                  final playing = (await audioHandler.playerStateStream.first).playing;
+                  if (playing) {
+                    await audioHandler.pause();
+                  } else {
+                    await audioHandler.play();
+                  }
+                  return;
+                }
+
+                // -------------------------------
+                // 2️⃣ Queue already contains all liked songs
+                // -------------------------------
+                final isSameQueue =
+                    sourceId == _sourceId &&
+                    currentQueue.isNotEmpty &&
+                    currentQueue.length == _songs.length &&
+                    currentQueue.every((s) => _songs.any((x) => x.id == s.id));
+
+                if (isSameQueue) {
+                  // Try to find tapped song after current song
+                  final currentIndex = currentQueue.indexWhere((s) => s.id == currentSong?.id);
+
+                  int nextIndex = -1;
+                  if (currentIndex != -1 && currentIndex + 1 < currentQueue.length) {
+                    final subQueue = currentQueue.sublist(currentIndex + 1);
+                    final subIndex = subQueue.indexWhere((s) => s.id == song.id);
+                    if (subIndex != -1) nextIndex = currentIndex + 1 + subIndex;
+                  }
+
+                  // Fallback: search entire queue
+                  if (nextIndex == -1) {
+                    nextIndex = currentQueue.indexWhere((s) => s.id == song.id);
+                  }
+
+                  if (nextIndex != -1) {
+                    await audioHandler.skipToQueueItem(nextIndex);
+                    await audioHandler.play();
+                    return;
+                  }
+                }
+
+                // -------------------------------
+                // 3️⃣ Queue missing liked songs → load full liked songs
+                // -------------------------------
+                if (isShuffle) await audioHandler.disableShuffle();
+
+                await audioHandler.loadQueue(_songs, startIndex: tappedIndex, sourceId: _sourceId, sourceName: _title);
+
+                if (isShuffle) await audioHandler.toggleShuffle();
+                await audioHandler.play();
+              } catch (e, st) {
+                Logger.error('SongsViewer', "Error playing liked song: $e\n$st");
+              } finally {
+                if (mounted && _loadingSongId == song.id) {
+                  setState(() => _loadingSongId = null);
+                }
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Row(
+                children: [
+                  _buildItemImage(song.images.isNotEmpty ? song.images.last.url : ''),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (isPlaying)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Image(
+                                  image: AssetImage('assets/icons/player.gif'),
+                                  height: 18,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            Expanded(
+                              child: _loadingSongId == song.id
+                                  ? Shimmer.fromColors(
+                                      enabled: !MediaQuery.disableAnimationsOf(context),
+                                      baseColor: Colors.white54,
+                                      highlightColor: Colors.white,
+                                      child: Text(
+                                        song.title,
+                                        style: TextStyle(
+                                          color: isPlaying
+                                              ? spotifyGreen
+                                              : isEnabled
+                                              ? Colors.white
+                                              : Colors.white38,
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    )
+                                  : Text(
+                                      song.title,
+                                      style: TextStyle(
+                                        color: isPlaying
+                                            ? spotifyGreen
+                                            : isEnabled
+                                            ? Colors.white
+                                            : Colors.white38,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          song.primaryArtists.isNotEmpty ? song.primaryArtists : song.album,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ✅ Icon Logic
+                  if (widget.showLikedSongs)
+                    // show tick only if song is available offline
+                    if (offlineManager.isAvailableOffline(songId: song.id))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Image.asset(
+                          'assets/icons/tick.png',
+                          width: 26,
+                          height: 26,
+                          fit: BoxFit.contain,
+                          color: spotifyGreen,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 26, height: 26),
+                  if (!widget.showLikedSongs && isLiked)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Image.asset(
+                        'assets/icons/tick.png',
+                        width: 26,
+                        height: 26,
+                        fit: BoxFit.contain,
+                        color: spotifyGreen,
+                      ),
+                    ),
+
+                  IconButton(
+                    icon: Image.asset('assets/icons/menu.png', width: 20, height: 20, color: Colors.white70),
+                    onPressed: () {
+                      showMediaItemMenu(context, song);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(top: kToolbarHeight + 16, bottom: 16, left: 16, right: 16),
+      child: Center(
+        child: SizedBox(
+          width: 250,
+          height: 250,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              color: widget.showDownloadedSongs ? downloadedArtworkColor : Colors.pinkAccent.shade100.withAlpha(60),
+              child: Center(
+                child: Icon(
+                  widget.showLikedSongs
+                      ? Icons.favorite
+                      : widget.showDownloadedSongs
+                      ? LucideIcons.download
+                      : Icons.music_note,
+                  size: 120,
+                  color: widget.showDownloadedSongs ? Colors.white : Colors.pinkAccent,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _downloadSongSet(String setId, Set<String> songIds) {
+    return ValueListenableBuilder<DownloadStatus>(
+      valueListenable: offlineManager.songsSetStatusNotifier(setId),
+      builder: (context, status, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: offlineManager.songsSetDownloadedCountNotifier(setId),
+          builder: (context, downloadedCount, _) {
+            final total = songIds.length;
+            Widget icon;
+            VoidCallback? onTap;
+
+            if (status == DownloadStatus.completed) {
+              icon = Image.asset('assets/icons/complete_download.png', width: 32, height: 32, color: spotifyGreen);
+              onTap = () => offlineManager.deleteSongsSet(setId, songIds);
+            } else if (status == DownloadStatus.downloading) {
+              icon = SizedBox(
+                width: 32,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: CircularProgressIndicator(
+                    value: downloadedCount / total,
+                    color: spotifyGreen,
+                    strokeWidth: 2.2,
+                    backgroundColor: Colors.grey.shade800,
+                  ),
+                ),
+              );
+            } else {
+              icon = Image.asset('assets/icons/download.png', width: 32, height: 32, color: Colors.white70);
+              onTap = () => offlineManager.downloadSongsSetWithStatus(setId, songIds, songs: _songs);
+            }
+
+            return GestureDetector(
+              onTap: onTap,
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 6),
+                  Text(
+                    status == DownloadStatus.downloading
+                        ? "$downloadedCount of $total downloaded"
+                        : status == DownloadStatus.completed
+                        ? "Offline Available"
+                        : "Download All",
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHeaderInfo() {
+    final isShuffle = ref.watch(shuffleProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            _title,
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 3),
+          child: Text(
+            "${_songs.length} songs • ${formatDuration(_totalDuration)}",
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (widget.showLikedSongs) ...[
+                _downloadSongSet('likedSongs', _songs.map((a) => a.id).toSet()),
+              ] else ...[
+                const Spacer(),
+              ],
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final sleepState = ref.watch(sleepTimerProvider);
+                      final hasTimer = sleepState.option != SleepTimerOption.off;
+
+                      return IconButton(
+                        icon: Image.asset(
+                          'assets/icons/timer.png',
+                          width: 26,
+                          height: 26,
+                          color: hasTimer ? spotifyGreen : Colors.white70,
+                        ),
+                        onPressed: () {
+                          showSleepTimerSheet(context);
+                        },
+                      );
+                    },
+                  ),
+                  // Shuffle Button
+                  GestureDetector(
+                    onTap: () async {
+                      final audioHandler = await ref.read(audioHandlerProvider.future);
+                      audioHandler.toggleShuffle();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(shape: BoxShape.circle),
+                      child: Image.asset(
+                        'assets/icons/shuffle.png',
+                        width: 24,
+                        height: 24,
+                        color: isShuffle ? spotifyGreen : Colors.grey[600],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Play/Pause Button
+                  StreamBuilder<PlayerState>(
+                    stream: ref.read(audioHandlerProvider.future).asStream().asyncExpand((h) => h.playerStateStream),
+                    builder: (context, snapshot) {
+                      final isPlaying = snapshot.data?.playing ?? false;
+                      final currentSong = ref.watch(currentSongProvider);
+
+                      return FutureBuilder(
+                        future: ref.read(audioHandlerProvider.future),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const SizedBox();
+                          final audioHandler = snapshot.data!;
+
+                          // ✅ Check if current queue belongs to this list
+                          final bool isSameSource = audioHandler.queueSourceId == _sourceId;
+
+                          // Icon logic
+                          final bool isCurrentInList = isSameSource && currentSong != null;
+                          final icon = isCurrentInList
+                              ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                              : Icons.play_arrow;
+
+                          return GestureDetector(
+                            onTap: () async {
+                              try {
+                                if (isSameSource) {
+                                  // 🔁 Current queue already loaded → toggle playback
+                                  if (isPlaying) {
+                                    await audioHandler.pause();
+                                  } else {
+                                    await audioHandler.play();
+                                  }
+                                } else {
+                                  // 🚀 New queue → load liked songs
+                                  int startIndex = 0;
+
+                                  // Shuffle handling
+                                  audioHandler.disableShuffle();
+
+                                  await audioHandler.loadQueue(
+                                    _songs,
+                                    startIndex: startIndex,
+                                    sourceId: _sourceId,
+                                    sourceName: _title,
+                                  );
+
+                                  if (isShuffle && !audioHandler.isShuffle) {
+                                    audioHandler.toggleShuffle();
+                                  }
+
+                                  await audioHandler.play();
+                                }
+                              } catch (e, st) {
+                                Logger.error('SongsViewer', "Error handling liked play button: $e\n$st");
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.green),
+                              child: Icon(icon, color: Colors.black, size: 30),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(currentSongProvider);
+    ref.watch(likedSongsProvider);
+
+    return Scaffold(
+      backgroundColor: ref.watch(playerColourProvider),
+      body: Container(
+        decoration: BoxDecoration(color: Colors.black),
+        child: _loading
+            ? Padding(padding: const EdgeInsets.only(top: 60), child: buildAlbumShimmer())
+            : _songs.isEmpty
+            ? EmptyStatePage(
+                state: EmptyState(
+                  icon: widget.showDownloadedSongs
+                      ? LucideIcons.download
+                      : widget.showLikedSongs
+                      ? LucideIcons.heart
+                      : LucideIcons.music2,
+                  title: widget.showDownloadedSongs
+                      ? 'No downloaded songs yet'
+                      : widget.showLikedSongs
+                      ? 'No liked songs yet'
+                      : 'No songs yet',
+                  subtitle: widget.showDownloadedSongs
+                      ? 'Download songs to listen when you are offline.'
+                      : widget.showLikedSongs
+                      ? 'Songs you like will appear here.'
+                      : 'Songs you add will appear here.',
+                ),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: Colors.transparent,
+                    expandedHeight: 300,
+                    elevation: 0,
+                    leading: const BackButton(color: Colors.white),
+                    flexibleSpace: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                widget.showDownloadedSongs ? downloadedArtworkColor : getDominantDarker(Colors.pink),
+                                Colors.black,
+                              ],
+                            ),
+                          ),
+                        ),
+                        FlexibleSpaceBar(
+                          collapseMode: CollapseMode.pin,
+                          centerTitle: false,
+                          titlePadding: EdgeInsets.only(left: _isTitleCollapsed ? 72 : 16, bottom: 16, right: 16),
+                          title: AnimatedOpacity(
+                            opacity: _isTitleCollapsed ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Text(
+                              _title,
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          background: _buildHeader(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(child: const SizedBox(height: 16)),
+
+                  SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildHeaderInfo(),
+                      const SizedBox(height: 16),
+                      for (var index = 0; index < _songs.length; index++)
+                        StaggeredAppearance(index: index, child: _buildSongSwipeCard(_songs[index])),
+                      const SizedBox(height: 100),
+                    ]),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
